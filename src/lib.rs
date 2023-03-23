@@ -1,6 +1,7 @@
 #![feature(unboxed_closures)]
 
 use bots_convars::register_required_convars;
+use debug_commands::register_debug_concommands;
 use rrplug::{
     bindings::convar::FCVAR_GAMEDLL,
     wrappers::convars::{ConVarRegister, ConVarStruct},
@@ -15,6 +16,9 @@ mod bots_cmds;
 mod bots_convars;
 mod bots_detour;
 mod tf2dlls;
+mod structs;
+mod native_types;
+mod debug_commands;
 
 static CLAN_TAG_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
 pub static SIMULATE_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
@@ -99,16 +103,18 @@ impl Plugin for BotPlugin {
             "spawns a bot on team 2",
             FCVAR_GAMEDLL as i32,
         );
+
+        register_debug_concommands(engine)
     }
 }
 
 #[rrplug::concommand]
 fn spawn_fake_player(command: CCommandResult) {
-    let name = command.args.get(0).unwrap_or(&"1".to_owned()).to_owned();
+    let name = command.args.get(0).unwrap_or(&"bot".to_owned()).to_owned();
     let team = command
         .args
         .get(1)
-        .unwrap_or(&"1".to_owned())
+        .unwrap_or(&"2".to_owned())
         .parse::<i32>()
         .unwrap_or(2);
 
@@ -128,6 +134,7 @@ fn spawn_fake_player(command: CCommandResult) {
         let bot_addr = bot as usize;
 
         (source_engine_data.client_fully_connected)(
+
             source_engine_data.game_clients,
             *((bot_addr + 0x14) as *const u16),
             false,

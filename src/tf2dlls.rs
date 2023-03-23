@@ -9,7 +9,13 @@ use std::{
     path::PathBuf,
 };
 
-use crate::bots_detour::hook_server;
+use crate::{
+    bots_detour::hook_server,
+    structs::{
+        cbaseclient::CbaseClientPtr,
+        clientarray::{ClientArray, ClientArrayPtr},
+    },
+};
 
 static EXE_DIR: Lazy<PathBuf> = Lazy::new(|| {
     std::env::current_exe()
@@ -19,28 +25,29 @@ static EXE_DIR: Lazy<PathBuf> = Lazy::new(|| {
         .to_path_buf()
 });
 
-pub type CbasePlayer = *const c_void;
-pub type PlayerByIndex = unsafe extern "C" fn (i32) -> CbasePlayer;
-pub type CbaseClient = *const c_void;
-pub type CbaseClientArray = *mut CbaseClient;
-pub type ClientFullyConnected = unsafe extern "C" fn(*const c_void, u16, bool);
+pub type PServer = *const c_void;
+pub type BotName =  *const c_char;
+pub type ServerGameClients = *const c_void;
+pub type CbasePlayer = *mut c_void;
+pub type PlayerByIndex = unsafe extern "C" fn(i32) -> CbasePlayer;
+pub type ClientFullyConnected = unsafe extern "C" fn(ServerGameClients, u16, bool);
 pub type RunNullCommand = unsafe extern "C" fn(CbasePlayer);
 pub type CreateFakeClient = unsafe extern "C" fn(
-    *const c_void,
-    *const c_char,
+    PServer,
+    BotName,
     *const c_char,
     *const c_char,
     i32,
-) -> *const c_void;
+) -> CbaseClientPtr;
 
 #[derive(Debug)]
 pub struct SourceEngineData {
-    pub server: *const c_void,
-    pub game_clients: *const c_void,
+    pub server: PServer,
+    pub game_clients: ServerGameClients,
     pub create_fake_client: CreateFakeClient,
     pub client_fully_connected: ClientFullyConnected,
     pub run_null_command: RunNullCommand,
-    pub client_array: CbaseClientArray,
+    pub client_array: ClientArray,
     pub player_by_index: PlayerByIndex,
 }
 
@@ -51,7 +58,6 @@ impl SourceEngineData {
         let path = EXE_DIR.clone().join(library_filename("server"));
 
         log::info!("loading server.dll from path {}", path.display());
-        // log::info!("loading server.dll from path server.dll");
 
         let handle_server = match unsafe { Library::load_with_flags(path, 0) } {
             Ok(lib) => lib.into_raw() as usize,
@@ -65,7 +71,7 @@ impl SourceEngineData {
         self.run_null_command = unsafe { mem::transmute(handle_server + 0x5A9FD0) };
         self.player_by_index = unsafe { mem::transmute(handle_server + 0x26AA10) };
 
-        // hook_server(handle_server);
+        hook_server(handle_server);
 
         if let Err(err) = unsafe { Library::from_raw(handle_server as *mut _).close() } {
             log::error!("couldn't close the handle_engine; {err}")
@@ -90,10 +96,10 @@ impl SourceEngineData {
                 }
             };
 
-        self.server = (handle_engine + 0x12A53D40) as *const c_void;
-        self.game_clients = (handle_engine + 0x13F0AAA8) as *const c_void;
+        self.server = (handle_engine + 0x12A53D40) as PServer;
+        self.game_clients = (handle_engine + 0x13F0AAA8) as ServerGameClients;
         self.create_fake_client = unsafe { mem::transmute(handle_engine + 0x114C60) };
-        self.client_array = (handle_engine + 0x12A53F90) as CbaseClientArray;
+        self.client_array = ClientArray::new((handle_engine + 0x12A53F90) as ClientArrayPtr);
 
         if let Err(err) = unsafe { Library::from_raw(handle_engine as *mut _).close() } {
             log::error!("couldn't close the handle_engine; {err}")
