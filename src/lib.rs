@@ -12,13 +12,15 @@ use std::mem;
 use std::sync::Mutex;
 use tf2dlls::SourceEngineData;
 
+use crate::structs::cbaseclient::CbaseClient;
+
 mod bots_cmds;
 mod bots_convars;
 mod bots_detour;
-mod tf2dlls;
-mod structs;
-mod native_types;
 mod debug_commands;
+mod native_types;
+mod structs;
+mod tf2dlls;
 
 static CLAN_TAG_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
 pub static SIMULATE_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
@@ -131,12 +133,28 @@ fn spawn_fake_player(command: CCommandResult) {
             "\0".as_ptr() as *const i8,
             team,
         );
-        let bot_addr = bot as usize;
+
+        if bot.is_null() {
+            log::warn!("spawned a invalid bot");
+            return;
+        }
+
+        let client = CbaseClient::new(bot);
+
+        client.peak();
+
+        let array_addr = source_engine_data.client_array.get_inner_ptr() as usize;
+        let client_addr = client.get_addr();
+
+        let offset = client.get_addr() - array_addr;
+
+        log::info!("offset {offset}");
+        log::info!("client_addr {array_addr}");
+        log::info!("array_addr {client_addr}");
 
         (source_engine_data.client_fully_connected)(
-
             source_engine_data.game_clients,
-            *((bot_addr + 0x14) as *const u16),
+            client.get_edict(),
             false,
         );
     }

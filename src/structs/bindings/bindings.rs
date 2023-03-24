@@ -16,20 +16,6 @@ pub enum ePersistenceReady {
     READY = 3,
     READY_REMOTE = 4,
 }
-#[repr(i32)]
-#[derive(Debug, Hash, PartialEq, Eq)]
-pub enum eSignonState {
-    NONE = 0,
-    CHALLENGE = 1,
-    CONNECTED = 2,
-    NEW = 3,
-    PRESPAWN = 4,
-    GETTINGDATA = 5,
-    SPAWN = 6,
-    FIRSTSNAP = 7,
-    FULL = 8,
-    CHANGELEVEL = 9,
-}
 #[repr(C)]
 pub union CBaseClient {
     pub __size: [::std::os::raw::c_char; 7426usize],
@@ -173,7 +159,7 @@ fn bindgen_test_layout_CBaseClient__bindgen_ty_3() {
 #[derive(Debug)]
 pub struct CBaseClient__bindgen_ty_4 {
     pub pad17: [::std::os::raw::c_char; 672usize],
-    pub m_Signon: eSignonState,
+    pub m_Signon: i32,
 }
 #[test]
 fn bindgen_test_layout_CBaseClient__bindgen_ty_4() {

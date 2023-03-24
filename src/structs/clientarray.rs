@@ -1,19 +1,27 @@
-use std::{
-    mem::{self},
-    ptr::addr_of,
+use std::mem;
+
+use crate::structs::{
+    bindings::CBaseClientUnion,
+    cbaseclient::{CbaseClient, CbaseClientPtr},
 };
 
-use crate::structs::cbaseclient::{CbaseClient, CbaseClientPtr};
-
-use super::Void;
+// use super::Void;
 
 // pub type ClientArrayPtr = *const [Void; ClientArray::MAXCLIENTS];
-pub type ClientArrayPtr = Void;
+pub type ClientArrayPtr = *mut CBaseClientUnion;
 
-#[derive(Debug)]
 pub struct ClientArray {
     inner: ClientArrayPtr,
     index: usize,
+}
+
+impl std::fmt::Debug for ClientArray {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CbaseClient")
+            .field("inner", &"can't Format")
+            .field("index", &self.index)
+            .finish()
+    }
 }
 
 impl ClientArray {
@@ -35,22 +43,22 @@ impl ClientArray {
 
         for (i, client) in self.enumerate() {
             log::info!("info about client {i}");
-            log::info!("addr {client:?}");
+            log::info!("addr {:?}", client.get_addr());
 
-            let client = CbaseClient::new(client);
+            // let client = CbaseClient::new(client);
 
             log::info!("edict : {}", client.get_edict());
-            log::info!("name alt : {}", client.get_name_alt());
+            // log::info!("name alt : {}", client.get_name_alt());
             log::info!("name : {}", client.get_name());
             log::info!("signon : {:?}", client.get_signon());
             log::info!("bot : {}", client.is_fake_player());
         }
 
-        for client_addr in
-            unsafe { *mem::transmute::<_, *const [Void; Self::MAXCLIENTS]>(self.inner) }
-        {
-            log::info!("v2 addr {client_addr:?}");
-        }
+        // for client_addr in
+        //     unsafe { *mem::transmute::<_, *const [Void; Self::MAXCLIENTS]>(self.inner) }
+        // {
+        //     log::info!("v2 addr {client_addr:?}");
+        // }
 
         self.reset_iter();
     }
@@ -62,7 +70,7 @@ impl ClientArray {
 }
 
 impl Iterator for ClientArray {
-    type Item = CbaseClientPtr;
+    type Item = CbaseClient;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.index >= Self::MAXCLIENTS {
@@ -70,26 +78,20 @@ impl Iterator for ClientArray {
             return None;
         }
 
-        // let client = (addr_of!(self.inner) as usize + size_of::<ClientArrayPtr>() * self.index)
-        //     as CbaseClientPtr;
+        // let client =
+        //     (addr_of!(self.inner) as usize + CbaseClient::REALSIZE * self.index) as CbaseClientPtr;
 
-        let client = (unsafe { addr_of!(self.inner).add(self.index) }) as CbaseClientPtr;
+        let client = unsafe { mem::transmute::<_, CbaseClientPtr>(self.inner.add(self.index)) };
 
         // let client = unsafe { (*self.inner)[self.index] };
 
         self.index += 1;
 
         if client.is_null() {
+            self.reset_iter();
             return None;
         }
 
-        Some(client)
+        Some(CbaseClient::new(client))
     }
-
-    // fn find<P>(&mut self, predicate: P) -> Option<Self::Item>
-    //     where
-    //         Self: Sized,
-    //         P: FnMut(&Self::Item) -> bool, {
-
-    // }
 }
