@@ -8,11 +8,11 @@ use rrplug::{
     wrappers::northstar::{EngineLoadType, PluginData},
 };
 use rrplug::{prelude::*, to_sq_string, OnceCell};
-use std::mem;
 use std::sync::Mutex;
+use std::{ffi::c_void, mem};
 use tf2dlls::SourceEngineData;
 
-use crate::structs::cbaseclient::CbaseClient;
+use crate::{native_types::SignonState, structs::cbaseclient::CbaseClient};
 
 mod bots_cmds;
 mod bots_convars;
@@ -24,6 +24,7 @@ mod tf2dlls;
 
 static CLAN_TAG_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
 pub static SIMULATE_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
+pub static mut TESTBOT: Option<CbaseClient> = None;
 
 #[derive(Debug)]
 pub struct BotPlugin {
@@ -112,15 +113,16 @@ impl Plugin for BotPlugin {
 
 #[rrplug::concommand]
 fn spawn_fake_player(command: CCommandResult) {
+    let mut source_engine_data = PLUGIN.wait().source_engine_data.lock().expect("how");
+
     let name = command.args.get(0).unwrap_or(&"bot".to_owned()).to_owned();
     let team = command
         .args
         .get(1)
-        .unwrap_or(&"2".to_owned())
-        .parse::<i32>()
-        .unwrap_or(2);
-
-    let source_engine_data = PLUGIN.wait().source_engine_data.lock().expect("how");
+        .map(|t| t.parse::<i32>().ok())
+        .unwrap_or_else(|| Some(choose_team(&mut source_engine_data)))
+        .unwrap_or_else(|| choose_team(&mut source_engine_data));
+        // .clamp(32, 2);
 
     log::info!("bot : {name} spawned");
 
@@ -134,12 +136,13 @@ fn spawn_fake_player(command: CCommandResult) {
             team,
         );
 
-        if bot.is_null() {
-            log::warn!("spawned a invalid bot");
-            return;
-        }
-
-        let client = CbaseClient::new(bot);
+        let client = match CbaseClient::new(bot) {
+            Some(c) => c,
+            None => {
+                log::warn!("spawned a invalid bot");
+                return;
+            }
+        };
 
         client.peak();
 
@@ -152,11 +155,44 @@ fn spawn_fake_player(command: CCommandResult) {
         log::info!("client_addr {array_addr}");
         log::info!("array_addr {client_addr}");
 
-        (source_engine_data.client_fully_connected)(
-            source_engine_data.game_clients,
-            client.get_edict(),
-            false,
-        );
+        wait(1);
+
+        let g = source_engine_data.game_clients;
+        let f = source_engine_data.client_fully_connected;
+
+        f(std::ptr::null(), client.get_edict(), false);
+
+        log::info!("spawned a bot : {}", client.get_name());
+
+        // _ = TESTBOT.replace(client);
+    }
+}
+
+fn choose_team(source_engine_data: &mut SourceEngineData) -> i32 {
+    let client_array = &mut source_engine_data.client_array;
+    let get_player_by_index = source_engine_data.player_by_index;
+
+    let mut total_players = 0;
+
+    let team_2_count = client_array
+        .enumerate()
+        .filter(|(_, c)| c.get_signon() >= SignonState::Connected)
+        .inspect(|_| total_players += 1)
+        .filter_map(|(index, _)| {
+            Some(unsafe {
+                *((get_player_by_index(index as i32 + 1).as_ref()? as *const c_void).offset(0x5E4)
+                    as *const i32)
+            })
+        })
+        .filter(|team| team == &2)
+        .count();
+
+    let team_3_count = total_players - team_2_count;
+
+    if team_3_count < team_2_count {
+        3
+    } else {
+        2
     }
 }
 

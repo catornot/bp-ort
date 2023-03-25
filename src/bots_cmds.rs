@@ -22,4 +22,13 @@ pub fn run_bots_cmds() {
             }
         }
     }
+
+    if let Some(client) = unsafe { &crate::TESTBOT } {
+        if client.get_signon() == SignonState::Full && client.is_fake_player() {
+            log::info!("running cmds for {}", client.get_name());
+            unsafe {
+                run_null_command(player_by_index(2));
+            }
+        }
+    }
 }

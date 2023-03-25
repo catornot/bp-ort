@@ -26,14 +26,13 @@ impl std::fmt::Debug for CbaseClient {
 impl CbaseClient {
     pub const REALSIZE: usize = 0x2D728;
 
-    pub fn new(ptr: CbaseClientPtr) -> Self {
-        Self {
+    pub fn new(ptr: CbaseClientPtr) -> Option<Self> {
+        Some(Self {
             inner: unsafe {
                 mem::transmute::<_, *mut CBaseClientUnion>(ptr)
-                    .as_ref()
-                    .expect("this should have been checked before")
+                    .as_ref()?
             },
-        }
+        })
     }
 
     pub fn get_edict(&self) -> u16 {

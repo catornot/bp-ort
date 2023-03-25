@@ -75,23 +75,16 @@ impl Iterator for ClientArray {
     fn next(&mut self) -> Option<Self::Item> {
         if self.index >= Self::MAXCLIENTS {
             self.reset_iter();
-            return None;
+            None?
         }
-
-        // let client =
-        //     (addr_of!(self.inner) as usize + CbaseClient::REALSIZE * self.index) as CbaseClientPtr;
 
         let client = unsafe { mem::transmute::<_, CbaseClientPtr>(self.inner.add(self.index)) };
 
-        // let client = unsafe { (*self.inner)[self.index] };
-
         self.index += 1;
 
-        if client.is_null() {
+        CbaseClient::new(client).or_else(|| {
             self.reset_iter();
-            return None;
-        }
-
-        Some(CbaseClient::new(client))
+            None
+        })
     }
 }
