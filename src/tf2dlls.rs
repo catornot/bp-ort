@@ -13,6 +13,7 @@ use crate::{
     bots_detour::hook_server,
     structs::{
         cbaseclient::CbaseClientPtr,
+        cbaseplayer::CbasePlayerPtr,
         clientarray::{ClientArray, ClientArrayPtr},
     },
 };
@@ -28,12 +29,25 @@ static EXE_DIR: Lazy<PathBuf> = Lazy::new(|| {
 pub type PServer = *const c_void;
 pub type BotName = *const c_char;
 pub type ServerGameClients = *const c_void;
-pub type CbasePlayer = *mut c_void;
-pub type PlayerByIndex = unsafe extern "fastcall" fn(i32) -> CbasePlayer;
+pub type PlayerByIndex = unsafe extern "fastcall" fn(i32) -> CbasePlayerPtr;
 pub type ClientFullyConnected = unsafe extern "fastcall" fn(ServerGameClients, u16, bool);
-pub type RunNullCommand = unsafe extern "fastcall" fn(CbasePlayer);
-pub type CreateFakeClient =
-    unsafe extern "C" fn(PServer, BotName, *const c_char, *const c_char, i32) -> CbaseClientPtr;
+pub type RunNullCommand = unsafe extern "fastcall" fn(CbasePlayerPtr);
+pub type CreateFakeClient = unsafe extern "fastcall" fn(
+    PServer,
+    BotName,
+    *const c_char,
+    *const c_char,
+    i32,
+    i32,
+) -> CbaseClientPtr;
+
+// unsafe extern "C" fn(
+// self_: *mut ::std::os::raw::c_void,
+// pName: *const ::std::os::raw::c_char,
+// pUnk: *const ::std::os::raw::c_char,
+// pDesiredPlaylist: *const ::std::os::raw::c_char,
+// nDesiredTeam: ::std::os::raw::c_int,
+// ) -> *mut CBaseClient,
 
 pub struct SourceEngineData {
     pub server: PServer,
@@ -50,7 +64,10 @@ impl std::fmt::Debug for SourceEngineData {
         f.debug_struct("SourceEngineData")
             .field("server", &self.server)
             .field("game_clients", &self.game_clients)
-            .field("create_fake_client", &self.create_fake_client)
+            .field(
+                "create_fake_client",
+                &(self.create_fake_client as *const c_void),
+            )
             .field(
                 "client_fully_connected",
                 &(self.client_fully_connected as *const c_void),
@@ -109,10 +126,10 @@ impl SourceEngineData {
                     return;
                 }
             };
+        
         unsafe {
             self.server = handle_engine.offset(0x12A53D40) as PServer;
-            self.game_clients =
-                handle_engine.offset(0x13F0AAA8) as ServerGameClients;
+            self.game_clients = handle_engine.offset(0x13F0AAA8) as ServerGameClients;
             self.create_fake_client = mem::transmute(handle_engine.offset(0x114C60));
             self.client_array =
                 ClientArray::new(handle_engine.offset(0x12A53F90) as ClientArrayPtr);

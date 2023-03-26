@@ -6,10 +6,10 @@ use std::{
     ptr::addr_of,
 };
 
-use super::{bindings::CBaseClientUnion, Void};
+use super::bindings::CBaseClientUnion;
 use crate::native_types::SignonState;
 
-pub type CbaseClientPtr = Void;
+pub type CbaseClientPtr = *mut CBaseClientUnion;
 
 pub struct CbaseClient {
     inner: &'static CBaseClientUnion,
@@ -28,10 +28,7 @@ impl CbaseClient {
 
     pub fn new(ptr: CbaseClientPtr) -> Option<Self> {
         Some(Self {
-            inner: unsafe {
-                mem::transmute::<_, *mut CBaseClientUnion>(ptr)
-                    .as_ref()?
-            },
+            inner: unsafe { ptr.as_ref()? },
         })
     }
 
@@ -40,15 +37,15 @@ impl CbaseClient {
     }
 
     pub fn is_fake_player(&self) -> bool {
-        unsafe { self.inner.m_b_fake_player.m_bFakePlayer }
+        unsafe { self.inner.fake_player.m_bFakePlayer }
     }
 
     fn get_name_ptr(&self) -> &[c_char; 64] {
-        unsafe { &self.inner.m_name.m_Name }
+        unsafe { &self.inner.name.m_Name }
     }
 
     pub fn get_signon(&self) -> SignonState {
-        unsafe { SignonState::from(self.inner.m_signon.m_Signon) }
+        unsafe { SignonState::from(self.inner.signon.m_Signon) }
     }
 
     pub fn get_name(&self) -> String {
@@ -56,6 +53,14 @@ impl CbaseClient {
             CStr::from_ptr(mem::transmute(self.get_name_ptr() as *const [c_char; 64]))
                 .to_string_lossy()
                 .to_string()
+        }
+    }
+
+    pub fn set_clan_tag(&self, new_tag: String) {
+        let mut tag = unsafe { self.inner.clan_tag.m_ClanTag };
+
+        for (index, c) in new_tag.chars().enumerate() {
+            tag[index] = c as u8 as i8
         }
     }
 

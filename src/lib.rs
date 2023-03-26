@@ -131,9 +131,10 @@ fn spawn_fake_player(command: CCommandResult) {
         let bot = (source_engine_data.create_fake_client)(
             source_engine_data.server,
             name.as_ptr(),
-            "\0".as_ptr() as *const i8,
-            "\0".as_ptr() as *const i8,
+            &'\0' as *const char as *const i8,
+            &'\0' as *const char as *const i8,
             team,
+            0,
         );
 
         let client = match CbaseClient::new(bot) {
@@ -160,11 +161,11 @@ fn spawn_fake_player(command: CCommandResult) {
         let g = source_engine_data.game_clients;
         let f = source_engine_data.client_fully_connected;
 
-        f(std::ptr::null(), client.get_edict(), false);
+        f(g, client.get_edict(), true);
 
         log::info!("spawned a bot : {}", client.get_name());
 
-        // _ = TESTBOT.replace(client);
+        _ = TESTBOT.replace(client);
     }
 }
 
@@ -180,7 +181,7 @@ fn choose_team(source_engine_data: &mut SourceEngineData) -> i32 {
         .inspect(|_| total_players += 1)
         .filter_map(|(index, _)| {
             Some(unsafe {
-                *((get_player_by_index(index as i32 + 1).as_ref()? as *const c_void).offset(0x5E4)
+                *((get_player_by_index(index as i32 + 1).as_ref()? as *const _ as *const c_void).offset(0x5E4)
                     as *const i32)
             })
         })

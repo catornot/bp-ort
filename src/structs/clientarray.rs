@@ -1,14 +1,9 @@
-use std::mem;
-
-use crate::structs::{
-    bindings::CBaseClientUnion,
-    cbaseclient::{CbaseClient, CbaseClientPtr},
-};
+use crate::structs::cbaseclient::{CbaseClient, CbaseClientPtr};
 
 // use super::Void;
 
 // pub type ClientArrayPtr = *const [Void; ClientArray::MAXCLIENTS];
-pub type ClientArrayPtr = *mut CBaseClientUnion;
+pub type ClientArrayPtr = CbaseClientPtr;
 
 pub struct ClientArray {
     inner: ClientArrayPtr,
@@ -78,7 +73,7 @@ impl Iterator for ClientArray {
             None?
         }
 
-        let client = unsafe { mem::transmute::<_, CbaseClientPtr>(self.inner.add(self.index)) };
+        let client = unsafe { self.inner.add(self.index) };
 
         self.index += 1;
 

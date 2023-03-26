@@ -9,7 +9,8 @@ static mut LOGGED_STUFF: bool = false;
 
 static_detour! {
     static SomeRunUsercmdFunc: unsafe extern "C" fn(c_char);
-    pub static ClientFullyConnected: unsafe extern "C" fn(ServerGameClients, u16, bool);
+    static ClientFullyConnected: unsafe extern "C" fn(ServerGameClients, u16, bool);
+    static FUN_005a5c00: unsafe extern "fastcall" fn(i64,c_char);
 }
 
 fn some_run_user_cmd_hook(parm: c_char) {
@@ -30,6 +31,7 @@ fn some_run_user_cmd_hook(parm: c_char) {
     unsafe { SomeRunUsercmdFunc.call(parm) }
 }
 
+#[allow(dead_code)]
 pub fn client_connected_hook(game_clients: ServerGameClients, edict: u16, unk: bool) {
     let game_clients_known = crate::PLUGIN
         .wait()
@@ -43,6 +45,17 @@ pub fn client_connected_hook(game_clients: ServerGameClients, edict: u16, unk: b
     log::info!("unk bool {unk}");
 
     unsafe { ClientFullyConnected.call(game_clients, edict, unk) };
+}
+
+#[allow(dead_code)]
+pub fn fun_005a5c00_hook(parm1: i64, parm2: c_char) {
+    log::info!("FUN_005a5c00 called");
+    log::info!("parm 1 {parm1}");
+    log::info!("parm 2 {parm2}");
+
+    unsafe {
+        FUN_005a5c00.call(parm1, parm2);
+    }
 }
 
 pub fn hook_server(addr: *const c_void) {
@@ -67,5 +80,13 @@ pub fn hook_server(addr: *const c_void) {
         //     .expect("failure to enable the ClientFullyConnected hook");
 
         // log::info!("hooked ClientFullyConnected");
+
+        // FUN_005a5c00
+        //     .initialize(mem::transmute(addr.offset(0x005a5c00)), fun_005a5c00_hook)
+        //     .expect("failed to hook FUN_005a5c00")
+        //     .enable()
+        //     .expect("failure to enable the FUN_005a5c00 hook");
+
+        // log::info!("hooked FUN_005a5c00");
     }
 }

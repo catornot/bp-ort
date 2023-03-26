@@ -20,14 +20,14 @@ pub enum ePersistenceReady {
 pub union CBaseClient {
     pub __size: [::std::os::raw::c_char; 7426usize],
     pub edict: std::mem::ManuallyDrop<CBaseClient__bindgen_ty_1>,
-    pub m_name: std::mem::ManuallyDrop<CBaseClient__bindgen_ty_2>,
-    pub m_con_vars: std::mem::ManuallyDrop<CBaseClient__bindgen_ty_3>,
-    pub m_signon: std::mem::ManuallyDrop<CBaseClient__bindgen_ty_4>,
-    pub m_clan_tag: std::mem::ManuallyDrop<CBaseClient__bindgen_ty_5>,
-    pub m_b_fake_player: std::mem::ManuallyDrop<CBaseClient__bindgen_ty_6>,
-    pub m_i_persistence_ready: std::mem::ManuallyDrop<CBaseClient__bindgen_ty_7>,
-    pub m_persistence_buffer: std::mem::ManuallyDrop<CBaseClient__bindgen_ty_8>,
-    pub m_uid: std::mem::ManuallyDrop<CBaseClient__bindgen_ty_9>,
+    pub name: std::mem::ManuallyDrop<CBaseClient__bindgen_ty_2>,
+    pub con_vars: std::mem::ManuallyDrop<CBaseClient__bindgen_ty_3>,
+    pub signon: std::mem::ManuallyDrop<CBaseClient__bindgen_ty_4>,
+    pub clan_tag: std::mem::ManuallyDrop<CBaseClient__bindgen_ty_5>,
+    pub fake_player: std::mem::ManuallyDrop<CBaseClient__bindgen_ty_6>,
+    pub persistence_ready: std::mem::ManuallyDrop<CBaseClient__bindgen_ty_7>,
+    pub persistence_buffer: std::mem::ManuallyDrop<CBaseClient__bindgen_ty_8>,
+    pub uid: std::mem::ManuallyDrop<CBaseClient__bindgen_ty_9>,
 }
 #[repr(C)]
 #[derive(Debug)]
