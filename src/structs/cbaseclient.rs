@@ -57,7 +57,7 @@ impl CbaseClient {
     }
 
     pub fn set_clan_tag(&self, new_tag: String) {
-        let mut tag = unsafe { self.inner.clan_tag.m_ClanTag };
+        let tag = &mut unsafe { self.inner.clan_tag.m_ClanTag };
 
         for (index, c) in new_tag.chars().enumerate() {
             tag[index] = c as u8 as i8
@@ -78,5 +78,14 @@ impl CbaseClient {
         log::info!("name : {}", name);
         log::info!("signon : {:?}", self.get_signon());
         log::info!("bot : {}", self.is_fake_player());
+    }
+}
+
+impl From<&'static CBaseClientUnion> for CbaseClient {
+
+    fn from(value: &'static CBaseClientUnion) -> Self {
+        Self {
+            inner: value
+        }
     }
 }

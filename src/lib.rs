@@ -1,4 +1,4 @@
-#![feature(unboxed_closures)]
+#![feature(unboxed_closures,layout_for_ptr)]
 
 use bots_convars::register_required_convars;
 use debug_commands::register_debug_concommands;
@@ -24,7 +24,6 @@ mod tf2dlls;
 
 static CLAN_TAG_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
 pub static SIMULATE_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
-pub static mut TESTBOT: Option<CbaseClient> = None;
 
 #[derive(Debug)]
 pub struct BotPlugin {
@@ -158,14 +157,9 @@ fn spawn_fake_player(command: CCommandResult) {
 
         wait(1);
 
-        let g = source_engine_data.game_clients;
-        let f = source_engine_data.client_fully_connected;
+        (source_engine_data.client_fully_connected)(std::ptr::null(), client.get_edict(), true);
 
-        f(g, client.get_edict(), true);
-
-        log::info!("spawned a bot : {}", client.get_name());
-
-        _ = TESTBOT.replace(client);
+       log::info!("spawned a bot : {}", client.get_name());
     }
 }
 

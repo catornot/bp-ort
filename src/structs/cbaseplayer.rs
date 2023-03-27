@@ -35,7 +35,7 @@ impl CbasePlayer {
     }
 
     pub fn set_clan_tag(&self, new_tag: String) {
-        let mut tag = unsafe { self.inner.community_clan_tag.community_clan_tag };
+        let tag = &mut unsafe { self.inner.community_clan_tag.community_clan_tag };
 
         for (index, c) in new_tag.chars().enumerate() {
             tag[index] = c as u8 as i8

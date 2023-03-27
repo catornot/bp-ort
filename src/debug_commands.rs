@@ -114,7 +114,9 @@ pub fn set_clan_tag(command: CCommandResult) {
         None => return,
     };
 
-    if let Ok(player) = CbasePlayer::try_from(unsafe {
+    log::info!("setting clan tag");
+
+    match CbasePlayer::try_from(unsafe {
         (crate::PLUGIN
             .wait()
             .source_engine_data
@@ -122,10 +124,9 @@ pub fn set_clan_tag(command: CCommandResult) {
             .unwrap()
             .player_by_index)(index + 1)
     }) {
-        player.set_clan_tag(tag)
+        Ok(player) => player.set_clan_tag(tag),
+        Err(_) => log::info!("failed to find the player")
     }
-
-    
 
     // for client in (&mut crate::PLUGIN
     //     .wait()

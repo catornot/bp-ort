@@ -18,7 +18,7 @@ pub enum ePersistenceReady {
 }
 #[repr(C)]
 pub union CBaseClient {
-    pub __size: [::std::os::raw::c_char; 7426usize],
+    pub __size: [::std::os::raw::c_char; 186152usize],
     pub edict: std::mem::ManuallyDrop<CBaseClient__bindgen_ty_1>,
     pub name: std::mem::ManuallyDrop<CBaseClient__bindgen_ty_2>,
     pub con_vars: std::mem::ManuallyDrop<CBaseClient__bindgen_ty_3>,
