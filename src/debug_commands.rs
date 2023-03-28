@@ -127,15 +127,4 @@ pub fn set_clan_tag(command: CCommandResult) {
         Ok(player) => player.set_clan_tag(tag),
         Err(_) => log::info!("failed to find the player")
     }
-
-    // for client in (&mut crate::PLUGIN
-    //     .wait()
-    //     .source_engine_data
-    //     .lock()
-    //     .unwrap()
-    //     .client_array)
-    //     .filter(|c| c.get_signon() != SignonState::None)
-    // {
-    //     client.set_clan_tag(tag.clone())
-    // }
 }
