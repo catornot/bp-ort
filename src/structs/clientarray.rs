@@ -8,9 +8,6 @@ use crate::structs::{
     cbaseclient::{CbaseClient, CbaseClientPtr},
 };
 
-// use super::Void;
-
-// pub type ClientArrayPtr = *const [Void; ClientArray::MAXCLIENTS];
 pub type ClientArrayPtr = *const [CBaseClientUnion; ClientArray::MAXCLIENTS];
 
 pub struct ClientArray {
@@ -59,61 +56,12 @@ impl ClientArray {
             log::info!("info about client {i}");
             log::info!("addr {:?}", client.get_addr() as *const CbaseClient);
             log::info!("size of ptr : {:?}", std::mem::size_of::<CbaseClientPtr>());
-
-            // let client = CbaseClient::new(client);
-
+            
             log::info!("edict : {}", client.get_edict());
-            // log::info!("name alt : {}", client.get_name_alt());
             log::info!("name : {}", client.get_name());
             log::info!("signon : {:?}", client.get_signon());
             log::info!("bot : {}", client.is_fake_player());
         }
-
-        // log::info!("v2 addr {:?}", unsafe {
-        //     *std::mem::transmute::<_, *const [*const CBaseClientUnion; Self::MAXCLIENTS]>(self.inner)
-        // });
-
-        // for client_ptr in (0..Self::MAXCLIENTS).map(|i| {
-        //     (self.inner as usize + std::mem::size_of::<*const *const CbaseClient>() * i)
-        //         as *const CbaseClient
-        // }) {
-        //     log::info!("v3 addr {client_ptr:?}");
-        // }
-
-        // log::info!(
-        //     "v4 addr {:?}",
-        //     (0..Self::MAXCLIENTS)
-        //         .map(|i| (unsafe { self.inner.offset(0x4 * i as isize) }) as *const c_void)
-        //         .collect::<Vec<*const c_void>>()
-        // );
-
-        // log::info!("sizeof(ClientArrayPtr) {}", unsafe {
-        //     size_of_val_raw::<*const CBaseClientUnion>(self.inner.cast())
-        // });
-
-        // log::info!(
-        //     "v5 addr {:?}",
-        //     (0..Self::MAXCLIENTS)
-        //         .map(|i| (unsafe {
-        //             self.inner.offset(
-        //                 (size_of_val_raw::<*const CBaseClientUnion>(self.inner.cast()) * i)
-        //                     .try_into()
-        //                     .unwrap(),
-        //             )
-        //         }) as *const c_void)
-        //         .collect::<Vec<*const c_void>>()
-        // );
-
-        // log::info!("v6 addr {:?}", unsafe {
-        //     **std::mem::transmute::<_, *const *const [*const c_void; Self::MAXCLIENTS]>(self.inner)
-        // });
-
-        // log::info!("v7 addr {:?}", unsafe {
-        //     slice::from_raw_parts(self.inner, Self::MAXCLIENTS).iter().collect::<Vec<_>>()
-        // });
-
-        log::info!("whole thing {:?}", self);
-
         self.reset_iter();
     }
 

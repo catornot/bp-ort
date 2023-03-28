@@ -24,7 +24,6 @@ impl From<CbasePlayer> for CbasePlayerPtr {
     }
 }
 
-#[allow(dead_code)]
 impl CbasePlayer {
     pub fn get_index(&self) -> u32 {
         unsafe { self.inner.player_index.player_index }

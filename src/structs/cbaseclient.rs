@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+// #![allow(dead_code)]
 
 use std::{
     ffi::{c_char, CStr},
@@ -24,8 +24,6 @@ impl std::fmt::Debug for CbaseClient {
 }
 
 impl CbaseClient {
-    pub const REALSIZE: usize = 0x2D728;
-
     pub fn new(ptr: CbaseClientPtr) -> Option<Self> {
         Some(Self {
             inner: unsafe { ptr.as_ref()? },
@@ -53,14 +51,6 @@ impl CbaseClient {
             CStr::from_ptr(mem::transmute(self.get_name_ptr() as *const [c_char; 64]))
                 .to_string_lossy()
                 .to_string()
-        }
-    }
-
-    pub fn set_clan_tag(&self, new_tag: String) {
-        let tag = &mut unsafe { self.inner.clan_tag.m_ClanTag };
-
-        for (index, c) in new_tag.chars().enumerate() {
-            tag[index] = c as u8 as i8
         }
     }
 

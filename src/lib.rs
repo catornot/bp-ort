@@ -1,7 +1,8 @@
-#![feature(unboxed_closures,layout_for_ptr)]
+#![feature(unboxed_closures, layout_for_ptr)]
 
 use bots_convars::register_required_convars;
 use debug_commands::register_debug_concommands;
+use rand::Rng;
 use rrplug::{
     bindings::convar::FCVAR_GAMEDLL,
     wrappers::convars::{ConVarRegister, ConVarStruct},
@@ -28,6 +29,7 @@ pub static SIMULATE_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
 #[derive(Debug)]
 pub struct BotPlugin {
     clang_tag: Mutex<String>,
+    generic_bot_names: Mutex<Vec<String>>,
     source_engine_data: Mutex<SourceEngineData>,
 }
 
@@ -35,6 +37,33 @@ impl Plugin for BotPlugin {
     fn new() -> Self {
         Self {
             clang_tag: Mutex::new("BOT".into()),
+            generic_bot_names: Mutex::new(
+                vec![
+                    "bot",
+                    "botornot",
+                    "perhaps_bot",
+                    "sybotn",
+                    "botsimp",
+                    "1-1=-0",
+                    "thx_bob",
+                    "Petar_:D",
+                    "HI_H0L0",
+                    "ctalover",
+                    ">.<",
+                    "-.-",
+                    "HIIIIIII",
+                    "okhuh",
+                    "BOT-7274",
+                    "Standby_For_BotFall",
+                    "ifissmthismodded",
+                    "whenmp_boxgameplay?",
+                    "rust<3",
+                    "hi_Fifty",
+                ]
+                .into_iter()
+                .map(|s| s.to_string())
+                .collect(),
+            ),
             #[allow(invalid_value)]
             source_engine_data: Mutex::new(unsafe { mem::MaybeUninit::zeroed().assume_init() }),
         }
@@ -112,18 +141,27 @@ impl Plugin for BotPlugin {
 
 #[rrplug::concommand]
 fn spawn_fake_player(command: CCommandResult) {
-    let mut source_engine_data = PLUGIN.wait().source_engine_data.lock().expect("how");
+    let plugin = PLUGIN.wait();
+    let mut source_engine_data = plugin.source_engine_data.lock().expect("how");
 
-    let name = command.args.get(0).unwrap_or(&"bot".to_owned()).to_owned();
+    let mut rng = rand::thread_rng();
+    let names = &plugin.generic_bot_names.lock().expect("how");
+
+    let name = command
+        .args
+        .get(0)
+        .unwrap_or_else(|| {
+            names
+                .get(rng.gen_range(0..names.len()))
+                .unwrap_or(&names[0])
+        })
+        .to_owned();
     let team = command
         .args
         .get(1)
         .map(|t| t.parse::<i32>().ok())
         .unwrap_or_else(|| Some(choose_team(&mut source_engine_data)))
         .unwrap_or_else(|| choose_team(&mut source_engine_data));
-        // .clamp(32, 2);
-
-    log::info!("bot : {name} spawned");
 
     let name = to_sq_string!(name);
     unsafe {
@@ -144,22 +182,9 @@ fn spawn_fake_player(command: CCommandResult) {
             }
         };
 
-        client.peak();
-
-        let array_addr = source_engine_data.client_array.get_inner_ptr() as usize;
-        let client_addr = client.get_addr();
-
-        let offset = client.get_addr() - array_addr;
-
-        log::info!("offset {offset}");
-        log::info!("client_addr {array_addr}");
-        log::info!("array_addr {client_addr}");
-
-        wait(1);
-
         (source_engine_data.client_fully_connected)(std::ptr::null(), client.get_edict(), true);
 
-       log::info!("spawned a bot : {}", client.get_name());
+        log::info!("spawned a bot : {}", client.get_name());
     }
 }
 
@@ -175,8 +200,8 @@ fn choose_team(source_engine_data: &mut SourceEngineData) -> i32 {
         .inspect(|_| total_players += 1)
         .filter_map(|(index, _)| {
             Some(unsafe {
-                *((get_player_by_index(index as i32 + 1).as_ref()? as *const _ as *const c_void).offset(0x5E4)
-                    as *const i32)
+                *((get_player_by_index(index as i32 + 1).as_ref()? as *const _ as *const c_void)
+                    .offset(0x5E4) as *const i32)
             })
         })
         .filter(|team| team == &2)

@@ -41,14 +41,6 @@ pub type CreateFakeClient = unsafe extern "fastcall" fn(
     i32,
 ) -> CbaseClientPtr;
 
-// unsafe extern "C" fn(
-// self_: *mut ::std::os::raw::c_void,
-// pName: *const ::std::os::raw::c_char,
-// pUnk: *const ::std::os::raw::c_char,
-// pDesiredPlaylist: *const ::std::os::raw::c_char,
-// nDesiredTeam: ::std::os::raw::c_int,
-// ) -> *mut CBaseClient,
-
 pub struct SourceEngineData {
     pub server: PServer,
     pub game_clients: ServerGameClients,
@@ -127,15 +119,12 @@ impl SourceEngineData {
                 }
             };
 
-        let client_array_addr = unsafe { handle_engine.offset(0x12A53F90) } as ClientArrayPtr;
-
-        log::info!("client_array {:?}", &client_array_addr as *const _ );
-
         unsafe {
             self.server = handle_engine.offset(0x12A53D40) as PServer;
             self.game_clients = handle_engine.offset(0x13F0AAA8) as ServerGameClients;
             self.create_fake_client = mem::transmute(handle_engine.offset(0x114C60));
-            self.client_array = ClientArray::new(client_array_addr);
+            self.client_array =
+                ClientArray::new(handle_engine.offset(0x12A53F90) as ClientArrayPtr);
         }
 
         if let Err(err) = unsafe { Library::from_raw(handle_engine as *mut _).close() } {
