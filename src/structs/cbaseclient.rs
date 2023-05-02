@@ -54,6 +54,14 @@ impl CbaseClient {
         }
     }
 
+    pub fn set_clan_tag(&self, new_tag: String) {
+        let tag = &mut unsafe { self.inner.clan_tag.m_ClanTag };
+
+        for (index, c) in new_tag.chars().enumerate() {
+            tag[index] = c as u8 as i8
+        }
+    }
+
     pub fn get_addr(&self) -> usize {
         addr_of!(*self.inner) as usize
     }
@@ -72,10 +80,7 @@ impl CbaseClient {
 }
 
 impl From<&'static CBaseClientUnion> for CbaseClient {
-
     fn from(value: &'static CBaseClientUnion) -> Self {
-        Self {
-            inner: value
-        }
+        Self { inner: value }
     }
 }

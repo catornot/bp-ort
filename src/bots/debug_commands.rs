@@ -125,6 +125,6 @@ pub fn set_clan_tag(command: CCommandResult) {
             .player_by_index)(index + 1)
     }) {
         Ok(player) => player.set_clan_tag(tag),
-        Err(_) => log::info!("failed to find the player")
+        Err(_) => log::info!("failed to find the player"),
     }
 }

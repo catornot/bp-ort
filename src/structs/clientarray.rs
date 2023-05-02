@@ -56,7 +56,7 @@ impl ClientArray {
             log::info!("info about client {i}");
             log::info!("addr {:?}", client.get_addr() as *const CbaseClient);
             log::info!("size of ptr : {:?}", std::mem::size_of::<CbaseClientPtr>());
-            
+
             log::info!("edict : {}", client.get_edict());
             log::info!("name : {}", client.get_name());
             log::info!("signon : {:?}", client.get_signon());

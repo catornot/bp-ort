@@ -4,13 +4,14 @@ use libloading::{
 };
 use once_cell::sync::Lazy;
 use std::{
-    ffi::{c_char, c_void},
-    mem,
+    ffi::{c_char, c_int, c_void},
+    mem::{self, transmute},
     path::PathBuf,
 };
 
 use crate::{
-    bots_detour::hook_server,
+    hooks::{DllHook, FuncHooks},
+    screen_detour::hook_materialsystem,
     structs::{
         cbaseclient::CbaseClientPtr,
         cbaseplayer::CbasePlayerPtr,
@@ -49,6 +50,7 @@ pub struct SourceEngineData {
     pub run_null_command: RunNullCommand,
     pub client_array: ClientArray,
     pub player_by_index: PlayerByIndex,
+    pub some_ctexture_function: unsafe extern "C" fn(*const c_void, c_int) -> i16,
 }
 
 impl std::fmt::Debug for SourceEngineData {
@@ -77,7 +79,7 @@ impl std::fmt::Debug for SourceEngineData {
 unsafe impl Send for SourceEngineData {}
 
 impl SourceEngineData {
-    pub fn load_server(&mut self) {
+    pub fn load_server(&mut self, hook_functions: FuncHooks) {
         let path = EXE_DIR.clone().join(library_filename("server"));
 
         log::info!("loading server.dll from path {}", path.display());
@@ -94,14 +96,17 @@ impl SourceEngineData {
         self.run_null_command = unsafe { mem::transmute(handle_server.offset(0x5A9FD0)) };
         self.player_by_index = unsafe { mem::transmute(handle_server.offset(0x26AA10)) };
 
-        hook_server(handle_server);
+        let dll_hook = DllHook::new(handle_server);
+        for boxed_hook_struct in hook_functions.iter() {
+            boxed_hook_struct.hook_server(&dll_hook);
+        }
 
         if let Err(err) = unsafe { Library::from_raw(handle_server as *mut _).close() } {
             log::error!("couldn't close the handle_engine; {err}")
         }
     }
 
-    pub fn load_engine(&mut self) {
+    pub fn load_engine(&mut self, hook_functions: FuncHooks) {
         let path = EXE_DIR
             .clone()
             .join("bin")
@@ -119,6 +124,11 @@ impl SourceEngineData {
                 }
             };
 
+        let dll_hook = DllHook::new(handle_engine);
+        for boxed_hook_struct in hook_functions.iter() {
+            boxed_hook_struct.hook_engine(&dll_hook);
+        }
+
         unsafe {
             self.server = handle_engine.offset(0x12A53D40) as PServer;
             self.game_clients = handle_engine.offset(0x13F0AAA8) as ServerGameClients;
@@ -128,6 +138,68 @@ impl SourceEngineData {
         }
 
         if let Err(err) = unsafe { Library::from_raw(handle_engine as *mut _).close() } {
+            log::error!("couldn't close the handle_engine; {err}")
+        }
+    }
+
+    pub fn load_materialsystem(&mut self) {
+        let path = EXE_DIR
+            .clone()
+            .join("bin")
+            .join("x64_retail")
+            .join("materialsystem_dx11.dll");
+
+        log::info!(
+            "loading materialsystem_dx11.dll from path {}",
+            path.display()
+        );
+
+        let handle_matsys =
+            match unsafe { Library::load_with_flags(path, LOAD_WITH_ALTERED_SEARCH_PATH) } {
+                Ok(lib) => lib.into_raw() as *const c_void,
+                Err(err) => {
+                    log::error!("{err}");
+                    return;
+                }
+            };
+
+        log::info!("base matsys addr: {handle_matsys:?}");
+
+        hook_materialsystem(handle_matsys);
+
+        unsafe {
+            self.some_ctexture_function = transmute(handle_matsys as usize + 0x00079e80);
+        }
+
+        if let Err(err) = unsafe { Library::from_raw(handle_matsys as *mut _).close() } {
+            log::error!("couldn't close the handle_engine; {err}")
+        }
+    }
+
+    pub fn load_client(&mut self, hook_functions: FuncHooks) {
+        let path = EXE_DIR
+            .clone()
+            .join("bin")
+            .join("x64_retail")
+            .join("client.dll");
+
+        log::info!("loading client.dll from path {}", path.display());
+
+        let client_handle =
+            match unsafe { Library::load_with_flags(path, LOAD_WITH_ALTERED_SEARCH_PATH) } {
+                Ok(lib) => lib.into_raw() as *const c_void,
+                Err(err) => {
+                    log::error!("{err}");
+                    return;
+                }
+            };
+
+        let dll_hook = DllHook::new(client_handle);
+        for boxed_hook_struct in hook_functions.iter() {
+            boxed_hook_struct.hook_client(&dll_hook);
+        }
+
+        if let Err(err) = unsafe { Library::from_raw(client_handle as *mut _).close() } {
             log::error!("couldn't close the handle_engine; {err}")
         }
     }

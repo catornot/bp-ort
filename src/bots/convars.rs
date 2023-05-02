@@ -3,12 +3,7 @@ use rrplug::{bindings::convar::FCVAR_GAMEDLL, wrappers::engine::EngineData};
 macro_rules! bot_convar {
     ($engine: expr,$name: expr, $default_text: expr, $flag: expr, $help_text: expr) => {
         $engine
-            .register_convar(
-                $name.to_string(),
-                "",
-                $help_text,
-                $flag as i32,
-            )
+            .register_convar($name.to_string(), "", $help_text, $flag as i32)
             .expect("failed to register convar")
     };
 }
