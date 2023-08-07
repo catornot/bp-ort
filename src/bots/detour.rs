@@ -1,8 +1,8 @@
 use super::cmds::run_bots_cmds;
-use crate::structs::cbaseclient::{CbaseClient, CbaseClientPtr};
 use retour::static_detour;
+use rrplug::bindings::entity::CBaseClient;
 use std::{
-    ffi::{c_char, c_void},
+    ffi::{c_char, c_void, CStr},
     mem,
 };
 
@@ -10,7 +10,7 @@ static_detour! {
     static SomeRunUsercmdFunc: unsafe extern "C" fn(c_char);
     #[allow(improper_ctypes_definitions)] // this is bad but this is what respawn did with there infinite wisdom
     // static CBaseClient__Connect: unsafe extern "C" fn(CbaseClientPtr, *const c_char, *const c_void, c_char, *const c_void, [c_char;256], *const c_void ) -> bool;
-    static SomeSubFunc_Connect: unsafe extern "C" fn(CbaseClientPtr, *const c_char);
+    static SomeSubFunc_Connect: unsafe extern "C" fn(*mut CBaseClient, *const c_char);
     static SomeVoiceFunc: unsafe extern "C" fn(*const c_void, *const c_void) -> *const c_void;
 
 }
@@ -38,22 +38,30 @@ pub fn hook_server(addr: *const c_void) {
     }
 }
 
-pub fn subfunc_cbaseclient_connect_hook(this: CbaseClientPtr, name: *const c_char) {
-    match CbaseClient::new(this) {
+pub fn subfunc_cbaseclient_connect_hook(this: *mut CBaseClient, name: *const c_char) {
+    match unsafe { this.as_mut() } {
         Some(client) => {
-            if client.is_fake_player() {
-                client.set_clan_tag(
-                    crate::PLUGIN
-                        .wait()
-                        .bots.clang_tag
-                        .lock()
-                        .expect("how")
-                        .to_string(),
-                );
+            if unsafe { *client.fake_player.get_inner() } {
+                unsafe {
+                    client
+                        .clan_tag
+                        .iter_mut()
+                        .zip(
+                            crate::PLUGIN
+                                .wait()
+                                .bots
+                                .clang_tag
+                                .lock()
+                                .expect("how")
+                                .bytes(),
+                        )
+                        .for_each(|(c, tag_c)| *c = tag_c as i8)
+                };
 
-                log::info!("set the clan tag for {}", client.get_name());
-            } else {
-                client.set_clan_tag("GAMING".to_string())
+                log::info!("set the clan tag for {}", unsafe {
+                    &CStr::from_ptr(client.name.as_ref() as *const [i8] as *const i8)
+                        .to_string_lossy()
+                });
             }
         }
         None => log::warn!("connected client is null :("),
@@ -91,7 +99,7 @@ fn some_voice_func_hook(unk1: *const c_void, unk2: *const c_void) -> *const c_vo
     }
 }
 
-#[allow(unused_variables)]
+#[allow(unused)]
 // move this lmao
 pub fn hook_client(addr: *const c_void) {
     log::info!("hooking client functions");

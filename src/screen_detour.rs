@@ -1,4 +1,4 @@
-#![allow(dead_code,unused_variables)]
+#![allow(dead_code, unused_variables)]
 
 use retour::static_detour;
 use std::{
@@ -6,7 +6,7 @@ use std::{
     mem,
 };
 
-use crate::PLUGIN;
+use crate::bindings::MATSYS_FUNCTIONS;
 
 static_detour! {
     static SomeCtextureConstructor: unsafe extern "C" fn(*const c_void ) -> *const c_void;
@@ -45,10 +45,11 @@ fn ctexture_consumer_hook(unk1: *const c_void) -> *const c_void {
         // log::info!("name {name}");
 
         // std::ptr::null()
-        
-        let sed = PLUGIN.wait().source_engine_data.lock().expect("how");
 
-        log::info!("some int {}", (sed.some_ctexture_function)(ptr, 10));
+        log::info!(
+            "some int {}",
+            (MATSYS_FUNCTIONS.wait().some_ctexture_function)(ptr, 10)
+        );
 
         ptr
     }

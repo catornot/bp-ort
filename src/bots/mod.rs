@@ -1,18 +1,20 @@
 use rand::Rng;
+use rrplug::bindings::entity::SignonState;
+use rrplug::prelude::*;
 use rrplug::{
     bindings::convar::FCVAR_GAMEDLL,
-    to_sq_string,
-    wrappers::convars::{ConVarRegister, ConVarStruct},
-    wrappers::northstar::{EngineLoadType, PluginData},
+    high::convars::{ConVarRegister, ConVarStruct},
+    to_sq_string, OnceCell,
 };
-use rrplug::{prelude::*, OnceCell};
-use std::{ffi::c_void, sync::Mutex};
+use std::ffi::CStr;
+use std::{ops::Deref, sync::Mutex};
 
 use crate::{
-    hooks::Hooks, native_types::SignonState, structs::cbaseclient::CbaseClient,
-    tf2dlls::SourceEngineData, PLUGIN,
+    bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
+    iterate_c_array_sized, PLUGIN,
 };
 
+use self::detour::{hook_engine, hook_server};
 use self::{convars::register_required_convars, debug_commands::register_debug_concommands};
 
 mod cmds;
@@ -30,11 +32,11 @@ pub struct Bots {
 }
 
 impl Plugin for Bots {
-    fn new() -> Self {
+    fn new(_plugin_data: &PluginData) -> Self {
         Self {
             clang_tag: Mutex::new("BOT".into()),
             generic_bot_names: Mutex::new(
-                vec![
+                [
                     "bot",
                     "botornot",
                     "perhaps_bot",
@@ -65,17 +67,22 @@ impl Plugin for Bots {
             ),
         }
     }
-    fn initialize(&mut self, _plugin_data: &PluginData) {}
 
     fn main(&self) {}
 
-    fn on_engine_load(&self, engine: &EngineLoadType) {
+    fn on_dll_load(&self, engine: &PluginLoadDLL, dll_ptr: &DLLPointer) {
+        match dll_ptr.which_dll() {
+            rrplug::mid::engine::WhichDll::Engine => hook_engine(dll_ptr.get_dll_ptr()),
+            rrplug::mid::engine::WhichDll::Server => hook_server(dll_ptr.get_dll_ptr()),
+            _ => {}
+        }
+
         let engine = match engine {
-            EngineLoadType::Engine(engine) => engine,
+            PluginLoadDLL::Engine(engine) => engine,
             _ => return,
         };
 
-        let convar = ConVarStruct::try_new().unwrap();
+        let mut convar = ConVarStruct::try_new().unwrap();
         let register_info = ConVarRegister {
             callback: Some(clang_tag_changed),
             ..ConVarRegister::mandatory(
@@ -91,7 +98,7 @@ impl Plugin for Bots {
             .expect("failed to register the convar");
         _ = CLAN_TAG_CONVAR.set(convar);
 
-        let simulate_convar = ConVarStruct::try_new().unwrap();
+        let mut simulate_convar = ConVarStruct::try_new().unwrap();
         let register_info = ConVarRegister {
             ..ConVarRegister::mandatory(
                 "bot_cmds",
@@ -119,28 +126,15 @@ impl Plugin for Bots {
     }
 }
 
-impl Hooks for Bots {
-    fn hook_server(&self, dll: &crate::hooks::DllHook) {
-        detour::hook_server(dll.get_ptr())
-    }
-    fn hook_engine(&self, dll: &crate::hooks::DllHook) {
-        detour::hook_engine(dll.get_ptr())
-    }
-    fn hook_client(&self, dll: &crate::hooks::DllHook) {
-        detour::hook_client(dll.get_ptr())
-    }
-}
-
 #[rrplug::concommand]
 fn spawn_fake_player(command: CCommandResult) {
     let plugin = PLUGIN.wait();
-    let mut source_engine_data = plugin.source_engine_data.lock().expect("how");
-
+    let engine_funcs = ENGINE_FUNCTIONS.wait();
     let mut rng = rand::thread_rng();
     let names = &plugin.bots.generic_bot_names.lock().expect("how");
 
     let name = command
-        .args
+        .get_args()
         .get(0)
         .unwrap_or_else(|| {
             names
@@ -149,16 +143,16 @@ fn spawn_fake_player(command: CCommandResult) {
         })
         .to_owned();
     let team = command
-        .args
+        .get_args()
         .get(1)
         .map(|t| t.parse::<i32>().ok())
-        .unwrap_or_else(|| Some(choose_team(&mut source_engine_data)))
-        .unwrap_or_else(|| choose_team(&mut source_engine_data));
+        .unwrap_or_else(|| Some(choose_team()))
+        .unwrap_or_else(choose_team);
 
     let name = to_sq_string!(name);
     unsafe {
-        let bot = (source_engine_data.create_fake_client)(
-            source_engine_data.server,
+        let bot = (engine_funcs.create_fake_client)(
+            engine_funcs.server,
             name.as_ptr(),
             &'\0' as *const char as *const i8,
             &'\0' as *const char as *const i8,
@@ -166,7 +160,7 @@ fn spawn_fake_player(command: CCommandResult) {
             0,
         );
 
-        let client = match CbaseClient::new(bot) {
+        let client = match bot.as_ref() {
             Some(c) => c,
             None => {
                 log::warn!("spawned a invalid bot");
@@ -174,30 +168,36 @@ fn spawn_fake_player(command: CCommandResult) {
             }
         };
 
-        (source_engine_data.client_fully_connected)(std::ptr::null(), client.get_edict(), true);
+        (SERVER_FUNCTIONS.wait().client_fully_connected)(std::ptr::null(), **client.edict, true);
 
-        log::info!("spawned a bot : {}", client.get_name());
+        log::info!(
+            "spawned a bot : {}",
+            CStr::from_ptr(client.name.as_ref() as *const [i8] as *const i8).to_string_lossy()
+        );
     }
 }
 
-fn choose_team(source_engine_data: &mut SourceEngineData) -> i32 {
-    let client_array = &mut source_engine_data.client_array;
-    let get_player_by_index = source_engine_data.player_by_index;
+fn choose_team() -> i32 {
+    let server_functions = SERVER_FUNCTIONS.wait();
 
     let mut total_players = 0;
 
-    let team_2_count = client_array
-        .enumerate()
-        .filter(|(_, c)| c.get_signon() >= SignonState::Connected)
-        .inspect(|_| total_players += 1)
-        .filter_map(|(index, _)| {
-            Some(unsafe {
-                *((get_player_by_index(index as i32 + 1).as_ref()? as *const _ as *const c_void)
-                    .offset(0x5E4) as *const i32)
+    let team_2_count =
+        unsafe { iterate_c_array_sized::<_, 32>(ENGINE_FUNCTIONS.wait().client_array.into()) }
+            .enumerate()
+            .filter(|(_, c)| unsafe { c.signon.get_inner() } >= &SignonState::CONNECTED)
+            .inspect(|_| total_players += 1)
+            .filter_map::<i32, _>(|(index, _)| {
+                Some(*unsafe {
+                    (server_functions.get_player_by_index)(index as i32 + 1)
+                        .as_ref()?
+                        .team
+                        .deref()
+                        .deref()
+                })
             })
-        })
-        .filter(|team| team == &2)
-        .count();
+            .filter(|team| team == &2)
+            .count();
 
     let team_3_count = total_players - team_2_count;
 
@@ -209,7 +209,7 @@ fn choose_team(source_engine_data: &mut SourceEngineData) -> i32 {
 }
 
 #[rrplug::convar]
-fn clang_tag_changed(convar: Option<ConVarStruct>, old_value: String, float_old_value: f32) {
+fn clang_tag_changed() {
     let new_clan_tag = match CLAN_TAG_CONVAR.wait().get_value_string() {
         Some(c) => c,
         None => return,

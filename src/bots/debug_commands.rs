@@ -1,21 +1,13 @@
-use rrplug::{bindings::convar::FCVAR_GAMEDLL, wrappers::engine::EngineData};
+use rrplug::bindings::convar::FCVAR_GAMEDLL;
+use rrplug::prelude::*;
+use std::ffi::CStr;
 
-use crate::structs::cbaseplayer::CbasePlayer;
+use crate::{
+    bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
+    iterate_c_array_sized,
+};
 
 pub fn register_debug_concommands(engine: &EngineData) {
-    engine
-        .register_concommand(
-            "peak_connected_clients",
-            peak_connected_clients,
-            "peaks the info about connected clients (dumps a lot of info)",
-            FCVAR_GAMEDLL as i32,
-        )
-        .expect("couldn't register concommand peak_connected_clients");
-
-    engine
-        .register_concommand("bots_peak", bots_peak, "", FCVAR_GAMEDLL as i32)
-        .expect("couldn't register concommand bots_peak");
-
     engine
         .register_concommand("bot_find", bot_find, "", FCVAR_GAMEDLL as i32)
         .expect("couldn't register concommand bot_find");
@@ -35,73 +27,42 @@ pub fn register_debug_concommands(engine: &EngineData) {
 }
 
 #[rrplug::concommand]
-pub fn peak_connected_clients(command: CCommandResult) {
-    crate::PLUGIN
-        .wait()
-        .source_engine_data
-        .lock()
-        .unwrap()
-        .client_array
-        .peak_array();
-}
-
-#[rrplug::concommand]
 pub fn bot_find(command: CCommandResult) {
-    let name = match command.args.get(0) {
+    let name = match command.get_args().get(0) {
         Some(n) => n,
         None => return,
     };
 
-    let found_client = crate::PLUGIN
-        .wait()
-        .source_engine_data
-        .lock()
-        .unwrap()
-        .client_array
-        .find(|c| &c.get_name() == name);
+    let found_client = unsafe {
+        iterate_c_array_sized::<_, 32>(ENGINE_FUNCTIONS.wait().client_array.into())
+            .map(|c| CStr::from_ptr(c.name.as_ref() as *const [i8] as *const i8).to_string_lossy())
+            .find(|n| n == name)
+    };
 
     if let Some(c) = found_client {
-        c.peak()
+        log::info!("found bot {c}");
     }
 }
 
 #[rrplug::concommand]
-pub fn bots_peak(command: CCommandResult) {
-    for client in (&mut crate::PLUGIN
-        .wait()
-        .source_engine_data
-        .lock()
-        .unwrap()
-        .client_array)
-        .filter(|c| c.is_fake_player())
-    {
-        client.peak()
-    }
-}
-
-#[rrplug::concommand]
-pub fn bot_dump_players(command: CCommandResult) {
-    let player_by_index = crate::PLUGIN
-        .wait()
-        .source_engine_data
-        .lock()
-        .unwrap()
-        .player_by_index;
+pub fn bot_dump_players() {
     for player in (0..32)
-        .map(|i| unsafe { player_by_index(i + 1) })
-        .filter_map(|ptr| CbasePlayer::try_from(ptr).ok())
+        .map(|i| unsafe { (SERVER_FUNCTIONS.wait().get_player_by_index)(i + 1) })
+        .filter_map(|ptr| unsafe { ptr.as_ref() })
     {
-        log::info!(
-            "player at index {} on team {}",
-            player.get_index(),
-            player.get_team()
-        )
+        unsafe {
+            log::info!(
+                "player at index {:?} on team {:?}",
+                player.player_index,
+                player.team,
+            )
+        }
     }
 }
 
 #[rrplug::concommand]
 pub fn set_clan_tag(command: CCommandResult) {
-    let index = match command.args.get(0) {
+    let index = match command.get_args().get(0) {
         Some(index) => match index.parse::<i32>() {
             Ok(index) => index,
             _ => return,
@@ -109,22 +70,25 @@ pub fn set_clan_tag(command: CCommandResult) {
         None => return,
     };
 
-    let tag = match command.args.get(0) {
-        Some(tag) => tag.to_string(),
+    let tag = match command.get_args().get(0) {
+        Some(tag) => tag.bytes(),
         None => return,
     };
 
     log::info!("setting clan tag");
 
-    match CbasePlayer::try_from(unsafe {
-        (crate::PLUGIN
-            .wait()
-            .source_engine_data
-            .lock()
-            .unwrap()
-            .player_by_index)(index + 1)
-    }) {
-        Ok(player) => player.set_clan_tag(tag),
-        Err(_) => log::info!("failed to find the player"),
+    match unsafe {
+        (SERVER_FUNCTIONS.wait().get_player_by_index)(index + 1)
+            .cast_mut()
+            .as_mut()
+    } {
+        Some(player) => unsafe {
+            player
+                .community_clan_tag
+                .iter_mut()
+                .zip(tag)
+                .for_each(|(c, tag_c)| *c = tag_c as i8)
+        },
+        None => log::info!("failed to find the player"),
     }
 }

@@ -1,4 +1,5 @@
-use rrplug::{bindings::convar::FCVAR_GAMEDLL, wrappers::engine::EngineData};
+use rrplug::bindings::convar::FCVAR_GAMEDLL;
+use rrplug::prelude::*;
 
 macro_rules! bot_convar {
     ($engine: expr,$name: expr, $default_text: expr, $flag: expr, $help_text: expr) => {

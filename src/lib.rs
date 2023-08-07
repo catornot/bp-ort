@@ -1,17 +1,18 @@
-#![feature(unboxed_closures, layout_for_ptr)]
+use std::marker::PhantomData;
 
-use bots::Bots;
 use rrplug::prelude::*;
-use rrplug::wrappers::northstar::{EngineLoadType, PluginData};
-use std::mem;
-use std::sync::Mutex;
-use tf2dlls::SourceEngineData;
 
+mod bindings;
 mod bots;
-mod hooks;
-mod native_types;
-mod structs;
-mod tf2dlls;
+
+use crate::{
+    bindings::{
+        ClientFunctions, EngineFunctions, MatSysFunctions, ServerFunctions, CLIENT_FUNCTIONS,
+        ENGINE_FUNCTIONS, MATSYS_FUNCTIONS, SERVER_FUNCTIONS,
+    },
+    bots::Bots,
+    screen_detour::hook_materialsystem,
+};
 
 // todo put these into folders
 
@@ -19,67 +20,77 @@ mod screen_detour;
 
 #[derive(Debug)]
 pub struct HooksPlugin {
-    pub source_engine_data: Mutex<SourceEngineData>,
     pub bots: Bots,
 }
 
 impl Plugin for HooksPlugin {
-    fn new() -> Self {
+    fn new(plugin_data: &PluginData) -> Self {
         Self {
-            #[allow(invalid_value)]
-            source_engine_data: Mutex::new(unsafe { mem::MaybeUninit::zeroed().assume_init() }),
-            bots: Bots::new(),
+            bots: Bots::new(plugin_data),
         }
     }
 
-    fn initialize(&mut self, _plugin_data: &PluginData) {}
-
     fn main(&self) {}
 
-    fn on_engine_load(&self, engine: &EngineLoadType) {
-        self.bots.on_engine_load(engine);
+    fn on_dll_load(&self, engine: &PluginLoadDLL, dll_ptr: &DLLPointer) {
+        self.bots.on_dll_load(engine, dll_ptr);
+
+        unsafe {
+            EngineFunctions::try_init(dll_ptr, &ENGINE_FUNCTIONS);
+            ClientFunctions::try_init(dll_ptr, &CLIENT_FUNCTIONS);
+            ServerFunctions::try_init(dll_ptr, &SERVER_FUNCTIONS);
+            MatSysFunctions::try_init(dll_ptr, &MATSYS_FUNCTIONS);
+        }
 
         match engine {
-            EngineLoadType::Engine(_) => {},
-            EngineLoadType::EngineFailed => return,
-            EngineLoadType::Server => {
-                std::thread::spawn(|| {
-                    wait(10000);
-
-                    let plugin = PLUGIN.wait();
-                    plugin
-                        .source_engine_data
-                        .lock()
-                        .expect("how")
-                        .load_server(vec![&plugin.bots])
-                });
-                return;
+            PluginLoadDLL::Other(other) if other == "materialsystem_dx11.dll" => {
+                hook_materialsystem(dll_ptr.get_dll_ptr())
             }
-            EngineLoadType::Client => {
-                self.source_engine_data
-                    .lock()
-                    .expect("how")
-                    .load_materialsystem();
-
-                std::thread::spawn(|| {
-                    wait(10000);
-
-                    let plugin = PLUGIN.wait();
-                    plugin
-                        .source_engine_data
-                        .lock()
-                        .expect("how")
-                        .load_client(vec![&plugin.bots])
-                });
-                return;
-            }
-        };
-
-        self.source_engine_data
-            .lock()
-            .expect("how")
-            .load_engine(vec![&self.bots]);
+            _ => {}
+        }
     }
 }
 
 entry!(HooksPlugin);
+
+pub(crate) unsafe fn iterate_c_array_sized<T, const U: usize>(
+    ptr: Pointer<T>,
+) -> impl Iterator<Item = &T> {
+    let ptr: *const T = ptr.into();
+    (0..U).filter_map(move |i| ptr.add(i).as_ref())
+}
+
+pub struct Pointer<'a, T> {
+    pub ptr: *const T,
+    marker: PhantomData<&'a T>,
+}
+
+impl<'a, T> From<*const T> for Pointer<'a, T> {
+    fn from(value: *const T) -> Self {
+        Self {
+            ptr: value,
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<'a, T> From<*mut T> for Pointer<'a, T> {
+    fn from(value: *mut T) -> Self {
+        Self {
+            ptr: value.cast_const(),
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<'a, T> From<Pointer<'a, T>> for *const T {
+    fn from(val: Pointer<'a, T>) -> Self {
+        val.ptr
+    }
+}
+
+impl<'a, T> From<Pointer<'a, T>> for *mut T {
+    fn from(val: Pointer<'a, T>) -> Self {
+        val.ptr.cast_mut()
+    }
+}
