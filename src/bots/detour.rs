@@ -73,6 +73,10 @@ pub fn subfunc_cbaseclient_connect_hook(this: *mut CBaseClient, name: *const c_c
 pub fn hook_engine(addr: *const c_void) {
     log::info!("hooking engine functions");
 
+    if SomeSubFunc_Connect.is_enabled() {
+        return;
+    }
+
     unsafe {
         SomeSubFunc_Connect
             .initialize(
