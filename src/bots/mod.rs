@@ -9,9 +9,11 @@ use rrplug::{
 use std::ffi::CStr;
 use std::{ops::Deref, sync::Mutex};
 
+use crate::utils::set_c_char_array;
 use crate::{
     bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
-    iterate_c_array_sized, PLUGIN,
+    utils::iterate_c_array_sized,
+    PLUGIN,
 };
 
 use self::detour::{hook_engine, hook_server};
@@ -160,13 +162,18 @@ fn spawn_fake_player(command: CCommandResult) {
             0,
         );
 
-        let client = match bot.as_ref() {
+        let client = match bot.cast_mut().as_mut() {
             Some(c) => c,
             None => {
                 log::warn!("spawned a invalid bot");
                 return;
             }
         };
+
+        set_c_char_array(
+            &mut client.clan_tag,
+            &PLUGIN.wait().bots.clang_tag.lock().expect("how"),
+        );
 
         (SERVER_FUNCTIONS.wait().client_fully_connected)(std::ptr::null(), **client.edict, true);
 

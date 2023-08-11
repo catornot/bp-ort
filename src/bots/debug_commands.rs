@@ -4,7 +4,7 @@ use std::ffi::CStr;
 
 use crate::{
     bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
-    iterate_c_array_sized,
+    utils::iterate_c_array_sized,
 };
 
 pub fn register_debug_concommands(engine: &EngineData) {
@@ -35,7 +35,11 @@ pub fn bot_find(command: CCommandResult) {
 
     let found_client = unsafe {
         iterate_c_array_sized::<_, 32>(ENGINE_FUNCTIONS.wait().client_array.into())
-            .map(|c| CStr::from_ptr(c.name.as_ref() as *const [i8] as *const i8).to_string_lossy())
+            .map(|c| {
+                CStr::from_ptr(c.name.as_ref() as *const [i8] as *const i8)
+                    .to_string_lossy()
+                    .to_string()
+            })
             .find(|n| n == name)
     };
 
@@ -77,11 +81,7 @@ pub fn set_clan_tag(command: CCommandResult) {
 
     log::info!("setting clan tag");
 
-    match unsafe {
-        (SERVER_FUNCTIONS.wait().get_player_by_index)(index + 1)
-            .cast_mut()
-            .as_mut()
-    } {
+    match unsafe { (SERVER_FUNCTIONS.wait().get_player_by_index)(index + 1).as_mut() } {
         Some(player) => unsafe {
             player
                 .community_clan_tag

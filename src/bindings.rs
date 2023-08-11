@@ -7,7 +7,7 @@ use std::ffi::{c_char, c_void, c_int};
 pub type PServer = *const c_void;
 pub type BotName = *const c_char;
 pub type ServerGameClients = *const c_void;
-pub type PlayerByIndex = unsafe extern "fastcall" fn(i32) -> *const CBasePlayer;
+pub type PlayerByIndex = unsafe extern "fastcall" fn(i32) -> *mut CBasePlayer;
 pub type ClientFullyConnected = unsafe extern "fastcall" fn(ServerGameClients, u16, bool);
 pub type RunNullCommand = unsafe extern "fastcall" fn(*const CBasePlayer);
 pub type CreateFakeClient = unsafe extern "fastcall" fn(
@@ -22,7 +22,7 @@ pub type SomeCtextureFunction = unsafe extern "C" fn(*const c_void, c_int) -> i1
 
 engine_functions! {
     ENGINE_FUNCTIONS + EngineFunctions for WhichDll::Engine => {
-        client_array = *const CBaseClient, at 0x12A53F90;
+        client_array = *mut CBaseClient, at 0x12A53F90;
         server = PServer, at 0x12A53D40;
         game_clients = ServerGameClients, at 0x13F0AAA8;
         create_fake_client = CreateFakeClient, at 0x114C60;

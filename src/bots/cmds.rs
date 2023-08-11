@@ -4,7 +4,7 @@ use std::ops::Deref;
 use super::SIMULATE_CONVAR;
 use crate::{
     bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
-    iterate_c_array_sized,
+    utils::iterate_c_array_sized,
 };
 
 pub fn run_bots_cmds() {

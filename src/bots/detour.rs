@@ -1,3 +1,5 @@
+use crate::utils::set_c_char_array;
+
 use super::cmds::run_bots_cmds;
 use retour::static_detour;
 use rrplug::bindings::entity::CBaseClient;
@@ -10,7 +12,7 @@ static_detour! {
     static SomeRunUsercmdFunc: unsafe extern "C" fn(c_char);
     #[allow(improper_ctypes_definitions)] // this is bad but this is what respawn did with there infinite wisdom
     // static CBaseClient__Connect: unsafe extern "C" fn(CbaseClientPtr, *const c_char, *const c_void, c_char, *const c_void, [c_char;256], *const c_void ) -> bool;
-    static SomeSubFunc_Connect: unsafe extern "C" fn(*mut CBaseClient, *const c_char);
+    static SomeSubFunc_Connect: unsafe extern "C" fn(*mut CBaseClient);
     static SomeVoiceFunc: unsafe extern "C" fn(*const c_void, *const c_void) -> *const c_void;
 
 }
@@ -38,24 +40,17 @@ pub fn hook_server(addr: *const c_void) {
     }
 }
 
-pub fn subfunc_cbaseclient_connect_hook(this: *mut CBaseClient, name: *const c_char) {
+pub fn subfunc_cbaseclient_connect_hook(this: *mut CBaseClient) {
+    unsafe { SomeSubFunc_Connect.call(this) }
+
     match unsafe { this.as_mut() } {
         Some(client) => {
             if unsafe { *client.fake_player.get_inner() } {
                 unsafe {
-                    client
-                        .clan_tag
-                        .iter_mut()
-                        .zip(
-                            crate::PLUGIN
-                                .wait()
-                                .bots
-                                .clang_tag
-                                .lock()
-                                .expect("how")
-                                .bytes(),
-                        )
-                        .for_each(|(c, tag_c)| *c = tag_c as i8)
+                    set_c_char_array(
+                        &mut client.name,
+                        &crate::PLUGIN.wait().bots.clang_tag.lock().expect("how"),
+                    )
                 };
 
                 log::info!("set the clan tag for {}", unsafe {
@@ -66,8 +61,6 @@ pub fn subfunc_cbaseclient_connect_hook(this: *mut CBaseClient, name: *const c_c
         }
         None => log::warn!("connected client is null :("),
     }
-
-    unsafe { SomeSubFunc_Connect.call(this, name) }
 }
 
 pub fn hook_engine(addr: *const c_void) {
@@ -80,7 +73,7 @@ pub fn hook_engine(addr: *const c_void) {
     unsafe {
         SomeSubFunc_Connect
             .initialize(
-                mem::transmute(addr.offset(0x00105ed0)),
+                mem::transmute(addr.offset(0x00101480)),
                 subfunc_cbaseclient_connect_hook, // so since we can't double hook, I found a function that can be hook in CBaseClient__Connect
             )
             .expect("failed to hook SomeSubFunc_Connect")
