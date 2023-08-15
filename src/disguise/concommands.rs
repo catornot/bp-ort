@@ -33,6 +33,15 @@ pub fn register_concommands(engine: &EngineData) {
             FCVAR_GAMEDLL as i32,
         )
         .expect("couldn't register concommand bot_find");
+
+        engine
+        .register_concommand(
+            "disguise_edict",
+            disguise_edict,
+            "disguise_edict <index> <edict>",
+            FCVAR_GAMEDLL as i32,
+        )
+        .expect("couldn't register concommand bot_find");
 }
 
 #[rrplug::concommand]
@@ -84,6 +93,22 @@ pub fn disguise_travesal(command: CCommandResult) -> Option<()> {
         let state: i32 = command.get_args().get(0)?.parse().ok()?;
 
         **player.traversal_type = state;
+    }
+    None
+}
+
+#[rrplug::concommand]
+pub fn disguise_edict(command: CCommandResult) -> Option<()> {
+    unsafe {
+        let index: usize = command.get_args().get(0)?.parse().ok()?;
+
+        let client = ENGINE_FUNCTIONS.wait().client_array.add(index).as_mut()?;
+
+        log::info!("client.edict {}", *client.edict);
+
+        let edict: u16 = command.get_args().get(0)?.parse().ok()?;
+
+        **client.edict = edict;
     }
     None
 }

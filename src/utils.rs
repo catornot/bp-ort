@@ -1,4 +1,4 @@
-use std::{ffi::c_char, marker::PhantomData};
+use std::{ffi::{c_char, CStr}, marker::PhantomData};
 
 pub struct Pointer<'a, T> {
     pub ptr: *const T,
@@ -49,4 +49,7 @@ pub(crate) unsafe fn set_c_char_array<const U: usize>(buf: &mut [c_char; U], new
     buf.iter_mut()
         .zip(new.as_bytes())
         .for_each(|(buf_char, new)| *buf_char = *new as i8);
+}
+pub(crate) unsafe fn from_c_string<T: From<String>>( ptr: *const c_char ) -> T {
+    CStr::from_ptr(ptr).to_string_lossy().to_string().into()
 }

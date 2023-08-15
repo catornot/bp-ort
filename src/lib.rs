@@ -13,8 +13,8 @@ use crate::{
     },
     bots::Bots,
     disguise::Disguise,
-    screen_detour::hook_materialsystem,
     interfaces::Interfaces,
+    screen_detour::hook_materialsystem,
 };
 
 // todo put these into folders
@@ -58,6 +58,8 @@ impl Plugin for HooksPlugin {
             _ => {}
         }
     }
+
+    fn runframe(&self) {}
 }
 
 entry!(HooksPlugin);

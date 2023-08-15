@@ -23,6 +23,7 @@ mod cmds;
 mod convars;
 mod debug_commands;
 mod detour;
+mod set_on_join;
 
 static CLAN_TAG_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
 pub static SIMULATE_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
@@ -170,16 +171,16 @@ fn spawn_fake_player(command: CCommandResult) {
             }
         };
 
-        set_c_char_array(
-            &mut client.clan_tag,
-            &PLUGIN.wait().bots.clang_tag.lock().expect("how"),
-        );
-
         (SERVER_FUNCTIONS.wait().client_fully_connected)(std::ptr::null(), **client.edict, true);
 
         log::info!(
             "spawned a bot : {}",
             CStr::from_ptr(client.name.as_ref() as *const [i8] as *const i8).to_string_lossy()
+        );
+
+        set_c_char_array(
+            &mut client.clan_tag,
+            &PLUGIN.wait().bots.clang_tag.lock().expect("how"),
         );
     }
 }
