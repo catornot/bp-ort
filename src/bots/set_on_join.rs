@@ -13,6 +13,7 @@ pub unsafe fn set_stuff_on_join(client: &mut CBaseClient) {
         log::info!("set the clan tag for {} bot", name);
     } else if name == "cat_or_not" {
         set_c_char_array(&mut client.clan_tag, ":D");
+        set_c_char_array(&mut client.name, "cat_or_nya");
 
         log::info!("set the clan tag for cat_or_not");
     }

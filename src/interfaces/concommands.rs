@@ -165,6 +165,9 @@ pub fn interfaces_test_player() -> Option<()> {
         let same_v = (server_functions.get_origin)(player, &mut v).as_mut()?;
         log::info!("get_origin = {same_v:?}");
 
+        let same_v = (server_functions.eye_angles)(player, &mut v).as_ref()?;
+        log::info!("eye_angles = {same_v:?}");
+
         let ent_fire: *const () =
             *((server_functions.base as usize + 0xb63300) as *const *const ());
 

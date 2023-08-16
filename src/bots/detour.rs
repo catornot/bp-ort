@@ -1,7 +1,7 @@
 use retour::static_detour;
 use rrplug::bindings::entity::{CBaseClient, CBasePlayer};
 use std::{
-    ffi::{c_char, c_void},
+    ffi::{c_char, c_short, c_uchar, c_void},
     mem,
 };
 
@@ -14,7 +14,8 @@ static_detour! {
   // static CBaseClient__Connect: unsafe extern "C" fn(CbaseClientPtr, *const c_char, *const c_void, c_char, *const c_void, [c_char;256], *const c_void ) -> bool;
   static SomeFuncInConnectProcedure: unsafe extern "C" fn(*mut CBaseClient, *const c_void);
   static SomeVoiceFunc: unsafe extern "C" fn(*const c_void, *const c_void) -> *const c_void;
-  static PlayerRunCommand: unsafe extern "C" fn(*const CBasePlayer, *const CUserCmd, *const c_void);
+  static PlayerRunCommand: unsafe extern "C" fn(*mut CBasePlayer, *const CUserCmd, *const c_void);
+  static ProcessUsercmds: unsafe extern "C" fn(*mut CBasePlayer, c_short, *const CUserCmd, i32, i32, c_char, c_uchar); // c_uchar might be wrong since undefined
 }
 
 fn some_run_user_cmd_hook(parm: c_char) {
@@ -23,15 +24,20 @@ fn some_run_user_cmd_hook(parm: c_char) {
     unsafe { SomeRunUsercmdFunc.call(parm) }
 }
 
-// fn hook_player_run_command(
-//     this: *const CBasePlayer,
-//     user_cmd: *const CUserCmd,
-//     move_helper: *const c_void,
-// ) {
-//     log::info!("hook_player_run_command");
+fn hook_proccess_user_cmds(
+    // disabled
+    this: *mut CBasePlayer,
+    unk1: c_short,
+    user_cmds: *const CUserCmd,
+    numcmds: i32,
+    totalcmds: i32,
+    unk2: c_char,
+    unk3: c_uchar,
+) {
+    log::info!("hook_proccess_user_cmds");
 
-//     unsafe { PlayerRunCommand.call(this, user_cmd, move_helper) }
-// }
+    unsafe { ProcessUsercmds.call(this, unk1, user_cmds, numcmds, totalcmds, unk2, unk3) }
+}
 
 pub fn hook_server(addr: *const c_void) {
     log::info!("hooking server functions");
@@ -48,16 +54,16 @@ pub fn hook_server(addr: *const c_void) {
 
         log::info!("hooked SomeRunUsercmdFunc");
 
-        // PlayerRunCommand
-        //     .initialize(
-        //         mem::transmute(addr.offset(0x5a9fcf)),
-        //         hook_player_run_command,
-        //     )
-        //     .expect("failed to hook PlayerRunCommand")
-        //     .enable()
-        //     .expect("failure to enable the PlayerRunCommand hook");
+        ProcessUsercmds
+            .initialize(
+                mem::transmute(addr.offset(0x159e50)),
+                hook_proccess_user_cmds,
+            )
+            .expect("failed to hook ProcessUsercmds");
+        // .enable()
+        // .expect("failure to enable the ProcessUsercmds hook");
 
-        log::info!("hooked PlayerRunCommand");
+        log::info!("hooked ProcessUsercmds");
     }
 }
 
