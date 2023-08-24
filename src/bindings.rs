@@ -67,6 +67,41 @@ pub struct CUserCmd {
     pub frame_time: f32,
 }
 
+#[repr(u32)]
+#[allow(dead_code)]
+pub enum Action {
+    Attack = 1,
+    Jump = 2,
+    Duck = 4,
+    Forward = 8,
+    Back = 0x10,
+    Use = 0x20,
+    Pausemenu = 0x40,
+    Left = 0x80,
+    Right = 0x100,
+    Moveleft = 0x200,
+    Moveright = 0x400,
+    Walk = 0x800,
+    Reload = 0x1000,
+    WeaponDiscard = 0x4000,
+    Speed = 0x8000,
+    Zoom = 0x10000,
+    ZoomToggle = 0x20000,
+    Melee = 0x40000,
+    WeaponCycle = 0x80000,
+    OffHand0 = 0x100000,
+    OffHand1 = 0x200000,
+    OffHand2 = 0x400000,
+    OffHand3 = 0x800000,
+    OffHand4 = 0x1000000,
+    OffhandQuick = 0x2000000,
+    Ducktoggle = 0x4000000,
+    UseAndReload = 0x8000000,
+    Dodge = 0x10000000,
+    VariableScopeToggle = 0x20000000,
+    Ping = 0x40000000,
+}
+
 offset_struct! {
     pub struct CGlobalVars {
         real_time: f64 where offset(0x0),

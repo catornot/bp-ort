@@ -6,7 +6,7 @@ use std::{
 };
 
 use super::{cmds::run_bots_cmds, set_on_join::set_stuff_on_join};
-use crate::bindings::CUserCmd;
+use crate::{bindings::CUserCmd, utils::from_c_string};
 
 static_detour! {
   static SomeRunUsercmdFunc: unsafe extern "C" fn(c_char);
@@ -34,7 +34,9 @@ fn hook_proccess_user_cmds(
     unk2: c_char,
     unk3: c_uchar,
 ) {
-    log::info!("hook_proccess_user_cmds");
+    let name =
+        unsafe { from_c_string::<String>(&**(*this).community_name as *const _ as *const i8) };
+    log::info!("hook_proccess_user_cmds( this: {name}, unk1: {unk1}, user_cmds: {user_cmds:?}, numcmds: {numcmds}, totalcmds: {totalcmds}, unk2: {unk2}, unk3: {unk3})");
 
     unsafe { ProcessUsercmds.call(this, unk1, user_cmds, numcmds, totalcmds, unk2, unk3) }
 }
@@ -60,8 +62,8 @@ pub fn hook_server(addr: *const c_void) {
                 hook_proccess_user_cmds,
             )
             .expect("failed to hook ProcessUsercmds");
-        // .enable()
-        // .expect("failure to enable the ProcessUsercmds hook");
+            // .enable()
+            // .expect("failure to enable the ProcessUsercmds hook");
 
         log::info!("hooked ProcessUsercmds");
     }
