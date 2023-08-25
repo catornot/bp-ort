@@ -1,5 +1,5 @@
 use rand::Rng;
-use rrplug::bindings::entity::SignonState;
+use rrplug::bindings::class_types::client::SignonState;
 use rrplug::prelude::*;
 use rrplug::{
     bindings::convar::FCVAR_GAMEDLL,
@@ -219,8 +219,8 @@ fn choose_team() -> i32 {
 #[rrplug::convar]
 fn clang_tag_changed() {
     let new_clan_tag = match CLAN_TAG_CONVAR.wait().get_value_string() {
-        Some(c) => c,
-        None => return,
+        Ok(c) => c.to_string(),
+        Err(err) => return err.log(),
     };
 
     let mut clan_tag = PLUGIN.wait().bots.clang_tag.lock().expect("how");

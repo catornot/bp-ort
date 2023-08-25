@@ -1,5 +1,5 @@
 use rrplug::{
-    bindings::entity::{CBaseClient, CBasePlayer},
+    bindings::class_types::{client::CClient, player::CPlayer},
     engine_functions,
     high::vector::Vector3,
     offset_struct,
@@ -9,11 +9,18 @@ use std::ffi::{c_char, c_int, c_short, c_uchar, c_void};
 pub type PServer = *const c_void;
 pub type BotName = *const c_char;
 pub type ServerGameClients = *const c_void;
-pub type PlayerByIndex = unsafe extern "C" fn(i32) -> *mut CBasePlayer;
+pub type PlayerByIndex = unsafe extern "C" fn(i32) -> *mut CPlayer;
 pub type ClientFullyConnected = unsafe extern "C" fn(ServerGameClients, u16, bool);
-pub type RunNullCommand = unsafe extern "C" fn(*const CBasePlayer);
-pub type ProcessUsercmds =
-    unsafe extern "C" fn(*mut CBasePlayer, c_short, *const CUserCmd, i32, i32, c_char, c_uchar);
+pub type RunNullCommand = unsafe extern "C" fn(*const CPlayer);
+pub type ProcessUsercmds = unsafe extern "C" fn(
+    *const ServerGameClients,
+    c_short,
+    *const CUserCmd,
+    i32,
+    i32,
+    c_char,
+    c_uchar,
+);
 pub type CreateFakeClient = unsafe extern "C" fn(
     PServer,
     BotName,
@@ -21,7 +28,7 @@ pub type CreateFakeClient = unsafe extern "C" fn(
     *const c_char,
     i32,
     i32,
-) -> *const CBaseClient;
+) -> *const CClient;
 pub type SomeCtextureFunction = unsafe extern "C" fn(*const c_void, c_int) -> i16;
 
 pub type CreateInterfaceFn =
@@ -117,15 +124,15 @@ offset_struct! {
 // struct IServerGameEnts {}
 
 // a really interesting function : FUN_00101370
-// it prints CBasePlayer stuff
+// it prints CPlayer stuff
 
 engine_functions! {
     ENGINE_FUNCTIONS + EngineFunctions for WhichDll::Engine => {
-        client_array = *mut CBaseClient, at 0x12A53F90;
-        server = PServer, at 0x12A53D40;
-        game_clients = ServerGameClients, at 0x13F0AAA8;
-        create_fake_client = CreateFakeClient, at 0x114C60;
-        globals = *const CGlobalVars, at 0x7C6F70;
+        client_array = *mut CClient where offset(0x12A53F90);
+        server = PServer where offset(0x12A53D40);
+        game_clients = ServerGameClients where offset(0x13F0AAA8);
+        create_fake_client = CreateFakeClient where offset(0x114C60);
+        globals = *const CGlobalVars where offset(0x7C6F70);
     }
 }
 
@@ -137,19 +144,19 @@ self.player_by_index = unsafe { mem::transmute(handle_server.offset(0x26AA10)) }
 
 engine_functions! {
     SERVER_FUNCTIONS + ServerFunctions for WhichDll::Server => {
-        base = *const c_void, at 0x0;
-        client_fully_connected = ClientFullyConnected, at 0x153B70;
-        run_null_command = RunNullCommand, at 0x5A9FD0;
-        proccess_user_cmds = ProcessUsercmds, at 0x159e50;
-        get_player_by_index = PlayerByIndex, at 0x26AA10;
-        interface_regs = *const InterfaceReg, at 0x01752038;
-        get_eye_pos = unsafe extern "C" fn(*const CBasePlayer, *mut Vector3) -> *mut Vector3, at 0x0043b8d0;
-        get_center_pos = unsafe extern "C" fn(*const CBasePlayer, *mut Vector3) -> *mut Vector3, at 0x00407d30; // found these by pocking around in a vtable :)
-        get_angles_01 = unsafe extern "C" fn(*const CBasePlayer, *mut Vector3) -> *mut Vector3, at 0x00442ce0;
-        get_angles = unsafe extern "C" fn(*const CBasePlayer, *mut Vector3) -> *mut Vector3, at 0x0043c030;
-        get_origin_varient = unsafe extern "C" fn(*const CBasePlayer, *mut Vector3) -> *mut Vector3, at 0x00443e80;
-        get_origin = unsafe extern "C" fn(*const CBasePlayer, *mut Vector3) -> *mut Vector3, at 0x004198d0;
-        eye_angles = unsafe extern "C" fn(*const CBasePlayer, *mut Vector3) -> *const Vector3, at 0x004455f0; // this access the vtable
+        base = *const c_void where offset(0x0);
+        client_fully_connected = ClientFullyConnected where offset(0x153B70);
+        run_null_command = RunNullCommand where offset(0x5A9FD0);
+        proccess_user_cmds = ProcessUsercmds where offset(0x159e50);
+        get_player_by_index = PlayerByIndex where offset(0x26AA10);
+        interface_regs = *const InterfaceReg where offset(0x01752038);
+        get_eye_pos = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x0043b8d0);
+        get_center_pos = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x00407d30); // found these by pocking around in a vtable :)
+        get_angles_01 = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x00442ce0);
+        get_angles = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x0043c030);
+        get_origin_varient = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x00443e80);
+        get_origin = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x004198d0);
+        eye_angles = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *const Vector3 where offset(0x004455f0); // this access the vtable
     }
 }
 
@@ -161,6 +168,6 @@ engine_functions! {
 
 engine_functions! {
     MATSYS_FUNCTIONS + MatSysFunctions for WhichDll::Other("materialsystem_dx11.dll") => {
-        some_ctexture_function = SomeCtextureFunction, at 0x00079e80;
+        some_ctexture_function = SomeCtextureFunction where offset(0x00079e80);
     }
 }

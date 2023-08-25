@@ -1,7 +1,7 @@
 use crate::utils::{from_c_string, set_c_char_array};
-use rrplug::bindings::entity::CBaseClient;
+use rrplug::bindings::class_types::client::CClient;
 
-pub unsafe fn set_stuff_on_join(client: &mut CBaseClient) {
+pub unsafe fn set_stuff_on_join(client: &mut CClient) {
     let name = from_c_string::<String>(&**client.name as *const i8);
 
     if *client.fake_player.get_inner() {
