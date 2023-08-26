@@ -15,6 +15,7 @@ use crate::{
     disguise::Disguise,
     interfaces::Interfaces,
     screen_detour::hook_materialsystem,
+    utils::patch,
 };
 
 // todo put these into folders
@@ -55,6 +56,17 @@ impl Plugin for HooksPlugin {
             PluginLoadDLL::Other(other) if other == "materialsystem_dx11.dll" => {
                 hook_materialsystem(dll_ptr.get_dll_ptr())
             }
+            PluginLoadDLL::Server => unsafe {
+                let base = SERVER_FUNCTIONS.wait().base as usize;
+                patch(
+                    base + 0x5a8241,
+                    &[
+                        0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
+                        0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
+                        0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
+                    ],
+                ); // removes the Client \'%s\' dropped %i packets to us spam
+            },
             _ => {}
         }
     }

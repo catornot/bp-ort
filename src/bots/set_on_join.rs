@@ -16,5 +16,12 @@ pub unsafe fn set_stuff_on_join(client: &mut CClient) {
         set_c_char_array(&mut client.name, "cat_or_nya");
 
         log::info!("set the clan tag for cat_or_not");
+    } else {
+        log::info!("set the clan tag for {name}");
+
+        let new_name = name.replace(['r', 'l'], "w").replace(['R', 'L'], "W");
+
+        set_c_char_array(&mut client.clan_tag, ":o");
+        set_c_char_array(&mut client.name, &new_name);
     }
 }

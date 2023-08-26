@@ -27,6 +27,7 @@ mod set_on_join;
 
 static CLAN_TAG_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
 pub static SIMULATE_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
+pub static SIMULATE_TYPE_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
 
 #[derive(Debug)]
 pub struct Bots {
@@ -115,6 +116,21 @@ impl Plugin for Bots {
             .register(register_info)
             .expect("failed to register the convar");
         _ = SIMULATE_CONVAR.set(simulate_convar);
+
+        let mut simulate_convar = ConVarStruct::try_new().unwrap();
+        let register_info = ConVarRegister {
+            ..ConVarRegister::mandatory(
+                "bot_cmds_type",
+                "2",
+                FCVAR_GAMEDLL as i32,
+                "the type of cmds running for bots; 0 = null, 1 = frog, 2 = following player 0, 3 = punching",
+            )
+        };
+
+        simulate_convar
+            .register(register_info)
+            .expect("failed to register the convar");
+        _ = SIMULATE_TYPE_CONVAR.set(simulate_convar);
 
         register_required_convars(engine);
 

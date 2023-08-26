@@ -77,6 +77,7 @@ pub struct CUserCmd {
 #[repr(u32)]
 #[allow(dead_code)]
 pub enum Action {
+    Null = 0,
     Attack = 1,
     Jump = 2,
     Duck = 4,
@@ -147,7 +148,9 @@ engine_functions! {
         base = *const c_void where offset(0x0);
         client_fully_connected = ClientFullyConnected where offset(0x153B70);
         run_null_command = RunNullCommand where offset(0x5A9FD0);
+        simulate_player = unsafe extern "C" fn(*const CPlayer) where offset(0x0492580);
         proccess_user_cmds = ProcessUsercmds where offset(0x159e50);
+        add_user_cmd_to_player = unsafe extern "C" fn(*const CPlayer, *const CUserCmd, u32, usize, u32, c_char) where offset(0x005a81c0);
         get_player_by_index = PlayerByIndex where offset(0x26AA10);
         interface_regs = *const InterfaceReg where offset(0x01752038);
         get_eye_pos = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x0043b8d0);
@@ -157,6 +160,7 @@ engine_functions! {
         get_origin_varient = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x00443e80);
         get_origin = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x004198d0);
         eye_angles = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *const Vector3 where offset(0x004455f0); // this access the vtable
+        is_on_ground = unsafe extern "C" fn(*const CPlayer) -> usize where offset(0x441c60);
     }
 }
 

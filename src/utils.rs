@@ -1,4 +1,11 @@
-use std::{ffi::{c_char, CStr}, marker::PhantomData};
+use std::{
+    ffi::{c_char, c_void, CStr},
+    marker::PhantomData,
+};
+
+use windows_sys::Win32::System::{
+    Diagnostics::Debug::WriteProcessMemory, Threading::GetCurrentProcess,
+};
 
 pub struct Pointer<'a, T> {
     pub ptr: *const T,
@@ -45,11 +52,26 @@ pub(crate) unsafe fn iterate_c_array_sized<T, const U: usize>(
 
 #[inline]
 pub(crate) unsafe fn set_c_char_array<const U: usize>(buf: &mut [c_char; U], new: &str) {
-    *buf = [0;U]; // null everything
+    *buf = [0; U]; // null everything
     buf.iter_mut()
         .zip(new.as_bytes())
         .for_each(|(buf_char, new)| *buf_char = *new as i8);
 }
-pub(crate) unsafe fn from_c_string<T: From<String>>( ptr: *const c_char ) -> T {
+
+#[inline]
+pub(crate) unsafe fn from_c_string<T: From<String>>(ptr: *const c_char) -> T {
     CStr::from_ptr(ptr).to_string_lossy().to_string().into()
+}
+
+#[inline]
+pub(crate) unsafe fn patch(addr: usize, bytes: &[u8]) {
+    // (*(addr as *mut u8)) = new_ins
+
+    WriteProcessMemory(
+        GetCurrentProcess(),
+        addr as *const c_void,
+        bytes as *const _ as *const c_void,
+        bytes.len(),
+        std::ptr::null_mut(),
+    );
 }

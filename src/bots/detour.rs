@@ -41,6 +41,33 @@ fn hook_proccess_user_cmds(
     unsafe { ProcessUsercmds.call(this, unk1, user_cmds, numcmds, totalcmds, unk2, unk3) }
 }
 
+/*
+// hook this to fix it!
+undefined4 * FUN_180658c50(undefined4 *param_1,undefined4 *param_2)
+
+{
+  *param_1 = *param_2;
+  param_1[1] = param_2[1];
+  param_1[2] = param_2[2];
+  param_1[3] = param_2[3];
+  param_1[4] = param_2[4];
+  param_1[5] = param_2[5];
+  param_1[6] = param_2[6];
+  param_1[7] = param_2[7];
+  param_1[8] = param_2[8];
+  param_1[9] = param_2[9];
+  param_1[10] = param_2[10];
+  param_1[0xb] = param_2[0xb];
+  param_1[0xc] = param_2[0xc];
+  param_1[0xd] = param_2[0xd];
+  param_1[0xe] = param_2[0xe];
+  param_1[0xf] = param_2[0xf];
+  param_1[0x10] = param_2[0x10];
+  param_1[0x11] = param_2[0x11];
+  return param_1;
+}
+*/
+
 pub fn hook_server(addr: *const c_void) {
     log::info!("hooking server functions");
 
@@ -119,7 +146,7 @@ pub fn hook_client(addr: *const c_void) {
     //     SomeVoiceFunc
     //         .initialize(
     //             mem::transmute(addr.offset(0x1804a6690)),
-    //             some_voice_func_hook, // so since we can't double hook, I found a function that can be hook in CClient__Connect
+    //             some_voice_func_hook,
     //         )
     //         .expect("failed to hook SomeVoiceFunc")
     //         .enable()
