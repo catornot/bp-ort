@@ -1,5 +1,5 @@
 use rrplug::prelude::*;
-use rrplug::{bindings::convar::FCVAR_CLIENTDLL, to_sq_string};
+use rrplug::{bindings::cvar::convar::FCVAR_CLIENTDLL, to_c_string};
 use std::mem;
 use windows_sys::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
 
@@ -46,10 +46,10 @@ pub fn register_concommands(engine: &EngineData) {
 
 #[rrplug::concommand]
 pub fn interfaces_load_some(command: CCommandResult) -> Option<()> {
-    let dll_name = to_sq_string!(command.get_args().get(0)?);
+    let dll_name = to_c_string!(command.get_args().get(0)?);
 
     let interface_name = command.get_args().get(1)?;
-    let c_interface_name = to_sq_string!(interface_name);
+    let c_interface_name = to_c_string!(interface_name);
 
     unsafe {
         let dll = GetModuleHandleA(dll_name.as_ptr() as *const u8);

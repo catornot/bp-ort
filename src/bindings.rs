@@ -1,5 +1,5 @@
 use rrplug::{
-    bindings::class_types::{client::CClient, player::CPlayer},
+    bindings::class_types::{client::CClient, cplayer::CPlayer},
     engine_functions,
     high::vector::Vector3,
     offset_struct,

@@ -2,9 +2,9 @@ use rand::Rng;
 use rrplug::bindings::class_types::client::SignonState;
 use rrplug::prelude::*;
 use rrplug::{
-    bindings::convar::FCVAR_GAMEDLL,
+    bindings::cvar::convar::FCVAR_GAMEDLL,
     high::convars::{ConVarRegister, ConVarStruct},
-    to_sq_string, OnceCell,
+    to_c_string, OnceCell,
 };
 use std::ffi::CStr;
 use std::{ops::Deref, sync::Mutex};
@@ -168,7 +168,7 @@ fn spawn_fake_player(command: CCommandResult) {
         .unwrap_or_else(|| Some(choose_team()))
         .unwrap_or_else(choose_team);
 
-    let name = to_sq_string!(name);
+    let name = to_c_string!(name);
     unsafe {
         let bot = (engine_funcs.create_fake_client)(
             engine_funcs.server,

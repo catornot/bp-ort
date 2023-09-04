@@ -1,5 +1,5 @@
 use retour::static_detour;
-use rrplug::bindings::class_types::{client::CClient, player::CPlayer};
+use rrplug::bindings::class_types::{client::CClient, cplayer::CPlayer};
 use std::{
     ffi::{c_char, c_short, c_uchar, c_void},
     mem,
@@ -9,19 +9,20 @@ use super::{cmds::run_bots_cmds, set_on_join::set_stuff_on_join};
 use crate::{bindings::CUserCmd, utils::from_c_string};
 
 static_detour! {
-  static SomeRunUsercmdFunc: unsafe extern "C" fn(c_char);
-  #[allow(improper_ctypes_definitions)] // this is bad but this is what respawn did with there infinite wisdom
-  // static CClient__Connect: unsafe extern "C" fn(CClientPtr, *const c_char, *const c_void, c_char, *const c_void, [c_char;256], *const c_void ) -> bool;
-  static SomeFuncInConnectProcedure: unsafe extern "C" fn(*mut CClient, *const c_void);
-  static SomeVoiceFunc: unsafe extern "C" fn(*const c_void, *const c_void) -> *const c_void;
-  static PlayerRunCommand: unsafe extern "C" fn(*mut CPlayer, *const CUserCmd, *const c_void);
-  static ProcessUsercmds: unsafe extern "C" fn(*mut CPlayer, c_short, *const CUserCmd, i32, i32, c_char, c_uchar); // c_uchar might be wrong since undefined
+    static Physics_RunThinkFunctions: unsafe extern "C" fn(c_char);
+    #[allow(improper_ctypes_definitions)] // this is bad but this is what respawn did with there infinite wisdom
+    // static CClient__Connect: unsafe extern "C" fn(CClientPtr, *const c_char, *const c_void, c_char, *const c_void, [c_char;256], *const c_void ) -> bool;
+    static SomeFuncInConnectProcedure: unsafe extern "C" fn(*mut CClient, *const c_void);
+    static SomeVoiceFunc: unsafe extern "C" fn(*const c_void, *const c_void) -> *const c_void;
+    static PlayerRunCommand: unsafe extern "C" fn(*mut CPlayer, *const CUserCmd, *const c_void);
+    static ProcessUsercmds: unsafe extern "C" fn(*mut CPlayer, c_short, *const CUserCmd, i32, i32, c_char, c_uchar); // c_uchar might be wrong since undefined
+    static FUN_658c50: unsafe extern "C" fn(*mut u32, *mut u32) -> *mut u32;
 }
 
 fn some_run_user_cmd_hook(parm: c_char) {
     run_bots_cmds();
 
-    unsafe { SomeRunUsercmdFunc.call(parm) }
+    unsafe { Physics_RunThinkFunctions.call(parm) }
 }
 
 fn hook_proccess_user_cmds(
@@ -41,47 +42,53 @@ fn hook_proccess_user_cmds(
     unsafe { ProcessUsercmds.call(this, unk1, user_cmds, numcmds, totalcmds, unk2, unk3) }
 }
 
-/*
 // hook this to fix it!
-undefined4 * FUN_180658c50(undefined4 *param_1,undefined4 *param_2)
-
-{
-  *param_1 = *param_2;
-  param_1[1] = param_2[1];
-  param_1[2] = param_2[2];
-  param_1[3] = param_2[3];
-  param_1[4] = param_2[4];
-  param_1[5] = param_2[5];
-  param_1[6] = param_2[6];
-  param_1[7] = param_2[7];
-  param_1[8] = param_2[8];
-  param_1[9] = param_2[9];
-  param_1[10] = param_2[10];
-  param_1[0xb] = param_2[0xb];
-  param_1[0xc] = param_2[0xc];
-  param_1[0xd] = param_2[0xd];
-  param_1[0xe] = param_2[0xe];
-  param_1[0xf] = param_2[0xf];
-  param_1[0x10] = param_2[0x10];
-  param_1[0x11] = param_2[0x11];
-  return param_1;
+fn hook_658c50(unk1: *mut u32, unk2: *mut u32) -> *mut u32 {
+    unsafe {
+        *unk1 = *unk2;
+        _ = sub_hook_658c50(unk1, unk2);
+        unk1
+    }
 }
-*/
+
+fn sub_hook_658c50(unk1: *mut u32, unk2: *mut u32) -> Option<*mut u32> {
+    unsafe {
+        *unk1 = *unk2;
+        *unk1.add(1).as_mut()? = *unk2.add(1).as_ref()?;
+        *unk1.add(2).as_mut()? = *unk2.add(2).as_ref()?;
+        *unk1.add(3).as_mut()? = *unk2.add(3).as_ref()?;
+        *unk1.add(4).as_mut()? = *unk2.add(4).as_ref()?;
+        *unk1.add(5).as_mut()? = *unk2.add(5).as_ref()?;
+        *unk1.add(6).as_mut()? = *unk2.add(6).as_ref()?;
+        *unk1.add(7).as_mut()? = *unk2.add(7).as_ref()?;
+        *unk1.add(8).as_mut()? = *unk2.add(8).as_ref()?;
+        *unk1.add(9).as_mut()? = *unk2.add(9).as_ref()?;
+        *unk1.add(10).as_mut()? = *unk2.add(10).as_ref()?;
+        *unk1.add(0xb).as_mut()? = *unk2.add(0xb).as_ref()?;
+        *unk1.add(0xc).as_mut()? = *unk2.add(0xc).as_ref()?;
+        *unk1.add(0xd).as_mut()? = *unk2.add(0xd).as_ref()?;
+        *unk1.add(0xe).as_mut()? = *unk2.add(0xe).as_ref()?;
+        *unk1.add(0xf).as_mut()? = *unk2.add(0xf).as_ref()?;
+        *unk1.add(0x10).as_mut()? = *unk2.add(0x10).as_ref()?;
+        *unk1.add(0x11).as_mut()? = *unk2.add(0x11).as_ref()?;
+    }
+    Some(unk1)
+}
 
 pub fn hook_server(addr: *const c_void) {
     log::info!("hooking server functions");
 
     unsafe {
-        SomeRunUsercmdFunc
+        Physics_RunThinkFunctions
             .initialize(
                 mem::transmute(addr.offset(0x483A50)),
                 some_run_user_cmd_hook,
             )
-            .expect("failed to hook SomeRunUsercmdFunc")
+            .expect("failed to hook Physics_RunThinkFunctions")
             .enable()
-            .expect("failure to enable the SomeRunUsercmdFunc hook");
+            .expect("failure to enable the Physics_RunThinkFunctions hook");
 
-        log::info!("hooked SomeRunUsercmdFunc");
+        log::info!("hooked Physics_RunThinkFunctions");
 
         ProcessUsercmds
             .initialize(
@@ -89,10 +96,18 @@ pub fn hook_server(addr: *const c_void) {
                 hook_proccess_user_cmds,
             )
             .expect("failed to hook ProcessUsercmds");
-            // .enable()
-            // .expect("failure to enable the ProcessUsercmds hook");
+        // .enable()
+        // .expect("failure to enable the ProcessUsercmds hook");
 
         log::info!("hooked ProcessUsercmds");
+
+        FUN_658c50
+            .initialize(mem::transmute(addr.offset(0x658c50)), hook_658c50)
+            .expect("failed to hook FUN_658c50");
+            // .enable()
+            // .expect("failure to enable the FUN_658c50 hook");
+
+        log::info!("hooked FUN_658c50");
     }
 }
 

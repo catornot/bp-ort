@@ -1,4 +1,4 @@
-use rrplug::bindings::convar::FCVAR_GAMEDLL;
+use rrplug::bindings::cvar::convar::FCVAR_GAMEDLL;
 use rrplug::prelude::*;
 use std::ffi::CStr;
 
