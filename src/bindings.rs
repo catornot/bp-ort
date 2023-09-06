@@ -4,7 +4,10 @@ use rrplug::{
     high::vector::Vector3,
     offset_struct,
 };
-use std::ffi::{c_char, c_int, c_short, c_uchar, c_void};
+use std::{
+    ffi::{c_char, c_int, c_short, c_uchar, c_void},
+    mem::MaybeUninit,
+};
 
 pub type PServer = *const c_void;
 pub type BotName = *const c_char;
@@ -13,13 +16,13 @@ pub type PlayerByIndex = unsafe extern "C" fn(i32) -> *mut CPlayer;
 pub type ClientFullyConnected = unsafe extern "C" fn(ServerGameClients, u16, bool);
 pub type RunNullCommand = unsafe extern "C" fn(*const CPlayer);
 pub type ProcessUsercmds = unsafe extern "C" fn(
-    *const ServerGameClients,
-    c_short,
-    *const CUserCmd,
-    i32,
-    i32,
-    c_char,
-    c_uchar,
+    this: *const ServerGameClients,
+    edict: c_short,
+    cmds: *const CUserCmd,
+    numcmds: i32,
+    dropped: i32,
+    ignore: c_char,
+    paused: c_uchar,
 );
 pub type CreateFakeClient = unsafe extern "C" fn(
     PServer,
@@ -72,6 +75,16 @@ pub struct CUserCmd {
     pub predicted_server_event_hack: DWORD,
     pub dword98: DWORD,
     pub frame_time: f32,
+}
+
+impl CUserCmd {
+    pub fn init_default(sv_funcs: &ServerFunctions) -> Self {
+        let mut cmd = MaybeUninit::uninit();
+        unsafe {
+            (sv_funcs.create_null_user_cmd)(cmd.as_mut_ptr());
+            cmd.assume_init()
+        }
+    }
 }
 
 #[repr(u32)]
@@ -150,7 +163,8 @@ engine_functions! {
         run_null_command = RunNullCommand where offset(0x5A9FD0);
         simulate_player = unsafe extern "C" fn(*const CPlayer) where offset(0x0492580);
         proccess_user_cmds = ProcessUsercmds where offset(0x159e50);
-        add_user_cmd_to_player = unsafe extern "C" fn(*const CPlayer, *const CUserCmd, u32, usize, u32, c_char) where offset(0x005a81c0);
+        add_user_cmd_to_player = unsafe extern "C" fn(this: *const CPlayer, cmds: *const CUserCmd, numcmds: u32, unk: usize, totalcmds: u32, paused: c_char) where offset(0x005a81c0);
+        create_null_user_cmd = unsafe extern "C" fn(*mut CUserCmd) -> *mut CUserCmd where offset(0x25f790);
         get_player_by_index = PlayerByIndex where offset(0x26AA10);
         interface_regs = *const InterfaceReg where offset(0x01752038);
         get_eye_pos = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x0043b8d0);

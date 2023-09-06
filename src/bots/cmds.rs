@@ -3,7 +3,9 @@ use std::ops::Deref;
 
 use super::{SIMULATE_CONVAR, SIMULATE_TYPE_CONVAR};
 use crate::{
-    bindings::{Action, CGlobalVars, CUserCmd, ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
+    bindings::{
+        Action, CGlobalVars, CUserCmd, ServerFunctions, ENGINE_FUNCTIONS, SERVER_FUNCTIONS,
+    },
     utils::iterate_c_array_sized,
 };
 
@@ -17,7 +19,7 @@ pub fn run_bots_cmds() {
     let server_functions = SERVER_FUNCTIONS.wait();
     let engine_functions = ENGINE_FUNCTIONS.wait();
     let player_by_index = server_functions.get_player_by_index;
-    let simulate_player = server_functions.simulate_player;
+    let run_null_command = server_functions.run_null_command;
     let add_user_cmd_to_player = server_functions.add_user_cmd_to_player;
     let eye_angles = server_functions.eye_angles;
     let globals =
@@ -35,7 +37,8 @@ pub fn run_bots_cmds() {
 
             let angles = *eye_angles(player, &mut v);
 
-            let helper = CUserCmdHelper::new(globals, angles, **player.rank as u32);
+            let helper =
+                CUserCmdHelper::new(globals, angles, **player.rank as u32, server_functions);
 
             let mut cmds = match cmd_type {
                 1 => [if (server_functions.is_on_ground)(player) != 0 {
@@ -111,11 +114,10 @@ pub fn run_bots_cmds() {
                     ),
                 ]
                 .to_vec(),
-                _ => vec![CUserCmd::new_basic_move(
-                    Vector3::ZERO,
-                    Action::Null as u32,
-                    &helper,
-                )],
+                _ => {
+                    run_null_command(player);
+                    continue;
+                }
             };
 
             **player.rank += 1; // using this for command number
@@ -131,23 +133,29 @@ pub fn run_bots_cmds() {
                 0,
             );
 
-            simulate_player(player) // doesn't really work?
+            run_null_command(player) // doesn't really work?
         }
     }
 }
-
 pub struct CUserCmdHelper<'a> {
     globals: &'a CGlobalVars,
     angles: Vector3,
     cmd_num: u32,
+    sv_funcs: &'a ServerFunctions,
 }
 
 impl<'a> CUserCmdHelper<'a> {
-    pub fn new(globals: &'a CGlobalVars, angles: Vector3, cmd_num: u32) -> CUserCmdHelper<'a> {
+    pub fn new(
+        globals: &'a CGlobalVars,
+        angles: Vector3,
+        cmd_num: u32,
+        sv_funcs: &'a ServerFunctions,
+    ) -> CUserCmdHelper<'a> {
         Self {
             globals,
             angles,
             cmd_num,
+            sv_funcs,
         }
     }
 }
@@ -173,7 +181,7 @@ impl CUserCmd {
                 camera_angles: Vector3::ZERO,
                 tick_something: **helper.globals.tick_count as i32,
                 dword90: **helper.globals.tick_count + 4,
-                ..Default::default()
+                ..CUserCmd::init_default(helper.sv_funcs)
             }
         }
     }
@@ -191,7 +199,7 @@ impl CUserCmd {
                 buttons,
                 tick_something: **helper.globals.tick_count as i32,
                 dword90: **helper.globals.tick_count + 4,
-                ..Default::default()
+                ..CUserCmd::init_default(helper.sv_funcs)
             }
         }
     }
