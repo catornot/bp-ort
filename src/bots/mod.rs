@@ -1,23 +1,25 @@
 use rand::Rng;
-use rrplug::bindings::class_types::client::SignonState;
+use rrplug::bindings::class_types::client::CClient;
 use rrplug::prelude::*;
 use rrplug::{
-    bindings::cvar::convar::FCVAR_GAMEDLL,
+    bindings::{class_types::client::SignonState, cvar::convar::FCVAR_GAMEDLL},
     high::convars::{ConVarRegister, ConVarStruct},
     to_c_string, OnceCell,
 };
-use std::ffi::CStr;
-use std::{ops::Deref, sync::Mutex};
+use std::{
+    cell::RefCell,
+    ffi::CStr,
+    {ops::Deref, sync::Mutex},
+};
 
+use self::detour::{hook_engine, hook_server};
+use self::{convars::register_required_convars, debug_commands::register_debug_concommands};
 use crate::utils::set_c_char_array;
 use crate::{
     bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
     utils::iterate_c_array_sized,
     PLUGIN,
 };
-
-use self::detour::{hook_engine, hook_server};
-use self::{convars::register_required_convars, debug_commands::register_debug_concommands};
 
 mod cmds;
 mod convars;
@@ -26,8 +28,12 @@ mod detour;
 mod set_on_join;
 
 static CLAN_TAG_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
-pub static SIMULATE_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
 pub static SIMULATE_TYPE_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
+pub const DEFAULT_SIMULATE_TYPE: i32 = 3;
+
+thread_local! {
+    pub static MAX_PLAYERS: RefCell<u32> = const { RefCell::new(16) };
+}
 
 #[derive(Debug)]
 pub struct Bots {
@@ -74,6 +80,50 @@ impl Plugin for Bots {
 
     fn main(&self) {}
 
+    fn on_sqvm_created(&self, handle: &CSquirrelVMHandle) {
+        // DISABLED IN LIBS.RS
+        match handle.get_context() {
+            // doesn't seam to work anymore?
+            ScriptVmType::Ui => {}
+            _ => return,
+        }
+
+        let max_players: u32 = unsafe {
+            CStr::from_ptr((ENGINE_FUNCTIONS.wait().get_current_playlist_var)(
+                to_c_string!(const "max_players\0")
+                    .as_ptr()
+                    .as_ref()
+                    .unwrap_or_else(|| &*("err\0".as_ptr() as *const i8)),
+                false as i32,
+            ))
+            .to_string_lossy()
+        }
+        .parse()
+        .unwrap_or_else(|_| {
+            log::warn!("max_players is undefined; using default of 32");
+            32
+        });
+
+        MAX_PLAYERS.with(|i| *i.borrow_mut() = max_players);
+    }
+
+    fn on_sqvm_destroyed(&self, context: ScriptVmType) {
+        if let ScriptVmType::Server = context {
+            let engine_functions = ENGINE_FUNCTIONS.wait();
+            unsafe {
+                iterate_c_array_sized::<_, 32>(engine_functions.client_array.into())
+                    .filter(|client| **client.signon == SignonState::FULL && **client.fake_player)
+                    .for_each(|client| {
+                        (engine_functions.cclient_disconnect)(
+                            (client as *const CClient).cast_mut(),
+                            1,
+                            "no reason\0" as *const _ as *const i8,
+                        )
+                    });
+            }
+        }
+    }
+
     fn on_dll_load(&self, engine: &PluginLoadDLL, dll_ptr: &DLLPointer) {
         match dll_ptr.which_dll() {
             rrplug::mid::engine::WhichDll::Engine => hook_engine(dll_ptr.get_dll_ptr()),
@@ -105,25 +155,10 @@ impl Plugin for Bots {
         let mut simulate_convar = ConVarStruct::try_new().unwrap();
         let register_info = ConVarRegister {
             ..ConVarRegister::mandatory(
-                "bot_cmds",
-                "1",
-                FCVAR_GAMEDLL as i32,
-                "weather bots should have cmds ran",
-            )
-        };
-
-        simulate_convar
-            .register(register_info)
-            .expect("failed to register the convar");
-        _ = SIMULATE_CONVAR.set(simulate_convar);
-
-        let mut simulate_convar = ConVarStruct::try_new().unwrap();
-        let register_info = ConVarRegister {
-            ..ConVarRegister::mandatory(
                 "bot_cmds_type",
-                "2",
+                DEFAULT_SIMULATE_TYPE.to_string(),
                 FCVAR_GAMEDLL as i32,
-                "the type of cmds running for bots; 0 = null, 1 = frog, 2 = following player 0, 3 = punching",
+                "the type of cmds running for bots; 0 = null, 1 = frog, 2 = following player 0, 3 = firing, 4 = going backwards, 5 = going forward",
             )
         };
 
@@ -168,8 +203,28 @@ fn spawn_fake_player(command: CCommandResult) {
         .unwrap_or_else(|| Some(choose_team()))
         .unwrap_or_else(choose_team);
 
+    // let sim_type = command
+    //     .get_args()
+    //     .get(2)
+    //     .map(|t| Some(SimulationState::Const(t.parse::<i32>().ok()?)))
+    //     .unwrap_or(Some(SimulationState::Dyn))
+    //     .unwrap_or(SimulationState::Dyn); // could use vec_abs_origin since it's not used anywhere else lol
+
     let name = to_c_string!(name);
     unsafe {
+        let players = iterate_c_array_sized::<_, 32>(engine_funcs.client_array.into())
+            .filter(|c| c.signon.get_inner() >= &SignonState::CONNECTED)
+            .count() as u32;
+        let max_players = MAX_PLAYERS.with(|i| *i.borrow());
+        if players >= max_players {
+            log::warn!(
+                "max players({}) reached({}) can't add more",
+                max_players,
+                players
+            );
+            return;
+        }
+
         let bot = (engine_funcs.create_fake_client)(
             engine_funcs.server,
             name.as_ptr(),

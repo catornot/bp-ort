@@ -63,10 +63,9 @@ pub(crate) unsafe fn from_c_string<T: From<String>>(ptr: *const c_char) -> T {
     CStr::from_ptr(ptr).to_string_lossy().to_string().into()
 }
 
+#[allow(unused)]
 #[inline]
 pub(crate) unsafe fn patch(addr: usize, bytes: &[u8]) {
-    // (*(addr as *mut u8)) = new_ins
-
     WriteProcessMemory(
         GetCurrentProcess(),
         addr as *const c_void,

@@ -50,7 +50,7 @@ pub type DWORD = ::std::os::raw::c_uint;
 pub type BYTE = ::std::os::raw::c_uchar;
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone, Default)]
+#[derive(Debug, Copy, Clone)]
 pub struct CUserCmd {
     pub command_number: DWORD,
     pub tick_count: DWORD,
@@ -75,11 +75,12 @@ pub struct CUserCmd {
     pub predicted_server_event_hack: DWORD,
     pub dword98: DWORD,
     pub frame_time: f32,
+    pub gap_a0: [c_char; 152], // eh
 }
 
 impl CUserCmd {
     pub fn init_default(sv_funcs: &ServerFunctions) -> Self {
-        let mut cmd = MaybeUninit::uninit();
+        let mut cmd = MaybeUninit::zeroed();
         unsafe {
             (sv_funcs.create_null_user_cmd)(cmd.as_mut_ptr());
             cmd.assume_init()
@@ -129,6 +130,7 @@ offset_struct! {
         frame_count: i32 where offset(0x8),
         absolute_frame_time: f32 where offset(0xc),
         cur_time: f32 where offset(0x10),
+        frametime: f32 where offset(0x30),
         // there is stuff here too (I skiped things)
         tick_count: u32 where offset(0x3C),
         // there is more but I don't n eed more
@@ -146,25 +148,25 @@ engine_functions! {
         server = PServer where offset(0x12A53D40);
         game_clients = ServerGameClients where offset(0x13F0AAA8);
         create_fake_client = CreateFakeClient where offset(0x114C60);
-        globals = *const CGlobalVars where offset(0x7C6F70);
+        cclient_disconnect = unsafe extern "C" fn(*mut CClient, u32, *const c_char) where offset(0x1012C0);
+        get_current_playlist_var = unsafe extern "C" fn(*const c_char, c_int) -> *const c_char where offset(0x18C680);
+        globals = *mut CGlobalVars where offset(0x7C6F70);
     }
 }
-
-/*
-self.client_fully_connected = unsafe { mem::transmute(handle_server.offset(0x153B70)) };
-self.run_null_command = unsafe { mem::transmute(handle_server.offset(0x5A9FD0)) };
-self.player_by_index = unsafe { mem::transmute(handle_server.offset(0x26AA10)) };
-*/
 
 engine_functions! {
     SERVER_FUNCTIONS + ServerFunctions for WhichDll::Server => {
         base = *const c_void where offset(0x0);
+        move_helper = *mut c_void where offset(0xc389e0);
         client_fully_connected = ClientFullyConnected where offset(0x153B70);
         run_null_command = RunNullCommand where offset(0x5A9FD0);
         simulate_player = unsafe extern "C" fn(*const CPlayer) where offset(0x0492580);
         proccess_user_cmds = ProcessUsercmds where offset(0x159e50);
         add_user_cmd_to_player = unsafe extern "C" fn(this: *const CPlayer, cmds: *const CUserCmd, numcmds: u32, unk: usize, totalcmds: u32, paused: c_char) where offset(0x005a81c0);
         create_null_user_cmd = unsafe extern "C" fn(*mut CUserCmd) -> *mut CUserCmd where offset(0x25f790);
+        player_run_command = unsafe extern "C" fn(*mut CPlayer, *mut CUserCmd,*const c_void) -> () where offset(0x5a7d80);
+        set_base_time = unsafe extern "C" fn(*mut CPlayer, f32) where offset(0x5b3790);
+        set_last_cmd = unsafe extern "C" fn(*mut CUserCmd, *mut CUserCmd) -> () where offset(0x25f860);
         get_player_by_index = PlayerByIndex where offset(0x26AA10);
         interface_regs = *const InterfaceReg where offset(0x01752038);
         get_eye_pos = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x0043b8d0);
@@ -173,7 +175,7 @@ engine_functions! {
         get_angles = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x0043c030);
         get_origin_varient = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x00443e80);
         get_origin = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x004198d0);
-        eye_angles = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *const Vector3 where offset(0x004455f0); // this access the vtable
+        eye_angles = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *const Vector3 where offset(0x004455f0); // this acceses the vtable
         is_on_ground = unsafe extern "C" fn(*const CPlayer) -> usize where offset(0x441c60);
     }
 }

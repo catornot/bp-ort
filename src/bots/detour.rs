@@ -5,7 +5,7 @@ use std::{
     mem,
 };
 
-use super::{cmds::run_bots_cmds, set_on_join::set_stuff_on_join};
+use super::{set_on_join::set_stuff_on_join, cmds::run_bots_cmds};
 use crate::{bindings::CUserCmd, utils::from_c_string};
 
 static_detour! {
@@ -16,7 +16,8 @@ static_detour! {
     static SomeVoiceFunc: unsafe extern "C" fn(*const c_void, *const c_void) -> *const c_void;
     static PlayerRunCommand: unsafe extern "C" fn(*mut CPlayer, *const CUserCmd, *const c_void);
     static ProcessUsercmds: unsafe extern "C" fn(*mut CPlayer, c_short, *const CUserCmd, i32, i32, c_char, c_uchar); // c_uchar might be wrong since undefined
-    static FUN_658c50: unsafe extern "C" fn(*mut u32, *mut u32) -> *mut u32;
+    static SomeFuncInDisconnectProcedure: unsafe extern "C" fn(*mut CClient, *const c_void,c_uchar);
+    static CClient__Disconnect: unsafe extern "C" fn(*mut CClient, c_uchar, *const c_void, *const c_void);
 }
 
 fn some_run_user_cmd_hook(parm: c_char) {
@@ -40,39 +41,6 @@ fn hook_proccess_user_cmds(
     log::info!("hook_proccess_user_cmds( this: {name}, unk1: {unk1}, user_cmds: {user_cmds:?}, numcmds: {numcmds}, totalcmds: {totalcmds}, unk2: {unk2}, unk3: {unk3})");
 
     unsafe { ProcessUsercmds.call(this, unk1, user_cmds, numcmds, totalcmds, unk2, unk3) }
-}
-
-// hook this to fix it!
-fn hook_658c50(unk1: *mut u32, unk2: *mut u32) -> *mut u32 {
-    unsafe {
-        *unk1 = *unk2;
-        _ = sub_hook_658c50(unk1, unk2);
-        unk1
-    }
-}
-
-fn sub_hook_658c50(unk1: *mut u32, unk2: *mut u32) -> Option<*mut u32> {
-    unsafe {
-        *unk1 = *unk2;
-        *unk1.add(1).as_mut()? = *unk2.add(1).as_ref()?;
-        *unk1.add(2).as_mut()? = *unk2.add(2).as_ref()?;
-        *unk1.add(3).as_mut()? = *unk2.add(3).as_ref()?;
-        *unk1.add(4).as_mut()? = *unk2.add(4).as_ref()?;
-        *unk1.add(5).as_mut()? = *unk2.add(5).as_ref()?;
-        *unk1.add(6).as_mut()? = *unk2.add(6).as_ref()?;
-        *unk1.add(7).as_mut()? = *unk2.add(7).as_ref()?;
-        *unk1.add(8).as_mut()? = *unk2.add(8).as_ref()?;
-        *unk1.add(9).as_mut()? = *unk2.add(9).as_ref()?;
-        *unk1.add(10).as_mut()? = *unk2.add(10).as_ref()?;
-        *unk1.add(0xb).as_mut()? = *unk2.add(0xb).as_ref()?;
-        *unk1.add(0xc).as_mut()? = *unk2.add(0xc).as_ref()?;
-        *unk1.add(0xd).as_mut()? = *unk2.add(0xd).as_ref()?;
-        *unk1.add(0xe).as_mut()? = *unk2.add(0xe).as_ref()?;
-        *unk1.add(0xf).as_mut()? = *unk2.add(0xf).as_ref()?;
-        *unk1.add(0x10).as_mut()? = *unk2.add(0x10).as_ref()?;
-        *unk1.add(0x11).as_mut()? = *unk2.add(0x11).as_ref()?;
-    }
-    Some(unk1)
 }
 
 pub fn hook_server(addr: *const c_void) {
@@ -100,14 +68,6 @@ pub fn hook_server(addr: *const c_void) {
         // .expect("failure to enable the ProcessUsercmds hook");
 
         log::info!("hooked ProcessUsercmds");
-
-        FUN_658c50
-            .initialize(mem::transmute(addr.offset(0x658c50)), hook_658c50)
-            .expect("failed to hook FUN_658c50");
-            // .enable()
-            // .expect("failure to enable the FUN_658c50 hook");
-
-        log::info!("hooked FUN_658c50");
     }
 }
 
@@ -117,6 +77,19 @@ pub fn subfunc_cclient_connect_hook(this: *mut CClient, unk1: *const c_void) {
     if let Some(client) = unsafe { this.as_mut() } {
         unsafe { set_stuff_on_join(client) }
     }
+}
+
+pub fn subfunc_cclient_disconnect_hook(this: *mut CClient, unk1: *const c_void, unk2: c_uchar) {
+    unsafe { SomeFuncInDisconnectProcedure.call(this, unk1, unk2) }
+}
+
+pub fn disconnect_hook(
+    this: *mut CClient,
+    unk1: c_uchar,
+    unk2: *const c_void,
+    unk3: *const c_void,
+) {
+    unsafe { CClient__Disconnect.call(this, unk1, unk2, unk3) }
 }
 
 pub fn hook_engine(addr: *const c_void) {
@@ -129,7 +102,7 @@ pub fn hook_engine(addr: *const c_void) {
     unsafe {
         SomeFuncInConnectProcedure
             .initialize(
-                mem::transmute(addr.offset(0x00106270)),
+                mem::transmute(addr.offset(0x106270)),
                 subfunc_cclient_connect_hook, // so since we can't double hook, I found a function that can be hook in CClient__Connect
             )
             .expect("failed to hook SomeFuncInConnectProcedure")
@@ -137,6 +110,25 @@ pub fn hook_engine(addr: *const c_void) {
             .expect("failure to enable the SomeFuncInConnectProcedure hook");
 
         log::info!("hooked SomeFuncInConnectProcedure");
+
+        SomeFuncInDisconnectProcedure
+            .initialize(
+                mem::transmute(addr.offset(0x103810)),
+                subfunc_cclient_disconnect_hook,
+            )
+            .expect("failed to hook SomeFuncInDisconnectProcedure")
+            .enable()
+            .expect("failure to enable the SomeFuncInDisconnectProcedure hook");
+
+        log::info!("hooked SomeFuncInDisconnectProcedure");
+
+        CClient__Disconnect
+            .initialize(mem::transmute(addr.offset(0x1012c0)), disconnect_hook)
+            .expect("failed to hook CClient__Disconnect")
+            .enable()
+            .expect("failure to enable the CClient__Disconnect hook");
+
+        log::info!("hooked CClient__Disconnect");
     }
 }
 
