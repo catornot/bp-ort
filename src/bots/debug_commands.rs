@@ -19,11 +19,11 @@ pub fn register_debug_concommands(engine: &EngineData) {
             "",
             FCVAR_GAMEDLL as i32,
         )
-        .expect("couldn't register concommand bot_find");
+        .expect("couldn't register concommand bot_dump_players");
 
     engine
         .register_concommand("set_clan_tag", set_clan_tag, "", FCVAR_GAMEDLL as i32)
-        .expect("couldn't register concommand bot_find");
+        .expect("couldn't register concommand set_clan_tag");
 }
 
 #[rrplug::concommand]

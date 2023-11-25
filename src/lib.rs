@@ -1,4 +1,10 @@
-use rrplug::prelude::*;
+use rrplug::{
+    bindings::cvar::command::{COMMAND_COMPLETION_ITEM_LENGTH, COMMAND_COMPLETION_MAXITEMS},
+    mid::{concommands::find_concommand, engine::get_engine_data},
+    prelude::*,
+};
+use std::ffi::c_char;
+use utils::from_c_string;
 
 mod bindings;
 mod bots;
@@ -15,9 +21,8 @@ use crate::{
     disguise::Disguise,
     interfaces::Interfaces,
     screen_detour::hook_materialsystem,
+    utils::set_c_char_array,
 };
-
-// todo put these into folders
 
 mod screen_detour;
 
@@ -37,9 +42,7 @@ impl Plugin for HooksPlugin {
         }
     }
 
-    fn main(&self) {}
-
-    fn on_dll_load(&self, engine: &PluginLoadDLL, dll_ptr: &DLLPointer) {
+    fn on_dll_load(&self, engine: Option<&EngineData>, dll_ptr: &DLLPointer) {
         self.bots.on_dll_load(engine, dll_ptr);
         self.disguise.on_dll_load(engine, dll_ptr);
         self.interfaces.on_dll_load(engine, dll_ptr);
@@ -51,8 +54,8 @@ impl Plugin for HooksPlugin {
             MatSysFunctions::try_init(dll_ptr, &MATSYS_FUNCTIONS);
         }
 
-        match engine {
-            PluginLoadDLL::Other(other) if other == "materialsystem_dx11.dll" => {
+        match dll_ptr.which_dll() {
+            WhichDll::Other(other) if *other == "materialsystem_dx11.dll" => {
                 hook_materialsystem(dll_ptr.get_dll_ptr())
             }
             // PluginLoadDLL::Server => unsafe {
@@ -72,6 +75,39 @@ impl Plugin for HooksPlugin {
             //     //     ],
             //     // ); // same thing but less nops
             // },
+            WhichDll::Server => unsafe {
+                let concommand = get_engine_data()
+                    .unwrap()
+                    .register_concommand("test_completion", test_completion, "", 0)
+                    .expect("couldn't register concommand test_completion");
+
+                // let command = rrplug::mid::northstar::CREATE_OBJECT_FUNC.wait().unwrap()(
+                //     rrplug::bindings::plugin_abi::ObjectType::CONCOMMANDS,
+                // ) as *mut ConCommand;
+                // let concommand = (SERVER_FUNCTIONS.wait().register_con_command)(
+                //     command,
+                //     to_c_string!(const "test_completion\0").as_ptr(),
+                //     Some(test_completion),
+                //     std::ptr::null(),
+                //     0,
+                //     test_completion_completion,
+                // );
+                log::info!(
+                    "test_completion m_nCallbackFlags {}",
+                    (*concommand).m_nCallbackFlags
+                );
+
+                (*concommand).m_pCompletionCallback = Some(test_completion_completion);
+
+                // (*concommand).m_nCallbackFlags = true as i32;
+                (*concommand).m_nCallbackFlags =
+                    true as i32 | (*concommand).m_nCallbackFlags & 0xfa | 2;
+
+                // super bad
+                // (*concommand).m_nCallbackFlags = (*concommand).m_nCallbackFlags | true as i32 | 4;
+                let flags = find_concommand("give").unwrap().m_nCallbackFlags;
+                log::info!("give flags {:#10x}, {:#10b}", flags, flags);
+            },
             _ => {}
         }
     }
@@ -87,6 +123,39 @@ impl Plugin for HooksPlugin {
     fn runframe(&self) {
         self.interfaces.runframe()
     }
+}
+
+#[rrplug::concommand]
+pub fn test_completion(command: CCommandResult) -> Option<()> {
+    let arg = command.get_args().get(0)?;
+    log::info!("arg {arg}");
+
+    None
+}
+
+pub(crate) unsafe extern "C" fn test_completion_completion(
+    partial: *const c_char,
+    commands: *mut [c_char; COMMAND_COMPLETION_ITEM_LENGTH as usize],
+) -> i32 {
+    let cmd = from_c_string::<String>(partial);
+    let cmd = cmd.split_once(' ').map(|(cmd, _)| cmd).unwrap_or(&cmd);
+
+    let commands = std::slice::from_raw_parts_mut(commands, COMMAND_COMPLETION_MAXITEMS as usize);
+
+    set_c_char_array(
+        &mut commands[0],
+        &format!("{cmd} hksdgkshgskjghskjghsjkghksg\0"),
+    );
+    set_c_char_array(&mut commands[1], &format!("{cmd} test3\0"));
+    set_c_char_array(&mut commands[2], &format!("{cmd} test2\0"));
+    set_c_char_array(&mut commands[3], &format!("{cmd} test4\0"));
+    set_c_char_array(
+        &mut commands[4],
+        &format!("{cmd} 239852789472895798272592\0"),
+    );
+    set_c_char_array(&mut commands[5], &format!("{cmd} yo completion?\0"));
+
+    5
 }
 
 entry!(HooksPlugin);

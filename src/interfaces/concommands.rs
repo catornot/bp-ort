@@ -1,3 +1,4 @@
+use rrplug::mid::concommands::find_concommand;
 use rrplug::prelude::*;
 use rrplug::{bindings::cvar::convar::FCVAR_CLIENTDLL, to_c_string};
 use std::mem;
@@ -40,6 +41,14 @@ pub fn register_concommands(engine: &EngineData) {
             interfaces_test_player,
             "",
             FCVAR_CLIENTDLL as i32,
+        )
+        .expect("couldn't register concommand");
+    engine
+        .register_concommand(
+            "interfaces_show_ent_fire",
+            interfaces_show_ent_fire,
+            "",
+            0,
         )
         .expect("couldn't register concommand");
 }
@@ -176,5 +185,12 @@ pub fn interfaces_test_player() -> Option<()> {
             ent_fire as usize - server_functions.base as usize
         )
     }
+    None
+}
+
+#[rrplug::concommand]
+pub fn interfaces_show_ent_fire() -> Option<()> {
+    let c = find_concommand("ent_fire")?;
+    log::info!("{}", c.unk0);
     None
 }

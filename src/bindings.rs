@@ -1,8 +1,15 @@
+use recastnavigation_sys::dtNavMesh;
 use rrplug::{
-    bindings::class_types::{client::CClient, cplayer::CPlayer},
-    engine_functions,
+    bindings::{
+        class_types::{client::CClient, cplayer::CPlayer},
+        cvar::{
+            command::{ConCommand, FnCommandCallback_t},
+            convar::Color,
+        },
+        squirreldatatypes::CSquirrelVM,
+    },
     high::vector::Vector3,
-    offset_struct,
+    offset_functions, offset_struct,
 };
 use std::{
     ffi::{c_char, c_int, c_short, c_uchar, c_void},
@@ -137,12 +144,63 @@ offset_struct! {
     }
 }
 
+// opaque type
+#[repr(C)]
+pub struct CBaseEntity;
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct TraceLineResult {
+    gap_0: [c_char; 48],
+    pub ray_frac: f32,
+    pub unk: c_char,
+    pub success: f32,
+    // gap: [c_char; 48],
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct TraceResults {
+    pub gap_0: [c_char; 15],
+    pub end_pos: Vector3,
+    pub gap_0x1c: [c_char; 4],
+    pub surfce_normal: Vector3,
+    pub gap_0x2c: [c_char; 4],
+    pub fraction: f32,
+    pub contents: i32,
+    pub field28_0x38: c_uchar,
+    pub all_solid: bool,
+    pub start_solid: bool,
+    pub gap_0x3c: [c_char; 4],
+    pub fraction_left_solid: f32,
+    pub gap_0x44: [c_char; 15],
+    pub hit_sky: bool,
+    pub gap_0x55: [c_char; 3],
+    pub hit_group: i32,
+    pub gap_0x5c: [c_char; 4],
+    pub hit_ent: *const CBaseEntity,
+    pub gap_0x68: [c_char; 4],
+    pub static_prop_index: i32,
+}
+
+impl Default for TraceLineResult {
+    fn default() -> Self {
+        Self {
+            gap_0: [0; 48],
+            success: 0.0,
+            unk: 0,
+            ray_frac: 0.0,
+            // gap: [0; 48],
+        }
+    }
+}
+
 // struct IServerGameEnts {}
 
 // a really interesting function : FUN_00101370
 // it prints CPlayer stuff
 
-engine_functions! {
+offset_functions! {
     ENGINE_FUNCTIONS + EngineFunctions for WhichDll::Engine => {
         client_array = *mut CClient where offset(0x12A53F90);
         server = PServer where offset(0x12A53D40);
@@ -151,13 +209,19 @@ engine_functions! {
         cclient_disconnect = unsafe extern "C" fn(*mut CClient, u32, *const c_char) where offset(0x1012C0);
         get_current_playlist_var = unsafe extern "C" fn(*const c_char, c_int) -> *const c_char where offset(0x18C680);
         globals = *mut CGlobalVars where offset(0x7C6F70);
+        render_line = unsafe extern "C" fn(*const Vector3, *const Vector3, Color, bool) where offset(0x192A70);
+
+        props_and_wolrd_filter = *const c_void where offset(0x5eb980);
+        trace_ray = unsafe extern "C" fn(this: *const c_void, ray: *const c_void, maskf: f32, filter: *const c_void, trace: *mut TraceResults ) where offset(0x14eeb0);
+        ctraceengine = *const c_void where offset(0x7c9900);
     }
 }
 
-engine_functions! {
+offset_functions! {
     SERVER_FUNCTIONS + ServerFunctions for WhichDll::Server => {
         base = *const c_void where offset(0x0);
         move_helper = *mut c_void where offset(0xc389e0);
+        csqvm = *mut CSquirrelVM where offset(0xf39358);
         client_fully_connected = ClientFullyConnected where offset(0x153B70);
         run_null_command = RunNullCommand where offset(0x5A9FD0);
         simulate_player = unsafe extern "C" fn(*const CPlayer) where offset(0x0492580);
@@ -177,16 +241,30 @@ engine_functions! {
         get_origin = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x004198d0);
         eye_angles = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *const Vector3 where offset(0x004455f0); // this acceses the vtable
         is_on_ground = unsafe extern "C" fn(*const CPlayer) -> usize where offset(0x441c60);
+        is_alive = unsafe extern "C" fn(*const CPlayer) -> usize where offset(0x4461e0);
+        is_titan = unsafe extern "C" fn(*const CPlayer) -> bool where offset(0x406a70);
+
+        get_offhand_weapon = unsafe extern "C" fn(*const CPlayer,u32 ) -> bool where offset(0xe1ec0); // not done
+        set_weapon_by_slot = unsafe extern "C" fn(*const c_void, *const c_char) where offset(0xe4ba0);
+        replace_weapon = unsafe extern "C" fn(*const CPlayer, *const c_char, *const c_void, *const c_void) where offset(0xdbae0);
+        get_active_weapon = unsafe extern "C" fn(*const CPlayer) -> *const CBaseEntity where offset(0xea4c0);
+
+        trace_line_simple = unsafe extern "C" fn(*const Vector3, *const Vector3, c_char, c_char, i32, i32, i32, *mut TraceResults )  where offset(0x2725c0);
+
+        ent_fire = unsafe extern "C" fn(entityInstance: *mut CBaseEntity, inputName: *const c_char, args: *const c_void, delay: f32, otherEntity: *mut CBaseEntity, unkOrNull: *const c_void, unk:c_char ) where offset(0x29ea70);
+
+        register_con_command = unsafe extern "C" fn(concommand: *mut ConCommand,name: *const c_char, callback: FnCommandCallback_t, helpString: *const c_char,flags: i32, completion: unsafe extern "C-unwind" fn(arg1: *const ::std::os::raw::c_char, arg2: *mut [::std::os::raw::c_char; 128usize]) -> ::std::os::raw::c_int) -> *mut ConCommand where offset(0x723fa0);
+        nav_mesh = *mut dtNavMesh where offset(0x5f5d0);
     }
 }
 
-engine_functions! {
+offset_functions! {
     CLIENT_FUNCTIONS + ClientFunctions for WhichDll::Client => {
 
     }
 }
 
-engine_functions! {
+offset_functions! {
     MATSYS_FUNCTIONS + MatSysFunctions for WhichDll::Other("materialsystem_dx11.dll") => {
         some_ctexture_function = SomeCtextureFunction where offset(0x00079e80);
     }

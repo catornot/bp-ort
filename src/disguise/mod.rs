@@ -12,13 +12,8 @@ impl Plugin for Disguise {
         Self {}
     }
 
-    fn main(&self) {}
-
-    fn on_dll_load(&self, engine: &PluginLoadDLL, _dll_ptr: &DLLPointer) {
-        let engine = match engine {
-            PluginLoadDLL::Engine(engine) => engine,
-            _ => return,
-        };
+    fn on_dll_load(&self, engine: Option<&EngineData>, _dll_ptr: &DLLPointer) {
+        let Some(engine) = engine else { return };
 
         register_concommands(engine)
     }

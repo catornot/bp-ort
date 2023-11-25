@@ -1,9 +1,23 @@
-use rrplug::prelude::*;
+use libc::c_void;
+use once_cell::sync::OnceCell;
+use rrplug::{prelude::*, to_c_string};
+
+use crate::utils::create_source_interface;
 
 use self::concommands::register_concommands;
 
 mod concommands;
 mod hooks;
+
+pub static ENGINE_INTERFACES: OnceCell<EngineInterfaces> = OnceCell::new();
+
+pub struct EngineInterfaces {
+    pub debug_overlay: *mut *const [*const c_void; 31], // since it's a ptr to class which has a ptr to vtable
+    pub engine_server: *mut *const [*const c_void; 211],
+}
+
+unsafe impl Sync for EngineInterfaces {}
+unsafe impl Send for EngineInterfaces {}
 
 #[derive(Debug)]
 pub struct Interfaces;
@@ -13,17 +27,27 @@ impl Plugin for Interfaces {
         Self {}
     }
 
-    fn main(&self) {}
-
-    fn on_dll_load(&self, engine: &PluginLoadDLL, dll_ptr: &DLLPointer) {
+    fn on_dll_load(&self, engine: Option<&EngineData>, dll_ptr: &DLLPointer) {
         hooks::hook(dll_ptr);
 
-        let engine = match engine {
-            PluginLoadDLL::Engine(engine) => engine,
-            _ => return,
-        };
+        let Some(engine) = engine else { return };
 
-        register_concommands(engine)
+        register_concommands(engine);
+
+        _ = unsafe {
+            ENGINE_INTERFACES.set(EngineInterfaces {
+                debug_overlay: create_source_interface::<*const [*const c_void; 31]>(
+                    to_c_string!(const "engine.dll\0").as_ptr(),
+                    to_c_string!(const "VDebugOverlay004\0").as_ptr(),
+                )
+                .unwrap(),
+                engine_server: create_source_interface::<*const [*const c_void; 211]>(
+                    to_c_string!(const "engine.dll\0").as_ptr(),
+                    to_c_string!(const "VEngineServer022\0").as_ptr(),
+                )
+                .unwrap(),
+            })
+        };
     }
 
     fn runframe(&self) {
@@ -31,7 +55,7 @@ impl Plugin for Interfaces {
             return;
         };
 
-        let Ok(line) = convar.get_value_string()else {
+        let Ok(line) = convar.get_value_string() else {
             return;
         };
 

@@ -23,7 +23,7 @@ pub fn register_concommands(engine: &EngineData) {
             "disguise_name <index> <tag>",
             FCVAR_GAMEDLL as i32 | FCVAR_CLIENTDLL as i32,
         )
-        .expect("couldn't register concommand bot_find");
+        .expect("couldn't register concommand disguise_tag");
 
     engine
         .register_concommand(
@@ -32,16 +32,25 @@ pub fn register_concommands(engine: &EngineData) {
             "disguise_travesal <index> <type>",
             FCVAR_GAMEDLL as i32,
         )
-        .expect("couldn't register concommand bot_find");
+        .expect("couldn't register concommand disguise_travesal");
 
-        engine
+    engine
         .register_concommand(
             "disguise_edict",
             disguise_edict,
             "disguise_edict <index> <edict>",
             FCVAR_GAMEDLL as i32,
         )
-        .expect("couldn't register concommand bot_find");
+        .expect("couldn't register concommand disguise_edict");
+
+    engine
+        .register_concommand(
+            "disguise_generation",
+            disguise_generation,
+            "disguise_edict <index> <generation>",
+            FCVAR_GAMEDLL as i32,
+        )
+        .expect("couldn't register concommand disguise_generation");
 }
 
 #[rrplug::concommand]
@@ -109,6 +118,22 @@ pub fn disguise_edict(command: CCommandResult) -> Option<()> {
         let edict: u16 = command.get_args().get(0)?.parse().ok()?;
 
         **client.edict = edict;
+    }
+    None
+}
+
+#[rrplug::concommand]
+pub fn disguise_generation(command: CCommandResult) -> Option<()> {
+    unsafe {
+        let index: usize = command.get_args().get(0)?.parse().ok()?;
+
+        let player = (SERVER_FUNCTIONS.wait().get_player_by_index)(index as i32 + 1).as_mut()?;
+
+        log::info!("player.generation {}", **player.generation);
+
+        let generation: i32 = command.get_args().get(0)?.parse().ok()?;
+
+        **player.generation = generation;
     }
     None
 }

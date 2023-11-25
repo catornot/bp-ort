@@ -1,23 +1,29 @@
 use retour::static_detour;
-use rrplug::bindings::class_types::{client::CClient, cplayer::CPlayer};
+use rrplug::{
+    bindings::class_types::{client::CClient, cplayer::CPlayer},
+    high::vector::Vector3,
+};
 use std::{
     ffi::{c_char, c_short, c_uchar, c_void},
     mem,
 };
 
-use super::{set_on_join::set_stuff_on_join, cmds::run_bots_cmds};
-use crate::{bindings::CUserCmd, utils::from_c_string};
+use super::{cmds::run_bots_cmds, set_on_join::set_stuff_on_join};
+use crate::{
+    bindings::{CUserCmd, TraceResults},
+    utils::from_c_string,
+};
 
 static_detour! {
     static Physics_RunThinkFunctions: unsafe extern "C" fn(c_char);
-    #[allow(improper_ctypes_definitions)] // this is bad but this is what respawn did with there infinite wisdom
-    // static CClient__Connect: unsafe extern "C" fn(CClientPtr, *const c_char, *const c_void, c_char, *const c_void, [c_char;256], *const c_void ) -> bool;
+    // static CClient__Connect: unsafe extern "C" fn(CClientPtr, *const c_char, *const c_void, c_char, *const c_void, [c_char;256] this is a *mut c_char, *const c_void ) -> bool;
     static SomeFuncInConnectProcedure: unsafe extern "C" fn(*mut CClient, *const c_void);
     static SomeVoiceFunc: unsafe extern "C" fn(*const c_void, *const c_void) -> *const c_void;
     static PlayerRunCommand: unsafe extern "C" fn(*mut CPlayer, *const CUserCmd, *const c_void);
     static ProcessUsercmds: unsafe extern "C" fn(*mut CPlayer, c_short, *const CUserCmd, i32, i32, c_char, c_uchar); // c_uchar might be wrong since undefined
     static SomeFuncInDisconnectProcedure: unsafe extern "C" fn(*mut CClient, *const c_void,c_uchar);
     static CClient__Disconnect: unsafe extern "C" fn(*mut CClient, c_uchar, *const c_void, *const c_void);
+    static TraceLineSimple: unsafe extern "C" fn(*const Vector3, *const Vector3, c_char, c_char, i32, i32, i32, *mut TraceResults);
 }
 
 fn some_run_user_cmd_hook(parm: c_char) {
@@ -43,6 +49,31 @@ fn hook_proccess_user_cmds(
     unsafe { ProcessUsercmds.call(this, unk1, user_cmds, numcmds, totalcmds, unk2, unk3) }
 }
 
+fn hook_trace_line(
+    v1: *const Vector3,
+    v2: *const Vector3,
+    unk1: c_char,
+    unk2: c_char,
+    unk3: i32,
+    unk4: i32,
+    unk5: i32,
+    trace: *mut TraceResults,
+) {
+    unsafe {
+        log::info!(
+            "trace called with v1: {:?}, v2: {:?} unk1: {unk1} unk2: {unk2} unk3: {unk3} unk4: {unk4} unk5: {unk5}",
+            *v1,
+            *v2
+        );
+        log::info!("pre trace result : {:?}", *trace);
+
+        TraceLineSimple.call(v1, v2, unk1, unk2, unk3, unk4, unk5, trace);
+
+        log::info!("trace result : {:?}", *trace);
+        // dbg!(trace);
+    }
+}
+
 pub fn hook_server(addr: *const c_void) {
     log::info!("hooking server functions");
 
@@ -57,6 +88,14 @@ pub fn hook_server(addr: *const c_void) {
             .expect("failure to enable the Physics_RunThinkFunctions hook");
 
         log::info!("hooked Physics_RunThinkFunctions");
+
+        TraceLineSimple
+            .initialize(mem::transmute(addr.offset(0x2725c0)), hook_trace_line)
+            .expect("failed to hook TraceLineSimple");
+        // .enable()
+        // .expect("failure to enable the TraceLineSimple hook");
+
+        log::info!("hooked TraceLineSimple");
 
         ProcessUsercmds
             .initialize(

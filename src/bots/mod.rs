@@ -1,8 +1,12 @@
+use libc::c_char;
+use once_cell::sync::Lazy;
 use rand::Rng;
-use rrplug::bindings::class_types::client::CClient;
 use rrplug::prelude::*;
 use rrplug::{
-    bindings::{class_types::client::SignonState, cvar::convar::FCVAR_GAMEDLL},
+    bindings::{
+        class_types::client::{CClient, SignonState},
+        cvar::convar::FCVAR_GAMEDLL,
+    },
     high::convars::{ConVarRegister, ConVarStruct},
     to_c_string, OnceCell,
 };
@@ -14,7 +18,7 @@ use std::{
 
 use self::detour::{hook_engine, hook_server};
 use self::{convars::register_required_convars, debug_commands::register_debug_concommands};
-use crate::utils::set_c_char_array;
+use crate::utils::{set_c_char_array, CommandCompletion, CurrentCommand};
 use crate::{
     bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
     utils::iterate_c_array_sized,
@@ -25,14 +29,36 @@ mod cmds;
 mod convars;
 mod debug_commands;
 mod detour;
+mod navmesh;
 mod set_on_join;
 
 static CLAN_TAG_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
 pub static SIMULATE_TYPE_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
-pub const DEFAULT_SIMULATE_TYPE: i32 = 3;
+pub const DEFAULT_SIMULATE_TYPE: i32 = 5;
 
 thread_local! {
-    pub static MAX_PLAYERS: RefCell<u32> = const { RefCell::new(16) };
+    pub static MAX_PLAYERS: RefCell<u32> = const { RefCell::new(32) };
+}
+pub(super) static mut TASK_MAP: Lazy<[BotData; 64]> =
+    Lazy::new(|| std::array::from_fn(|_| BotData::default()));
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum BotWeaponState {
+    #[default]
+    ApReady,
+    ApPrepare,
+    AtReady,
+    AtPrepare,
+    TitanReady,
+    TitanPrepare,
+}
+
+#[derive(Debug, Default)]
+pub(super) struct BotData {
+    sim_type: Option<i32>,
+    edict: u16,
+    weapon_state: BotWeaponState,
+    counter: u32,
 }
 
 #[derive(Debug)]
@@ -78,8 +104,6 @@ impl Plugin for Bots {
         }
     }
 
-    fn main(&self) {}
-
     fn on_sqvm_created(&self, handle: &CSquirrelVMHandle) {
         // DISABLED IN LIBS.RS
         match handle.get_context() {
@@ -104,6 +128,8 @@ impl Plugin for Bots {
             32
         });
 
+        log::info!("MAX_PLAYERS is set to {max_players}");
+
         MAX_PLAYERS.with(|i| *i.borrow_mut() = max_players);
     }
 
@@ -124,17 +150,14 @@ impl Plugin for Bots {
         }
     }
 
-    fn on_dll_load(&self, engine: &PluginLoadDLL, dll_ptr: &DLLPointer) {
+    fn on_dll_load(&self, engine: Option<&EngineData>, dll_ptr: &DLLPointer) {
         match dll_ptr.which_dll() {
             rrplug::mid::engine::WhichDll::Engine => hook_engine(dll_ptr.get_dll_ptr()),
             rrplug::mid::engine::WhichDll::Server => hook_server(dll_ptr.get_dll_ptr()),
             _ => {}
         }
 
-        let engine = match engine {
-            PluginLoadDLL::Engine(engine) => engine,
-            _ => return,
-        };
+        let Some(engine) = engine else { return };
 
         let mut convar = ConVarStruct::try_new().unwrap();
         let register_info = ConVarRegister {
@@ -143,7 +166,7 @@ impl Plugin for Bots {
                 "bot_clang_tag",
                 "BOT",
                 FCVAR_GAMEDLL as i32,
-                "the clan tag for the bot; use . to indicate no clan tag",
+                "the clan tag for the bot",
             )
         };
 
@@ -158,7 +181,7 @@ impl Plugin for Bots {
                 "bot_cmds_type",
                 DEFAULT_SIMULATE_TYPE.to_string(),
                 FCVAR_GAMEDLL as i32,
-                "the type of cmds running for bots; 0 = null, 1 = frog, 2 = following player 0, 3 = firing, 4 = going backwards, 5 = going forward",
+                "the type of cmds running for bots; 0 = null, 1 = frog, 2 = following player 0, 3 = firing, 5 = firing and moving to a player, 5 = going forward",
             )
         };
 
@@ -169,12 +192,19 @@ impl Plugin for Bots {
 
         register_required_convars(engine);
 
-        _ = engine.register_concommand(
-            "bot_spawn",
-            spawn_fake_player,
-            "spawns a bot on team 2",
-            FCVAR_GAMEDLL as i32,
-        );
+        let command = engine
+            .register_concommand(
+                "bot_spawn",
+                spawn_fake_player,
+                "spawns a bot",
+                FCVAR_GAMEDLL as i32,
+            )
+            .unwrap();
+
+        unsafe {
+            (*command).m_pCompletionCallback = Some(spawn_fake_player_completion);
+            (*command).m_nCallbackFlags |= 0x3;
+        }
 
         register_debug_concommands(engine)
     }
@@ -203,12 +233,11 @@ fn spawn_fake_player(command: CCommandResult) {
         .unwrap_or_else(|| Some(choose_team()))
         .unwrap_or_else(choose_team);
 
-    // let sim_type = command
-    //     .get_args()
-    //     .get(2)
-    //     .map(|t| Some(SimulationState::Const(t.parse::<i32>().ok()?)))
-    //     .unwrap_or(Some(SimulationState::Dyn))
-    //     .unwrap_or(SimulationState::Dyn); // could use vec_abs_origin since it's not used anywhere else lol
+    let sim_type = command
+        .get_args()
+        .get(2)
+        .map(|t| Some(t.parse::<i32>().ok()?))
+        .flatten(); // doesn't work?
 
     let name = to_c_string!(name);
     unsafe {
@@ -253,9 +282,49 @@ fn spawn_fake_player(command: CCommandResult) {
             &mut client.clan_tag,
             &PLUGIN.wait().bots.clang_tag.lock().expect("how"),
         );
+
+        *TASK_MAP
+            .get_mut(**client.edict as usize)
+            .expect("tried to get an invalid edict") = BotData {
+            sim_type,
+            ..Default::default()
+        };
     }
 }
 
+pub extern "C" fn spawn_fake_player_completion(
+    partial: *const c_char,
+    commands: *mut [c_char;
+        rrplug::bindings::cvar::convar::COMMAND_COMPLETION_ITEM_LENGTH as usize],
+) -> i32 {
+    let current = CurrentCommand::new(partial).unwrap();
+    let mut suggestions = CommandCompletion::from(commands);
+
+    let Some((name, team)) = current.partial.split_once(' ') else {
+        _ = suggestions.push(&format!("{} {}", current.cmd, current.partial));
+        _ = suggestions.push(&format!("{} bot_name", current.cmd));
+        return suggestions.commands_used();
+    };
+
+    let Some((prev_team, _cmd_type)) = team.split_once(' ') else {
+        if team.starts_with('i') {
+            _ = suggestions.push(&format!("{} {} 2", current.cmd, name));
+        } else if team.starts_with('m') {
+            _ = suggestions.push(&format!("{} {} 3", current.cmd, name));
+        } else {
+            _ = suggestions.push(&format!("{} {} 2", current.cmd, name));
+            _ = suggestions.push(&format!("{} {} 3", current.cmd, name));
+        }
+
+        return suggestions.commands_used();
+    };
+
+    (0..=6).for_each(|i| {
+        _ = suggestions.push(&format!("{} {} {} {}", current.cmd, name, prev_team, i))
+    });
+
+    suggestions.commands_used()
+}
 fn choose_team() -> i32 {
     let server_functions = SERVER_FUNCTIONS.wait();
 
@@ -275,7 +344,7 @@ fn choose_team() -> i32 {
                         .deref()
                 })
             })
-            .filter(|team| team == &2)
+            .filter(|team| *team == 2)
             .count();
 
     let team_3_count = total_players - team_2_count;
