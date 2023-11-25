@@ -457,6 +457,7 @@ dependencies = [
 [[package]]
 name = "rrplug"
 version = "3.0.0"
+source = "git+https://github.com/catornot/rrplug.git#20eb5a0d6d4982c61d96391f67a32ab91dc0720f"
 dependencies = [
  "log",
  "once_cell",
@@ -468,6 +469,7 @@ dependencies = [
 [[package]]
 name = "rrplug_proc"
 version = "3.0.0"
+source = "git+https://github.com/catornot/rrplug.git#20eb5a0d6d4982c61d96391f67a32ab91dc0720f"
 dependencies = [
  "proc-macro2",
  "quote",
