@@ -36,6 +36,7 @@ pub struct HooksPlugin {
     pub disguise: Disguise,
     pub interfaces: Interfaces,
     pub admin_abuse: AdminAbuse,
+    is_dedicated_server: bool,
 }
 
 impl Plugin for HooksPlugin {
@@ -45,6 +46,7 @@ impl Plugin for HooksPlugin {
             disguise: Disguise::new(plugin_data),
             interfaces: Interfaces::new(plugin_data),
             admin_abuse: AdminAbuse::new(plugin_data),
+            is_dedicated_server: std::env::args().any(|cmd| cmd.starts_with("-dedicated")),
         }
     }
 
@@ -109,6 +111,12 @@ impl Plugin for HooksPlugin {
 
     fn runframe(&self) {
         self.interfaces.runframe()
+    }
+}
+
+impl HooksPlugin {
+    pub fn is_dedicated_server(&self) -> bool {
+        self.is_dedicated_server
     }
 }
 

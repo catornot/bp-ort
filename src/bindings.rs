@@ -194,7 +194,7 @@ pub struct TraceResults {
 offset_functions! {
     ENGINE_FUNCTIONS + EngineFunctions for WhichDll::Engine => {
         client_array = *mut CClient where offset(0x12A53F90);
-        host_client = *mut CClient where offset(0x13158990);
+        host_client = *mut *mut CClient where offset(0x13158990);
         cmd_source = *const isize where offset(0x12A53F90); // when 1 host_client is invalid
         is_dedicated = *const bool where offset(0x13002498);
         server = PServer where offset(0x12A53D40);

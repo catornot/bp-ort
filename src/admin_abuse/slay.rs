@@ -11,7 +11,7 @@ use crate::utils::{
 };
 use crate::{
     admin_abuse::get_admins,
-    bindings::{CmdSource, ServerFunctions, ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
+    bindings::{ServerFunctions, ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
 };
 
 pub fn register_slay_command(engine_data: &EngineData) {
@@ -38,7 +38,7 @@ pub fn slay_command(command: CCommandResult) {
     unsafe {
         let engine = ENGINE_FUNCTIONS.wait();
         let cmd = format!(
-            "slay {}\0", // for now it will be the regular script slay since host_client doesn't work
+            "slay_server {}\0",
             command
                 .get_args()
                 .iter()
@@ -48,13 +48,10 @@ pub fn slay_command(command: CCommandResult) {
         );
         let cmd_ptr = cmd.as_ptr() as *const c_char;
 
-        // (engine.cbuf_add_text)(0, cmd_ptr, CmdSource::UserInput);
-
         (engine.cengine_client_server_cmd)(std::ptr::null_mut(), cmd_ptr, true);
     }
 }
 
-// TODO: figure out how to get host_client working to be a purely plugin system
 #[rrplug::concommand]
 pub fn slay_server_command(command: CCommandResult) {
     if command.get_arg(0).is_none() {
@@ -63,18 +60,20 @@ pub fn slay_server_command(command: CCommandResult) {
     }
     let engine = ENGINE_FUNCTIONS.wait();
     let funcs = SERVER_FUNCTIONS.wait();
+    let is_dedicated = crate::PLUGIN.wait().is_dedicated_server();
 
-    let has_admin = dbg!(unsafe { dbg!(*engine.cmd_source) != 1 })
+    let has_admin = dbg!(unsafe { dbg!(*engine.cmd_source) != 1 || !is_dedicated })
         .then_some(unsafe {
             engine
                 .host_client
                 .as_ref()
+                .map(|ptr| ptr.as_ref())
+                .flatten()
                 .map(|c| from_c_string::<String>(c.uid.as_ptr()))
         })
         .flatten()
-        .inspect(|uid| log::info!("found host_client with uid {}", uid))
         .map(|uid| get_admins().iter().any(|admin| admin.as_ref() == &uid))
-        .unwrap_or(unsafe { *engine.is_dedicated });
+        .unwrap_or(false);
     if !has_admin {
         log::warn!(
             "Client needs to have admin to run {}",
