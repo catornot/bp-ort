@@ -1,9 +1,9 @@
 use recastnavigation_sys::dtNavMesh;
 use rrplug::{
     bindings::{
-        class_types::{client::CClient, cplayer::CPlayer},
+        class_types::{c_player::C_Player, client::CClient, cplayer::CPlayer},
         cvar::{
-            command::{ConCommand, FnCommandCallback_t},
+            command::{CCommand, ConCommand, FnCommandCallback_t},
             convar::Color,
         },
         squirreldatatypes::CSquirrelVM,
@@ -148,14 +148,17 @@ offset_struct! {
 #[repr(C)]
 pub struct CBaseEntity;
 
+#[derive(Debug, Clone)]
 #[repr(C)]
-#[derive(Debug)]
-pub struct TraceLineResult {
-    gap_0: [c_char; 48],
-    pub ray_frac: f32,
-    pub unk: c_char,
-    pub success: f32,
-    // gap: [c_char; 48],
+#[allow(dead_code)]
+pub enum CmdSource {
+    Code,
+    ClientCmd,
+    UserInput,
+    NetClient,
+    NetServer,
+    DemoFile,
+    Invalid = -1,
 }
 
 #[repr(C)]
@@ -183,18 +186,6 @@ pub struct TraceResults {
     pub static_prop_index: i32,
 }
 
-impl Default for TraceLineResult {
-    fn default() -> Self {
-        Self {
-            gap_0: [0; 48],
-            success: 0.0,
-            unk: 0,
-            ray_frac: 0.0,
-            // gap: [0; 48],
-        }
-    }
-}
-
 // struct IServerGameEnts {}
 
 // a really interesting function : FUN_00101370
@@ -203,6 +194,9 @@ impl Default for TraceLineResult {
 offset_functions! {
     ENGINE_FUNCTIONS + EngineFunctions for WhichDll::Engine => {
         client_array = *mut CClient where offset(0x12A53F90);
+        host_client = *mut CClient where offset(0x13158990);
+        cmd_source = *const isize where offset(0x12A53F90); // when 1 host_client is invalid
+        is_dedicated = *const bool where offset(0x13002498);
         server = PServer where offset(0x12A53D40);
         game_clients = ServerGameClients where offset(0x13F0AAA8);
         create_fake_client = CreateFakeClient where offset(0x114C60);
@@ -213,6 +207,15 @@ offset_functions! {
 
         props_and_wolrd_filter = *const c_void where offset(0x5eb980);
         trace_ray = unsafe extern "C" fn(this: *const c_void, ray: *const c_void, maskf: f32, filter: *const c_void, trace: *mut TraceResults ) where offset(0x14eeb0);
+
+        cbuf_add_text = unsafe extern "C" fn(i32, *const c_char, CmdSource) where offset(0x1203B0);
+        cbuf_execute = unsafe extern "C" fn() where offset(0x1204B0);
+        cbuf_get_current_player = unsafe extern "C" fn() -> i32 where offset(0x120630);
+        ccommand_tokenize = unsafe extern "C" fn(*mut CCommand, *const c_char, CmdSource) -> () where offset(0x418380);
+        cmd_exec_f = unsafe extern "C" fn(*const CCommand, bool, bool) -> () where offset(0x418380);
+        cengine_client_server_cmd = unsafe extern "C" fn(*const c_void, *const c_char, bool) -> () where offset(0x54840);
+        cengine_client_client_cmd = unsafe extern "C" fn(*const c_void, *const c_char) -> () where offset(0x4fb50);
+
         ctraceengine = *const c_void where offset(0x7c9900);
     }
 }
@@ -243,6 +246,7 @@ offset_functions! {
         is_on_ground = unsafe extern "C" fn(*const CPlayer) -> usize where offset(0x441c60);
         is_alive = unsafe extern "C" fn(*const CPlayer) -> usize where offset(0x4461e0);
         is_titan = unsafe extern "C" fn(*const CPlayer) -> bool where offset(0x406a70);
+        set_health = unsafe extern "C" fn(*const CPlayer, i32, usize, usize) -> () where offset(0x42d7f0);
 
         get_offhand_weapon = unsafe extern "C" fn(*const CPlayer,u32 ) -> bool where offset(0xe1ec0); // not done
         set_weapon_by_slot = unsafe extern "C" fn(*const c_void, *const c_char) where offset(0xe4ba0);
@@ -260,7 +264,7 @@ offset_functions! {
 
 offset_functions! {
     CLIENT_FUNCTIONS + ClientFunctions for WhichDll::Client => {
-
+        get_c_player_by_index = unsafe extern "C" fn(i32) -> *mut C_Player where offset(0x348650);
     }
 }
 

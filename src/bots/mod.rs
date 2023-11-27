@@ -18,7 +18,9 @@ use std::{
 
 use self::detour::{hook_engine, hook_server};
 use self::{convars::register_required_convars, debug_commands::register_debug_concommands};
-use crate::utils::{set_c_char_array, CommandCompletion, CurrentCommand};
+use crate::utils::{
+    register_concommand_with_completion, set_c_char_array, CommandCompletion, CurrentCommand,
+};
 use crate::{
     bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
     utils::iterate_c_array_sized,
@@ -192,21 +194,16 @@ impl Plugin for Bots {
 
         register_required_convars(engine);
 
-        let command = engine
-            .register_concommand(
-                "bot_spawn",
-                spawn_fake_player,
-                "spawns a bot",
-                FCVAR_GAMEDLL as i32,
-            )
-            .unwrap();
+        register_concommand_with_completion(
+            engine,
+            "bot_spawn",
+            spawn_fake_player,
+            "spawns a bot",
+            FCVAR_GAMEDLL as i32,
+            spawn_fake_player_completion,
+        );
 
-        unsafe {
-            (*command).m_pCompletionCallback = Some(spawn_fake_player_completion);
-            (*command).m_nCallbackFlags |= 0x3;
-        }
-
-        register_debug_concommands(engine)
+        register_debug_concommands(engine);
     }
 }
 

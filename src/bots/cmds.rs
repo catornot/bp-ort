@@ -328,6 +328,7 @@ pub(super) fn get_cmd(
                             std::ptr::null(),
                             std::ptr::null(),
                         );
+                        // TODO: look at how givecurrentammo works
 
                         local_data.weapon_state = BotWeaponState::ApReady;
                     },

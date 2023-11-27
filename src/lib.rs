@@ -1,11 +1,15 @@
+#![feature(result_option_inspect)]
+
+use admin_abuse::AdminAbuse;
 use rrplug::{
     bindings::cvar::command::{COMMAND_COMPLETION_ITEM_LENGTH, COMMAND_COMPLETION_MAXITEMS},
-    mid::{concommands::find_concommand, engine::get_engine_data},
+    mid::engine::get_engine_data,
     prelude::*,
 };
 use std::ffi::c_char;
 use utils::from_c_string;
 
+mod admin_abuse;
 mod bindings;
 mod bots;
 mod disguise;
@@ -31,6 +35,7 @@ pub struct HooksPlugin {
     pub bots: Bots,
     pub disguise: Disguise,
     pub interfaces: Interfaces,
+    pub admin_abuse: AdminAbuse,
 }
 
 impl Plugin for HooksPlugin {
@@ -39,6 +44,7 @@ impl Plugin for HooksPlugin {
             bots: Bots::new(plugin_data),
             disguise: Disguise::new(plugin_data),
             interfaces: Interfaces::new(plugin_data),
+            admin_abuse: AdminAbuse::new(plugin_data),
         }
     }
 
@@ -46,6 +52,7 @@ impl Plugin for HooksPlugin {
         self.bots.on_dll_load(engine, dll_ptr);
         self.disguise.on_dll_load(engine, dll_ptr);
         self.interfaces.on_dll_load(engine, dll_ptr);
+        self.admin_abuse.on_dll_load(engine, dll_ptr);
 
         unsafe {
             EngineFunctions::try_init(dll_ptr, &ENGINE_FUNCTIONS);
@@ -81,32 +88,12 @@ impl Plugin for HooksPlugin {
                     .register_concommand("test_completion", test_completion, "", 0)
                     .expect("couldn't register concommand test_completion");
 
-                // let command = rrplug::mid::northstar::CREATE_OBJECT_FUNC.wait().unwrap()(
-                //     rrplug::bindings::plugin_abi::ObjectType::CONCOMMANDS,
-                // ) as *mut ConCommand;
-                // let concommand = (SERVER_FUNCTIONS.wait().register_con_command)(
-                //     command,
-                //     to_c_string!(const "test_completion\0").as_ptr(),
-                //     Some(test_completion),
-                //     std::ptr::null(),
-                //     0,
-                //     test_completion_completion,
-                // );
-                log::info!(
-                    "test_completion m_nCallbackFlags {}",
-                    (*concommand).m_nCallbackFlags
-                );
-
                 (*concommand).m_pCompletionCallback = Some(test_completion_completion);
-
-                // (*concommand).m_nCallbackFlags = true as i32;
                 (*concommand).m_nCallbackFlags =
-                    true as i32 | (*concommand).m_nCallbackFlags & 0xfa | 2;
+                    true as i32 | (*concommand).m_nCallbackFlags & 0xfa | 2; // |= 0x3
 
                 // super bad
                 // (*concommand).m_nCallbackFlags = (*concommand).m_nCallbackFlags | true as i32 | 4;
-                let flags = find_concommand("give").unwrap().m_nCallbackFlags;
-                log::info!("give flags {:#10x}, {:#10b}", flags, flags);
             },
             _ => {}
         }

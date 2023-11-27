@@ -1,4 +1,4 @@
-use rrplug::bindings::cvar::command::COMMAND_COMPLETION_MAXITEMS;
+use rrplug::bindings::cvar::command::{CCommand, COMMAND_COMPLETION_MAXITEMS};
 use rrplug::bindings::cvar::{command::COMMAND_COMPLETION_ITEM_LENGTH, convar::Color};
 use rrplug::prelude::*;
 use std::{
@@ -123,6 +123,27 @@ pub(crate) unsafe fn set_c_char_array<const U: usize>(buf: &mut [c_char; U], new
 #[inline]
 pub(crate) unsafe fn from_c_string<T: From<String>>(ptr: *const c_char) -> T {
     CStr::from_ptr(ptr).to_string_lossy().to_string().into()
+}
+
+pub(crate) fn register_concommand_with_completion(
+    engine_data: &EngineData,
+    name: &str,
+    callback: unsafe extern "C" fn(arg1: *const CCommand),
+    help_string: &str,
+    flags: i32,
+    completion: unsafe extern "C" fn(
+        arg1: *const ::std::os::raw::c_char,
+        arg2: *mut [::std::os::raw::c_char; 128usize],
+    ) -> ::std::os::raw::c_int,
+) {
+    let command = engine_data
+        .register_concommand(name, callback, help_string, flags)
+        .unwrap();
+
+    unsafe {
+        (*command).m_pCompletionCallback = Some(completion);
+        (*command).m_nCallbackFlags |= 0x3;
+    }
 }
 
 #[allow(unused)]

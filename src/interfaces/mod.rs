@@ -14,6 +14,7 @@ pub static ENGINE_INTERFACES: OnceCell<EngineInterfaces> = OnceCell::new();
 pub struct EngineInterfaces {
     pub debug_overlay: *mut *const [*const c_void; 31], // since it's a ptr to class which has a ptr to vtable
     pub engine_server: *mut *const [*const c_void; 211],
+    pub engine_client: *mut *const [*const c_void; 200],
 }
 
 unsafe impl Sync for EngineInterfaces {}
@@ -44,6 +45,11 @@ impl Plugin for Interfaces {
                 engine_server: create_source_interface::<*const [*const c_void; 211]>(
                     to_c_string!(const "engine.dll\0").as_ptr(),
                     to_c_string!(const "VEngineServer022\0").as_ptr(),
+                )
+                .unwrap(),
+                engine_client: create_source_interface::<*const [*const c_void; 200]>(
+                    to_c_string!(const "engine.dll\0").as_ptr(),
+                    to_c_string!(const "VEngineClient013\0").as_ptr(),
                 )
                 .unwrap(),
             })
