@@ -1,4 +1,4 @@
-use recastnavigation_sys::dtNavMesh;
+// use recastnavigation_sys::dtNavMesh;
 use rrplug::{
     bindings::{
         class_types::{c_player::C_Player, client::CClient, cplayer::CPlayer},
@@ -246,7 +246,7 @@ offset_functions! {
         is_on_ground = unsafe extern "C" fn(*const CPlayer) -> usize where offset(0x441c60);
         is_alive = unsafe extern "C" fn(*const CPlayer) -> usize where offset(0x4461e0);
         is_titan = unsafe extern "C" fn(*const CPlayer) -> bool where offset(0x406a70);
-        set_health = unsafe extern "C" fn(*const CPlayer, i32, usize, usize) -> () where offset(0x42d7f0);
+        set_health = unsafe extern "C" fn(*mut CPlayer, i32, usize, usize) -> () where offset(0x42d7f0);
 
         get_offhand_weapon = unsafe extern "C" fn(*const CPlayer,u32 ) -> bool where offset(0xe1ec0); // not done
         set_weapon_by_slot = unsafe extern "C" fn(*const c_void, *const c_char) where offset(0xe4ba0);
@@ -258,7 +258,9 @@ offset_functions! {
         ent_fire = unsafe extern "C" fn(entityInstance: *mut CBaseEntity, inputName: *const c_char, args: *const c_void, delay: f32, otherEntity: *mut CBaseEntity, unkOrNull: *const c_void, unk:c_char ) where offset(0x29ea70);
 
         register_con_command = unsafe extern "C" fn(concommand: *mut ConCommand,name: *const c_char, callback: FnCommandCallback_t, helpString: *const c_char,flags: i32, completion: unsafe extern "C-unwind" fn(arg1: *const ::std::os::raw::c_char, arg2: *mut [::std::os::raw::c_char; 128usize]) -> ::std::os::raw::c_int) -> *mut ConCommand where offset(0x723fa0);
-        nav_mesh = *mut dtNavMesh where offset(0x5f5d0);
+        // nav_mesh = *mut *mut dtNavMesh where offset(0x105F5D0);
+
+        get_pet_titan = unsafe extern "C" fn(*const CPlayer) -> *const CBaseEntity where offset(0x5dd940);
     }
 }
 

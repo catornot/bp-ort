@@ -4,12 +4,13 @@ use std::ffi::CStr;
 
 use crate::{
     bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
+    // bots::navmesh::get_path,
     utils::iterate_c_array_sized,
 };
 
-pub fn register_debug_concommands(engine: &EngineData) {
+pub fn register_debug_concommands(engine: &EngineData, token: EngineToken) {
     engine
-        .register_concommand("bot_find", bot_find, "", FCVAR_GAMEDLL as i32)
+        .register_concommand("bot_find", bot_find, "", FCVAR_GAMEDLL as i32, token)
         .expect("couldn't register concommand bot_find");
 
     engine
@@ -18,12 +19,23 @@ pub fn register_debug_concommands(engine: &EngineData) {
             bot_dump_players,
             "",
             FCVAR_GAMEDLL as i32,
+            token,
         )
         .expect("couldn't register concommand bot_dump_players");
 
     engine
-        .register_concommand("set_clan_tag", set_clan_tag, "", FCVAR_GAMEDLL as i32)
+        .register_concommand(
+            "set_clan_tag",
+            set_clan_tag,
+            "",
+            FCVAR_GAMEDLL as i32,
+            token,
+        )
         .expect("couldn't register concommand set_clan_tag");
+
+    engine
+        .register_concommand("test_nav", test_nav, "", FCVAR_GAMEDLL as i32, token)
+        .expect("couldn't register concommand test_nav");
 }
 
 #[rrplug::concommand]
@@ -91,4 +103,11 @@ pub fn set_clan_tag(command: CCommandResult) {
         },
         None => log::info!("failed to find the player"),
     }
+}
+
+#[rrplug::concommand]
+pub fn test_nav() {
+    // unsafe {
+    //     get_path(Vector3::new(0., 10., 0.), Vector3::new(100., 10., 0.));
+    // }
 }

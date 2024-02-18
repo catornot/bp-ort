@@ -1,14 +1,15 @@
-use libc::c_char;
 use once_cell::sync::Lazy;
 use rand::Rng;
+use rrplug::bindings::class_types::cplayer::CPlayer;
+use rrplug::mid::utils::try_cstring;
 use rrplug::prelude::*;
 use rrplug::{
     bindings::{
         class_types::client::{CClient, SignonState},
         cvar::convar::FCVAR_GAMEDLL,
     },
-    high::convars::{ConVarRegister, ConVarStruct},
-    to_c_string, OnceCell,
+    exports::OnceCell,
+    high::engine::convars::{ConVarRegister, ConVarStruct},
 };
 use std::{
     cell::RefCell,
@@ -18,9 +19,7 @@ use std::{
 
 use self::detour::{hook_engine, hook_server};
 use self::{convars::register_required_convars, debug_commands::register_debug_concommands};
-use crate::utils::{
-    register_concommand_with_completion, set_c_char_array, CommandCompletion, CurrentCommand,
-};
+use crate::utils::set_c_char_array;
 use crate::{
     bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
     utils::iterate_c_array_sized,
@@ -31,11 +30,12 @@ mod cmds;
 mod convars;
 mod debug_commands;
 mod detour;
-mod navmesh;
+// mod navmesh;
 mod set_on_join;
 
 static CLAN_TAG_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
 pub static SIMULATE_TYPE_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
+pub static DRAWWORLD_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
 pub const DEFAULT_SIMULATE_TYPE: i32 = 5;
 
 thread_local! {
@@ -55,11 +55,24 @@ pub enum BotWeaponState {
     TitanPrepare,
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum TitanClass {
+    #[default]
+    Ion,
+    Northstar,
+    Scorch,
+    Ronin,
+    Tone,
+    Legion,
+    Monarch,
+}
+
 #[derive(Debug, Default)]
 pub(super) struct BotData {
     sim_type: Option<i32>,
     edict: u16,
     weapon_state: BotWeaponState,
+    titan: TitanClass,
     counter: u32,
 }
 
@@ -70,7 +83,12 @@ pub struct Bots {
 }
 
 impl Plugin for Bots {
-    fn new(_plugin_data: &PluginData) -> Self {
+    const PLUGIN_INFO: PluginInfo =
+        PluginInfo::new("Bots\0", "BOTS_____\0", "BOTS\0", PluginContext::all());
+
+    fn new(_: bool) -> Self {
+        register_sq_functions(bot_set_titan);
+
         Self {
             clang_tag: Mutex::new("BOT".into()),
             generic_bot_names: Mutex::new(
@@ -85,9 +103,7 @@ impl Plugin for Bots {
                     "Petar_:D",
                     "HI_HOLO",
                     "ctalover",
-                    ">.<",
-                    "-.-",
-                    "HIIIIIII",
+                    "Bot3000",
                     "okhuh",
                     "BOT-7274",
                     "Standby_For_BotFall",
@@ -95,9 +111,11 @@ impl Plugin for Bots {
                     "whenmp_boxgameplay?",
                     "rust<3",
                     "hi_Fifty",
-                    "yesdog",
+                    "yesdogbot",
                     "bobthebot",
                     "Ihatewarnings",
+                    "Trinity_Bot",
+                    "bornet",
                 ]
                 .into_iter()
                 .map(|s| s.to_string())
@@ -106,18 +124,19 @@ impl Plugin for Bots {
         }
     }
 
-    fn on_sqvm_created(&self, handle: &CSquirrelVMHandle) {
+    fn on_sqvm_created(&self, handle: &CSquirrelVMHandle, _token: EngineToken) {
         // DISABLED IN LIBS.RS
         match handle.get_context() {
             // doesn't seam to work anymore?
-            ScriptVmType::Ui => {}
+            ScriptContext::UI => {}
             _ => return,
         }
 
         let max_players: u32 = unsafe {
             CStr::from_ptr((ENGINE_FUNCTIONS.wait().get_current_playlist_var)(
-                to_c_string!(const "max_players\0")
+                "max_players\0"
                     .as_ptr()
+                    .cast::<i8>()
                     .as_ref()
                     .unwrap_or_else(|| &*("err\0".as_ptr() as *const i8)),
                 false as i32,
@@ -135,8 +154,8 @@ impl Plugin for Bots {
         MAX_PLAYERS.with(|i| *i.borrow_mut() = max_players);
     }
 
-    fn on_sqvm_destroyed(&self, context: ScriptVmType) {
-        if let ScriptVmType::Server = context {
+    fn on_sqvm_destroyed(&self, handle: &CSquirrelVMHandle, _token: EngineToken) {
+        if let ScriptContext::SERVER = handle.get_context() {
             let engine_functions = ENGINE_FUNCTIONS.wait();
             unsafe {
                 iterate_c_array_sized::<_, 32>(engine_functions.client_array.into())
@@ -152,7 +171,7 @@ impl Plugin for Bots {
         }
     }
 
-    fn on_dll_load(&self, engine: Option<&EngineData>, dll_ptr: &DLLPointer) {
+    fn on_dll_load(&self, engine: Option<&EngineData>, dll_ptr: &DLLPointer, token: EngineToken) {
         match dll_ptr.which_dll() {
             rrplug::mid::engine::WhichDll::Engine => hook_engine(dll_ptr.get_dll_ptr()),
             rrplug::mid::engine::WhichDll::Server => hook_server(dll_ptr.get_dll_ptr()),
@@ -161,49 +180,51 @@ impl Plugin for Bots {
 
         let Some(engine) = engine else { return };
 
-        let mut convar = ConVarStruct::try_new().unwrap();
-        let register_info = ConVarRegister {
-            callback: Some(clang_tag_changed),
-            ..ConVarRegister::mandatory(
-                "bot_clang_tag",
-                "BOT",
-                FCVAR_GAMEDLL as i32,
-                "the clan tag for the bot",
-            )
-        };
-
-        convar
-            .register(register_info)
-            .expect("failed to register the convar");
+        let convar = ConVarStruct::try_new(
+            &ConVarRegister {
+                callback: Some(clang_tag_changed),
+                ..ConVarRegister::mandatory(
+                    "bot_clang_tag",
+                    "BOT",
+                    FCVAR_GAMEDLL as i32,
+                    "the clan tag for the bot",
+                )
+            },
+            token,
+        )
+        .expect("failed to register the convar");
         _ = CLAN_TAG_CONVAR.set(convar);
 
-        let mut simulate_convar = ConVarStruct::try_new().unwrap();
-        let register_info = ConVarRegister {
-            ..ConVarRegister::mandatory(
+        let simulate_convar = ConVarStruct::try_new(&ConVarRegister::new(
                 "bot_cmds_type",
                 DEFAULT_SIMULATE_TYPE.to_string(),
                 FCVAR_GAMEDLL as i32,
                 "the type of cmds running for bots; 0 = null, 1 = frog, 2 = following player 0, 3 = firing, 5 = firing and moving to a player, 5 = going forward",
-            )
-        };
+            ), token
+        ).expect("failed to register the convar");
 
-        simulate_convar
-            .register(register_info)
-            .expect("failed to register the convar");
         _ = SIMULATE_TYPE_CONVAR.set(simulate_convar);
 
-        register_required_convars(engine);
+        let draw_convar = ConVarStruct::try_new(
+            &ConVarRegister::new("drawworld", "1", FCVAR_GAMEDLL as i32, ""),
+            token,
+        )
+        .expect("failed to register the convar");
 
-        register_concommand_with_completion(
-            engine,
+        _ = DRAWWORLD_CONVAR.set(draw_convar);
+
+        register_required_convars(engine, token);
+
+        _ = engine.register_concommand_with_completion(
             "bot_spawn",
             spawn_fake_player,
             "spawns a bot",
             FCVAR_GAMEDLL as i32,
             spawn_fake_player_completion,
+            token,
         );
 
-        register_debug_concommands(engine);
+        register_debug_concommands(engine, token);
     }
 }
 
@@ -233,10 +254,9 @@ fn spawn_fake_player(command: CCommandResult) {
     let sim_type = command
         .get_args()
         .get(2)
-        .map(|t| Some(t.parse::<i32>().ok()?))
-        .flatten(); // doesn't work?
+        .and_then(|t| t.parse::<i32>().ok()); // doesn't work?
 
-    let name = to_c_string!(name);
+    let name = try_cstring(&name).unwrap_or_default();
     unsafe {
         let players = iterate_c_array_sized::<_, 32>(engine_funcs.client_array.into())
             .filter(|c| c.signon.get_inner() >= &SignonState::CONNECTED)
@@ -289,14 +309,8 @@ fn spawn_fake_player(command: CCommandResult) {
     }
 }
 
-pub extern "C" fn spawn_fake_player_completion(
-    partial: *const c_char,
-    commands: *mut [c_char;
-        rrplug::bindings::cvar::convar::COMMAND_COMPLETION_ITEM_LENGTH as usize],
-) -> i32 {
-    let current = CurrentCommand::new(partial).unwrap();
-    let mut suggestions = CommandCompletion::from(commands);
-
+#[rrplug::completion]
+fn spawn_fake_player_completion(current: CurrentCommand, suggestions: CommandCompletion) -> i32 {
     let Some((name, team)) = current.partial.split_once(' ') else {
         _ = suggestions.push(&format!("{} {}", current.cmd, current.partial));
         _ = suggestions.push(&format!("{} bot_name", current.cmd));
@@ -355,11 +369,41 @@ fn choose_team() -> i32 {
 
 #[rrplug::convar]
 fn clang_tag_changed() {
-    let new_clan_tag = match CLAN_TAG_CONVAR.wait().get_value_string() {
+    let new_clan_tag = match CLAN_TAG_CONVAR.wait().get_value_str() {
         Ok(c) => c.to_string(),
         Err(err) => return err.log(),
     };
 
     let mut clan_tag = PLUGIN.wait().bots.clang_tag.lock().expect("how");
     *clan_tag = new_clan_tag;
+}
+
+#[rrplug::sqfunction(VM = "Server", ExportName = "BotSetTitan")]
+fn bot_set_titan(bot: Option<&mut CPlayer>, titan: String) -> Option<()> {
+    let bot_handle = unsafe {
+        TASK_MAP.get_mut(
+            ENGINE_FUNCTIONS
+                .wait()
+                .client_array
+                .add((bot?.player_index.copy_inner() - 1) as usize)
+                .as_ref()?
+                .edict
+                .copy_inner() as usize,
+        )
+    }?;
+
+    bot_handle.titan = match titan.as_str().trim() {
+        "titan_stryder_arc" | "titan_stryder_leadwall" | "titan_stryder_ronin_prime" => {
+            TitanClass::Ronin
+        }
+        "titan_stryder_sniper" | "titan_stryder_northstar_prime" => TitanClass::Northstar,
+        "titan_atlas_tracker" | "titan_atlas_tone_prime" => TitanClass::Tone,
+        "titan_atlas_vanguard" => TitanClass::Monarch,
+        "titan_atlas_stickybomb" | "titan_atlas_ion_prime" => TitanClass::Ion,
+        "titan_ogre_meteor" | "titan_ogre_scorch_prime" => TitanClass::Scorch,
+        "titan_ogre_minigun" | "titan_ogre_legion_prime" => TitanClass::Legion,
+        _ => TitanClass::Ion,
+    };
+
+    None
 }

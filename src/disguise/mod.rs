@@ -8,13 +8,19 @@ mod concommands;
 pub struct Disguise;
 
 impl Plugin for Disguise {
-    fn new(_plugin_data: &PluginData) -> Self {
+    const PLUGIN_INFO: PluginInfo = PluginInfo::new(
+        "disguise\0",
+        "disguise\0",
+        "disguise\0",
+        PluginContext::DEDICATED,
+    );
+    fn new(_: bool) -> Self {
         Self {}
     }
 
-    fn on_dll_load(&self, engine: Option<&EngineData>, _dll_ptr: &DLLPointer) {
+    fn on_dll_load(&self, engine: Option<&EngineData>, _dll_ptr: &DLLPointer, token: EngineToken) {
         let Some(engine) = engine else { return };
 
-        register_concommands(engine)
+        register_concommands(engine, token)
     }
 }

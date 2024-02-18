@@ -6,13 +6,14 @@ use crate::{
     utils::set_c_char_array,
 };
 
-pub fn register_concommands(engine: &EngineData) {
+pub fn register_concommands(engine: &EngineData, token: EngineToken) {
     engine
         .register_concommand(
             "disguise_name",
             disguise_name,
             "disguise_name <index> <name>",
             FCVAR_GAMEDLL as i32 | FCVAR_CLIENTDLL as i32,
+            token,
         )
         .expect("couldn't register concommand bot_find");
 
@@ -22,6 +23,7 @@ pub fn register_concommands(engine: &EngineData) {
             disguise_tag,
             "disguise_name <index> <tag>",
             FCVAR_GAMEDLL as i32 | FCVAR_CLIENTDLL as i32,
+            token,
         )
         .expect("couldn't register concommand disguise_tag");
 
@@ -31,6 +33,7 @@ pub fn register_concommands(engine: &EngineData) {
             disguise_travesal,
             "disguise_travesal <index> <type>",
             FCVAR_GAMEDLL as i32,
+            token,
         )
         .expect("couldn't register concommand disguise_travesal");
 
@@ -40,6 +43,7 @@ pub fn register_concommands(engine: &EngineData) {
             disguise_edict,
             "disguise_edict <index> <edict>",
             FCVAR_GAMEDLL as i32,
+            token,
         )
         .expect("couldn't register concommand disguise_edict");
 
@@ -49,6 +53,7 @@ pub fn register_concommands(engine: &EngineData) {
             disguise_generation,
             "disguise_edict <index> <generation>",
             FCVAR_GAMEDLL as i32,
+            token,
         )
         .expect("couldn't register concommand disguise_generation");
 }

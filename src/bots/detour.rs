@@ -1,6 +1,9 @@
 use retour::static_detour;
 use rrplug::{
-    bindings::class_types::{client::CClient, cplayer::CPlayer},
+    bindings::{
+        class_types::{client::CClient, cplayer::CPlayer},
+        cvar::command::CCommand,
+    },
     high::vector::Vector3,
 };
 use std::{
@@ -8,7 +11,7 @@ use std::{
     mem,
 };
 
-use super::{cmds::run_bots_cmds, set_on_join::set_stuff_on_join};
+use super::{cmds::run_bots_cmds, set_on_join::set_stuff_on_join, DRAWWORLD_CONVAR};
 use crate::{
     bindings::{CUserCmd, TraceResults},
     utils::from_c_string,
@@ -24,6 +27,9 @@ static_detour! {
     static SomeFuncInDisconnectProcedure: unsafe extern "C" fn(*mut CClient, *const c_void,c_uchar);
     static CClient__Disconnect: unsafe extern "C" fn(*mut CClient, c_uchar, *const c_void, *const c_void);
     static TraceLineSimple: unsafe extern "C" fn(*const Vector3, *const Vector3, c_char, c_char, i32, i32, i32, *mut TraceResults);
+    // static R_DrawWorldMeshes: unsafe extern "C" fn(*mut c_void, *mut c_void, u32); // TODO: move this to somewhere else
+    static SomeDrawWorldMeshes: unsafe extern "C" fn(*mut c_void, u32, usize); // TODO: move this to somewhere else
+    static Host_setpause_f: unsafe extern "C" fn(*mut CCommand); // TODO: move this to somewhere else
 }
 
 fn some_run_user_cmd_hook(parm: c_char) {
@@ -49,6 +55,7 @@ fn hook_proccess_user_cmds(
     unsafe { ProcessUsercmds.call(this, unk1, user_cmds, numcmds, totalcmds, unk2, unk3) }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn hook_trace_line(
     v1: *const Vector3,
     v2: *const Vector3,
@@ -131,6 +138,20 @@ pub fn disconnect_hook(
     unsafe { CClient__Disconnect.call(this, unk1, unk2, unk3) }
 }
 
+// pub fn draw_world_hook(this: *mut c_void, node: *mut c_void, unk: u32) {
+// this broke :(
+pub fn some_draw_world_hook(node: *mut c_void, mut unk: u32, unk2: usize) {
+    if DRAWWORLD_CONVAR.wait().get_value_i32() == 0 {
+        unk = 0;
+    }
+
+    unsafe { SomeDrawWorldMeshes.call(node, unk, unk2) }
+}
+
+fn set_pause_hook(_command: *mut CCommand) {
+    // unsafe { Host_setpause_f.call(command) }
+}
+
 pub fn hook_engine(addr: *const c_void) {
     log::info!("hooking engine functions");
 
@@ -168,6 +189,20 @@ pub fn hook_engine(addr: *const c_void) {
             .expect("failure to enable the CClient__Disconnect hook");
 
         log::info!("hooked CClient__Disconnect");
+
+        SomeDrawWorldMeshes
+            .initialize(mem::transmute(addr.offset(0xb8670)), some_draw_world_hook) //0xb7f80
+            .expect("failed to hook R_DrawWorldMeshes")
+            .enable()
+            .expect("failure to enable the R_DrawWorldMeshes hook");
+
+        Host_setpause_f
+            .initialize(mem::transmute(addr.offset(0x15ccb0)), set_pause_hook) //0xb7f80
+            .expect("failed to hook Host_setpause_f")
+            .enable()
+            .expect("failure to enable the Host_setpause_fhook");
+
+        log::info!("hooked Host_setpause_f");
     }
 }
 
@@ -201,3 +236,8 @@ pub fn hook_client(addr: *const c_void) {
     //     log::info!("hooked SomeVoiceFunc");
     // }
 }
+
+// cool init funtion may be usful to allow people to join singleplayer
+// 0x1145bd
+// and this to set singleplayer player cap?
+// 0x156c86

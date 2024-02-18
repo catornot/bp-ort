@@ -1,5 +1,4 @@
-use rrplug::bindings::cvar::command::{CCommand, COMMAND_COMPLETION_MAXITEMS};
-use rrplug::bindings::cvar::{command::COMMAND_COMPLETION_ITEM_LENGTH, convar::Color};
+use rrplug::bindings::cvar::convar::Color;
 use rrplug::prelude::*;
 use std::{
     ffi::{c_char, c_void, CStr},
@@ -17,16 +16,6 @@ use crate::interfaces::ENGINE_INTERFACES;
 pub struct Pointer<'a, T> {
     pub ptr: *const T,
     marker: PhantomData<&'a T>,
-}
-
-pub struct CommandCompletion<'a> {
-    suggestions: &'a mut [[i8; COMMAND_COMPLETION_ITEM_LENGTH as usize]],
-    suggestions_left: u32,
-}
-
-pub struct CurrentCommand<'a> {
-    pub cmd: &'a str,
-    pub partial: &'a str,
 }
 
 impl<'a, T> From<*const T> for Pointer<'a, T> {
@@ -58,50 +47,6 @@ impl<'a, T> From<Pointer<'a, T>> for *mut T {
         val.ptr.cast_mut()
     }
 }
-impl<'a> From<*mut [c_char; COMMAND_COMPLETION_ITEM_LENGTH as usize]> for CommandCompletion<'a> {
-    fn from(commands: *mut [c_char; COMMAND_COMPLETION_ITEM_LENGTH as usize]) -> Self {
-        Self {
-            suggestions: unsafe {
-                std::slice::from_raw_parts_mut(commands, COMMAND_COMPLETION_MAXITEMS as usize)
-            },
-            suggestions_left: COMMAND_COMPLETION_MAXITEMS,
-        }
-    }
-}
-impl CommandCompletion<'_> {
-    pub fn push<'b>(&mut self, new: &'b str) -> Result<(), &'b str> {
-        if self.suggestions_left == 0 {
-            return Err(new);
-        }
-
-        unsafe {
-            set_c_char_array(
-                &mut self.suggestions
-                    [(COMMAND_COMPLETION_MAXITEMS - self.suggestions_left) as usize],
-                new,
-            )
-        };
-        self.suggestions_left -= 1;
-
-        Ok(())
-    }
-
-    pub fn commands_used(&self) -> i32 {
-        (COMMAND_COMPLETION_MAXITEMS - self.suggestions_left) as i32
-    }
-}
-
-impl CurrentCommand<'_> {
-    pub fn new(partial: *const c_char) -> Option<Self> {
-        let partial = unsafe { CStr::from_ptr(partial).to_str() }.ok()?;
-        let (name, cmd) = partial.split_once(' ').unwrap_or((partial, ""));
-
-        Some(Self {
-            cmd: name,
-            partial: cmd,
-        })
-    }
-}
 
 #[inline]
 pub(crate) unsafe fn iterate_c_array_sized<T, const U: usize>(
@@ -123,27 +68,6 @@ pub(crate) unsafe fn set_c_char_array<const U: usize>(buf: &mut [c_char; U], new
 #[inline]
 pub(crate) unsafe fn from_c_string<T: From<String>>(ptr: *const c_char) -> T {
     CStr::from_ptr(ptr).to_string_lossy().to_string().into()
-}
-
-pub(crate) fn register_concommand_with_completion(
-    engine_data: &EngineData,
-    name: &str,
-    callback: unsafe extern "C" fn(arg1: *const CCommand),
-    help_string: &str,
-    flags: i32,
-    completion: unsafe extern "C" fn(
-        arg1: *const ::std::os::raw::c_char,
-        arg2: *mut [::std::os::raw::c_char; 128usize],
-    ) -> ::std::os::raw::c_int,
-) {
-    let command = engine_data
-        .register_concommand(name, callback, help_string, flags)
-        .unwrap();
-
-    unsafe {
-        (*command).m_pCompletionCallback = Some(completion);
-        (*command).m_nCallbackFlags |= 0x3;
-    }
 }
 
 #[allow(unused)]

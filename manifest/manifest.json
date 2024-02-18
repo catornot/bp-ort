@@ -1,9 +1,0 @@
-{
-	"name": "bots-plugin",
-	"displayname": "BOTS-PLUG",
-	"description": "adds bots as a plugin",
-	"api_version": "3",
-	"version": "2.0",
-	"run_on_server": true,
-	"run_on_client": false
-}

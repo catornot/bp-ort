@@ -1,19 +1,21 @@
-use rrplug::mid::concommands::find_concommand;
+use rrplug::bindings::cvar::convar::FCVAR_CLIENTDLL;
+use rrplug::mid::engine::concommands::find_concommand;
+use rrplug::mid::utils::try_cstring;
 use rrplug::prelude::*;
-use rrplug::{bindings::cvar::convar::FCVAR_CLIENTDLL, to_c_string};
 use std::mem;
 use windows_sys::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
 
 use crate::bindings::{CreateInterfaceFn, SERVER_FUNCTIONS};
 use crate::utils::from_c_string;
 
-pub fn register_concommands(engine: &EngineData) {
+pub fn register_concommands(engine: &EngineData, token: EngineToken) {
     engine
         .register_concommand(
             "interfaces_load_some",
             interfaces_load_some,
             "",
             FCVAR_CLIENTDLL as i32,
+            token,
         )
         .expect("couldn't register concommand");
 
@@ -23,6 +25,7 @@ pub fn register_concommands(engine: &EngineData) {
             interfaces_server,
             "",
             FCVAR_CLIENTDLL as i32,
+            token,
         )
         .expect("couldn't register concommand");
 
@@ -32,6 +35,7 @@ pub fn register_concommands(engine: &EngineData) {
             interfaces_player,
             "",
             FCVAR_CLIENTDLL as i32,
+            token,
         )
         .expect("couldn't register concommand");
 
@@ -41,6 +45,7 @@ pub fn register_concommands(engine: &EngineData) {
             interfaces_test_player,
             "",
             FCVAR_CLIENTDLL as i32,
+            token,
         )
         .expect("couldn't register concommand");
     engine
@@ -49,16 +54,17 @@ pub fn register_concommands(engine: &EngineData) {
             interfaces_show_ent_fire,
             "",
             0,
+            token,
         )
         .expect("couldn't register concommand");
 }
 
 #[rrplug::concommand]
 pub fn interfaces_load_some(command: CCommandResult) -> Option<()> {
-    let dll_name = to_c_string!(command.get_args().get(0)?);
+    let dll_name = try_cstring(command.get_args().get(0)?).ok()?;
 
     let interface_name = command.get_args().get(1)?;
-    let c_interface_name = to_c_string!(interface_name);
+    let c_interface_name = try_cstring(interface_name).ok()?;
 
     unsafe {
         let dll = GetModuleHandleA(dll_name.as_ptr() as *const u8);
@@ -190,7 +196,7 @@ pub fn interfaces_test_player() -> Option<()> {
 
 #[rrplug::concommand]
 pub fn interfaces_show_ent_fire() -> Option<()> {
-    let c = find_concommand("ent_fire")?;
+    let c = find_concommand("ent_fire").ok()?;
     log::info!("{}", c.unk0);
     None
 }

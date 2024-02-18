@@ -1,6 +1,6 @@
 use libc::c_void;
 use once_cell::sync::OnceCell;
-use rrplug::{prelude::*, to_c_string};
+use rrplug::prelude::*;
 
 use crate::utils::create_source_interface;
 
@@ -24,44 +24,51 @@ unsafe impl Send for EngineInterfaces {}
 pub struct Interfaces;
 
 impl Plugin for Interfaces {
-    fn new(_plugin_data: &PluginData) -> Self {
+    const PLUGIN_INFO: PluginInfo = PluginInfo::new(
+        "Interfaces",
+        "Interfaces",
+        "Interfaces",
+        PluginContext::all(),
+    );
+
+    fn new(_: bool) -> Self {
         Self {}
     }
 
-    fn on_dll_load(&self, engine: Option<&EngineData>, dll_ptr: &DLLPointer) {
+    fn on_dll_load(&self, engine: Option<&EngineData>, dll_ptr: &DLLPointer, token: EngineToken) {
         hooks::hook(dll_ptr);
 
         let Some(engine) = engine else { return };
 
-        register_concommands(engine);
+        register_concommands(engine, token);
 
         _ = unsafe {
             ENGINE_INTERFACES.set(EngineInterfaces {
                 debug_overlay: create_source_interface::<*const [*const c_void; 31]>(
-                    to_c_string!(const "engine.dll\0").as_ptr(),
-                    to_c_string!(const "VDebugOverlay004\0").as_ptr(),
+                    "engine.dll\0".as_ptr().cast(),
+                    "VDebugOverlay004\0".as_ptr().cast(),
                 )
                 .unwrap(),
                 engine_server: create_source_interface::<*const [*const c_void; 211]>(
-                    to_c_string!(const "engine.dll\0").as_ptr(),
-                    to_c_string!(const "VEngineServer022\0").as_ptr(),
+                    "engine.dll\0".as_ptr().cast(),
+                    "VEngineServer022\0".as_ptr().cast(),
                 )
                 .unwrap(),
                 engine_client: create_source_interface::<*const [*const c_void; 200]>(
-                    to_c_string!(const "engine.dll\0").as_ptr(),
-                    to_c_string!(const "VEngineClient013\0").as_ptr(),
+                    ("engine.dll\0").as_ptr().cast(),
+                    ("VEngineClient013\0").as_ptr().cast(),
                 )
                 .unwrap(),
             })
         };
     }
 
-    fn runframe(&self) {
-        let Some(convar) = ConVarStruct::find_convar_by_name("idcolor_ally") else {
+    fn runframe(&self, token: EngineToken) {
+        let Ok(convar) = ConVarStruct::find_convar_by_name("idcolor_ally", token) else {
             return;
         };
 
-        let Ok(line) = convar.get_value_string() else {
+        let Ok(line) = convar.get_value_str() else {
             return;
         };
 
@@ -73,10 +80,13 @@ impl Plugin for Interfaces {
             return;
         };
 
-        convar.set_value_string(format!(
-            "{:.*} 0.100 1.000 8",
-            3,
-            if value < 1. { value + 0.01 } else { 0. }
-        ))
+        convar.set_value_string(
+            format!(
+                "{:.*} 0.100 1.000 8",
+                3,
+                if value < 1. { value + 0.01 } else { 0. }
+            ),
+            token,
+        )
     }
 }

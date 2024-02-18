@@ -5,23 +5,20 @@ use rrplug::bindings::{
 };
 use rrplug::prelude::*;
 
-use crate::utils::{
-    from_c_string, iterate_c_array_sized, register_concommand_with_completion, CommandCompletion,
-    CurrentCommand,
-};
+use crate::utils::{from_c_string, iterate_c_array_sized};
 use crate::{
     admin_abuse::get_admins,
     bindings::{ServerFunctions, ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
 };
 
-pub fn register_slay_command(engine_data: &EngineData) {
-    register_concommand_with_completion(
-        engine_data,
+pub fn register_slay_command(engine_data: &EngineData, token: EngineToken) {
+    _ = engine_data.register_concommand_with_completion(
         "slay",
         slay_command,
         "spawns a bot",
         FCVAR_CLIENTDLL as i32,
         slay_completion,
+        token,
     );
 
     _ = engine_data.register_concommand(
@@ -30,6 +27,7 @@ pub fn register_slay_command(engine_data: &EngineData) {
         "",
         // 0,
         FCVAR_GAMEDLL_FOR_REMOTE_CLIENTS as i32 | FCVAR_GAMEDLL as i32,
+        token,
     );
 }
 
@@ -62,17 +60,18 @@ pub fn slay_server_command(command: CCommandResult) {
     let funcs = SERVER_FUNCTIONS.wait();
     let is_dedicated = crate::PLUGIN.wait().is_dedicated_server();
 
+    // 0x15bf40 is probably UTIL_GetCommandClient
+
     let has_admin = dbg!(unsafe { dbg!(*engine.cmd_source) != 1 || !is_dedicated })
         .then_some(unsafe {
             engine
                 .host_client
                 .as_ref()
-                .map(|ptr| ptr.as_ref())
-                .flatten()
+                .and_then(|ptr| ptr.as_ref())
                 .map(|c| from_c_string::<String>(c.uid.as_ptr()))
         })
         .flatten()
-        .map(|uid| get_admins().iter().any(|admin| admin.as_ref() == &uid))
+        .map(|uid| get_admins().iter().any(|admin| admin.as_ref() == uid))
         .unwrap_or(false);
     if !has_admin {
         log::warn!(
@@ -110,14 +109,8 @@ fn die_player(funcs: &ServerFunctions, player: &mut CPlayer) {
     unsafe { (funcs.set_health)(player, -1, 0, 0) }
 }
 
-pub extern "C" fn slay_completion(
-    partial: *const c_char,
-    commands: *mut [c_char;
-        rrplug::bindings::cvar::convar::COMMAND_COMPLETION_ITEM_LENGTH as usize],
-) -> i32 {
-    let current = CurrentCommand::new(partial).unwrap();
-    let mut suggestions = CommandCompletion::from(commands);
-
+#[rrplug::completion]
+fn slay_completion(current: CurrentCommand, suggestions: CommandCompletion) -> i32 {
     // let get_player_by_index = CLIENT_FUNCTIONS.wait().get_c_player_by_index;
 
     if "all".starts_with(current.partial) {

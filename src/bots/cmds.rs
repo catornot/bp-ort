@@ -1,13 +1,12 @@
 use rrplug::{
     bindings::class_types::{client::SignonState, cplayer::CPlayer},
     high::vector::Vector3,
-    to_c_string,
 };
 use std::mem::MaybeUninit;
 
 use crate::{
     bindings::{
-        Action, CGlobalVars, CUserCmd, EngineFunctions, ServerFunctions, TraceResults,
+        Action, CBaseEntity, CGlobalVars, CUserCmd, EngineFunctions, ServerFunctions, TraceResults,
         ENGINE_FUNCTIONS, SERVER_FUNCTIONS,
     },
     utils::{client_command, iterate_c_array_sized},
@@ -74,6 +73,29 @@ impl CUserCmd {
             }
         }
     }
+
+    pub fn new_empty(helper: &CUserCmdHelper) -> Self {
+        unsafe {
+            // union access :pain:
+            CUserCmd {
+                tick_count: **helper.globals.tick_count,
+                frame_time: **helper.globals.absolute_frame_time,
+                command_time: **helper.globals.cur_time,
+                command_number: helper.cmd_num,
+                world_view_angles: helper.angles,
+                local_view_angles: Vector3::ZERO,
+                attackangles: helper.angles,
+                impulse: 0,
+                weaponselect: 0,
+                meleetarget: 0,
+                camera_pos: Vector3::ZERO,
+                camera_angles: Vector3::ZERO,
+                tick_something: **helper.globals.tick_count as i32,
+                dword90: **helper.globals.tick_count + 4,
+                ..CUserCmd::init_default(helper.sv_funcs)
+            }
+        }
+    }
 }
 
 pub fn run_bots_cmds() {
@@ -114,7 +136,7 @@ pub fn run_bots_cmds() {
                 let data = bot_tasks.get_mut(edict)?;
                 data.edict = edict as u16;
                 Some((
-                    get_cmd(p, &helper, data.sim_type.unwrap_or_else(|| sim_type), data)?,
+                    get_cmd(p, &helper, data.sim_type.unwrap_or(sim_type), data)?,
                     p,
                 ))
             }) // can collect here to stop the globals from complaning about mutability
@@ -173,11 +195,11 @@ pub(super) fn get_cmd(
             unsafe {
                 client_command(
                     local_data.edict,
-                    to_c_string!(const "CC_RespawnPlayer Pilot\0").as_ptr(),
+                    "CC_RespawnPlayer Pilot\0".as_ptr() as *const i8,
                 )
             };
 
-            CUserCmd::init_default(helper.sv_funcs)
+            CUserCmd::new_empty(&helper)
         }
         1 => {
             if unsafe { (helper.sv_funcs.is_on_ground)(player) } != 0 {
@@ -276,34 +298,73 @@ pub(super) fn get_cmd(
             let team = unsafe { **player.team };
 
             let target = unsafe {
-                find_closest_player(origin, team, &helper)
-                    .map(|player| (*player.get_origin(&mut v), player))
+                find_closest_player(origin, team, &helper).map(|(player, should_shoot)| {
+                    ((*player.get_origin(&mut v), player), should_shoot)
+                })
             };
 
-            let mut cmd = CUserCmd::new_basic_move(
-                Vector3::ZERO,
-                Action::Attack as u32 | Action::Zoom as u32,
-                &helper,
-            );
+            let mut cmd = CUserCmd::new_basic_move(Vector3::ZERO, Action::Zoom as u32, &helper);
 
             if sim_type == 5 && target.is_some() {
                 'ifstmt: {
                     cmd.move_ = Vector3::new(1., 0., 0.);
                     cmd.buttons |= Action::Forward as u32 | Action::Walk as u32;
 
-                    let Some((target, _)) = target else {
+                    let Some((ref target, _)) = target else {
                         break 'ifstmt;
                     };
 
-                    if (origin.x - target.x).powi(2) * (origin.y - target.y).powi(2) < 81000. // 810000.
-                        && (origin.z - target.z).abs() < 50.
+                    let is_titan = unsafe { (helper.sv_funcs.is_titan)(player) };
+
+                    if (!is_titan
+                        && (origin.x - target.0.x).powi(2) * (origin.y - target.0.y).powi(2)
+                            < 81000.
+                        && (origin.z - target.0.z).abs() < 50.)
+                        || (is_titan
+                            && (origin.x - target.0.x).powi(2) * (origin.y - target.0.y).powi(2)
+                                < 810000.
+                            && (origin.z - target.0.z).abs() < 200.)
                     {
                         cmd.buttons |= Action::Melee as u32;
                     };
+
+                    if is_titan && local_data.counter % 4 == 0 {
+                        cmd.buttons |= Action::Dodge as u32;
+                    }
                 }
             }
 
-            if let Some((target, target_player)) = target {
+            if let Some(((target, target_player), should_shoot)) = target {
+                cmd.buttons |= if should_shoot {
+                    Action::Attack as u32
+                } else {
+                    0
+                };
+
+                let target = if let Some(titan) =
+                    unsafe { (helper.sv_funcs.get_pet_titan)(player).as_ref() }
+                {
+                    let titan_pos = unsafe {
+                        *(helper.sv_funcs.get_origin)(
+                            (titan as *const CBaseEntity).cast::<CPlayer>(),
+                            &mut v,
+                        )
+                    };
+
+                    if unsafe { view_rate(&helper, titan_pos, origin, player) } >= 1.0 {
+                        if (origin.x - titan_pos.x).powi(2) * (origin.y - titan_pos.y).powi(2)
+                            < 81000.
+                        {
+                            cmd.buttons |= Action::Use as u32;
+                        }
+                        titan_pos
+                    } else {
+                        target
+                    }
+                } else {
+                    target
+                };
+
                 let diff = target - origin;
                 let angley = diff.y.atan2(diff.x) * 180. / std::f32::consts::PI;
                 let anglex = diff.z.atan2((diff.x.powi(2) + diff.y.powi(2)).sqrt()) * 180.
@@ -368,14 +429,28 @@ pub(super) fn get_cmd(
                 }
 
                 if is_titan {
-                    cmd.buttons |= match local_data.counter {
-                        0 => Action::OffHand0 as u32,
-                        1 => Action::OffHand1 as u32,
-                        2 => Action::OffHand2 as u32,
-                        3 => Action::OffHand3 as u32,
-                        _ => {
+                    use super::TitanClass as TC;
+                    cmd.buttons |= match (local_data.counter, local_data.titan) {
+                        (_, TC::Scorch) => {
+                            Action::OffHand0 as u32
+                                | Action::OffHand1 as u32
+                                | Action::OffHand2 as u32
+                                | Action::OffHand3 as u32
+                                | Action::OffHand4 as u32
+                        }
+                        (1, TC::Ronin | TC::Ion) => 0,
+                        (2, TC::Legion) => 0,
+                        (0, _) => Action::OffHand0 as u32,
+                        (1, _) => Action::OffHand1 as u32,
+                        (2, _) => Action::OffHand2 as u32,
+                        (3, _) => Action::OffHand3 as u32,
+                        (4, _) => {
                             local_data.counter = 0;
                             Action::OffHand4 as u32
+                        }
+                        _ => {
+                            local_data.counter = 0;
+                            0
                         }
                     };
                     local_data.counter += 1;
@@ -403,7 +478,7 @@ pub(super) fn get_cmd(
             dbg!("befor crash");
 
             // server_command(to_c_string!(const "echo test\0").as_ptr());
-            client_command(local_data.edict, to_c_string!(const "say test\0").as_ptr());
+            client_command(local_data.edict, "say test\0".as_ptr() as *const i8);
 
             CUserCmd::new_basic_move(
                 Vector3::new(1., 0., 0.),
@@ -416,7 +491,7 @@ pub(super) fn get_cmd(
             Action::Forward as u32 | Action::Walk as u32,
             &helper,
         ),
-        _ => CUserCmd::init_default(helper.sv_funcs),
+        _ => CUserCmd::new_empty(&helper),
     })?;
 
     unsafe {
@@ -431,7 +506,7 @@ unsafe fn find_closest_player<'a>(
     pos: Vector3,
     team: i32,
     helper: &CUserCmdHelper,
-) -> Option<&'a mut CPlayer> {
+) -> Option<(&'a mut CPlayer, bool)> {
     let mut v = Vector3::ZERO;
     if let Some(target) = unsafe {
         (0..32)
@@ -440,10 +515,10 @@ unsafe fn find_closest_player<'a>(
             .filter(|player| (helper.sv_funcs.is_alive)(*player) != 0)
             .map(|player| (*player.get_origin(&mut v), player))
             .map(|(target, player)| (view_rate(helper, pos, target, player), player))
-            .find(|(dist, _)| *dist >= 1000)
+            .find(|(dist, _)| *dist >= 1.0)
             .map(|(_, player)| player)
     } {
-        return Some(target);
+        return Some((target, true));
     }
 
     let mut targets = unsafe {
@@ -460,7 +535,10 @@ unsafe fn find_closest_player<'a>(
 
     targets.sort_by(|(dis1, _), (dis2, _)| dis1.cmp(dis2));
     // targets.into_iter().last().map(|(_, player)| player) // for view_rate
-    targets.into_iter().next().map(|(_, player)| player) // for distance_rate
+    targets
+        .into_iter()
+        .next()
+        .map(|(_, player)| (player, false)) // for distance_rate
 }
 
 #[allow(unused)]
@@ -469,7 +547,7 @@ unsafe fn view_rate(
     v1: Vector3,
     v2: Vector3,
     player: *mut CPlayer,
-) -> i64 {
+) -> f32 {
     const POS_OFFSET: Vector3 = Vector3::new(0., 0., 50.);
 
     let (v1, v2) = (v1 + POS_OFFSET, v2 + POS_OFFSET);
@@ -477,11 +555,24 @@ unsafe fn view_rate(
     // let id = ((player.offset(0x30) as usize) & 0xffff);
     // let id = (helper.sv_funcs.base.offset(0xb6ab58) as usize + id * 30) as i8 * -1;
 
+    const TRACE_MASK_SHOT: i32 = 1178615859;
+    const TRACE_MASK_SOLID_BRUSHONLY: i32 = 16907;
+
     let mut result: MaybeUninit<TraceResults> = MaybeUninit::zeroed();
-    (helper.sv_funcs.trace_line_simple)(&v2, &v1, -1, 0, 0, 0, 0, result.as_mut_ptr());
+    (helper.sv_funcs.trace_line_simple)(
+        &v2,
+        &v1,
+        TRACE_MASK_SHOT as i8,
+        0,
+        0,
+        0,
+        0,
+        result.as_mut_ptr(),
+    );
     let result = result.assume_init();
 
-    (result.fraction * 1000.) as i64
+    // (result.fraction * 1000.) as i64
+    result.fraction
 }
 
 #[allow(unused)]
