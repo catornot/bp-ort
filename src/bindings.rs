@@ -235,6 +235,7 @@ offset_functions! {
         set_base_time = unsafe extern "C" fn(*mut CPlayer, f32) where offset(0x5b3790);
         set_last_cmd = unsafe extern "C" fn(*mut CUserCmd, *mut CUserCmd) -> () where offset(0x25f860);
         get_player_by_index = PlayerByIndex where offset(0x26AA10);
+        util_get_command_client = unsafe extern "C" fn() -> *mut CPlayer where offset(0x15bf40);
         interface_regs = *const InterfaceReg where offset(0x01752038);
         get_eye_pos = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x0043b8d0);
         get_center_pos = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x00407d30); // found these by pocking around in a vtable :)
@@ -263,6 +264,8 @@ offset_functions! {
         get_pet_titan = unsafe extern "C" fn(*const CPlayer) -> *const CBaseEntity where offset(0x5dd940);
     }
 }
+// very intersting call at server.dll + 0x151782
+// call that possibly sets 1 max player for sp? : 0x15191a server.dll
 
 offset_functions! {
     CLIENT_FUNCTIONS + ClientFunctions for WhichDll::Client => {

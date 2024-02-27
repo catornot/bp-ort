@@ -1,4 +1,9 @@
-use rrplug::prelude::*;
+use rrplug::{bindings::class_types::cplayer::CPlayer, prelude::*};
+
+use crate::{
+    bindings::{EngineFunctions, ServerFunctions},
+    utils::from_c_string,
+};
 
 use self::{slay::register_slay_command, switch::register_switch_command};
 
@@ -81,4 +86,43 @@ pub fn parse_admins(convar: ConVarStruct) {
 
 pub fn get_admins() -> &'static [Box<str>] {
     unsafe { &ADMINS }
+}
+
+pub fn filter_target(filter: Option<&str>, player: &CPlayer, name: &str) -> bool {
+    match filter {
+        Some("all") => true,
+        Some("imc") => unsafe { *player.team.get_inner() == 2 },
+        Some("militia") => unsafe { *player.team.get_inner() == 3 },
+        Some(fname) => name.starts_with(fname),
+        None => false,
+    }
+}
+
+pub fn admin_check<'a, 'b>(
+    command: &'a CCommandResult,
+    engine_funcs: &'b EngineFunctions,
+    server_funcs: &'b ServerFunctions,
+) -> (bool, Option<&'a mut CPlayer>) {
+    let caller_player = unsafe { (server_funcs.util_get_command_client)().as_mut() };
+
+    let has_admin = caller_player
+        .as_ref()
+        .and_then(|caller_player| unsafe {
+            engine_funcs
+                .client_array
+                .add(caller_player.player_index.copy_inner().saturating_sub(1) as usize)
+                .as_ref()
+                .map(|c| from_c_string::<String>(c.uid.as_ptr()))
+        })
+        .map(|uid| get_admins().iter().any(|admin| admin.as_ref() == uid))
+        .unwrap_or(true);
+
+    if !has_admin {
+        log::warn!(
+            "Client needs to have admin to run {}",
+            command.get_command()
+        );
+    }
+
+    (has_admin, caller_player)
 }

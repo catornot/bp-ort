@@ -5,17 +5,17 @@ use rrplug::bindings::{
 };
 use rrplug::prelude::*;
 
-use crate::utils::{from_c_string, iterate_c_array_sized};
+use crate::bindings::{ServerFunctions, ENGINE_FUNCTIONS, SERVER_FUNCTIONS};
 use crate::{
-    admin_abuse::get_admins,
-    bindings::{ServerFunctions, ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
+    admin_abuse::{admin_check, filter_target},
+    utils::{from_c_string, iterate_c_array_sized},
 };
 
 pub fn register_slay_command(engine_data: &EngineData, token: EngineToken) {
     _ = engine_data.register_concommand_with_completion(
         "slay",
         slay_command,
-        "spawns a bot",
+        "kills a desired target",
         FCVAR_CLIENTDLL as i32,
         slay_completion,
         token,
@@ -56,28 +56,11 @@ pub fn slay_server_command(command: CCommandResult) {
         log::warn!("Usage:  {} < name >", command.get_command());
         return;
     }
+
     let engine = ENGINE_FUNCTIONS.wait();
     let funcs = SERVER_FUNCTIONS.wait();
-    let is_dedicated = crate::PLUGIN.wait().is_dedicated_server();
 
-    // 0x15bf40 is probably UTIL_GetCommandClient
-
-    let has_admin = dbg!(unsafe { dbg!(*engine.cmd_source) != 1 || !is_dedicated })
-        .then_some(unsafe {
-            engine
-                .host_client
-                .as_ref()
-                .and_then(|ptr| ptr.as_ref())
-                .map(|c| from_c_string::<String>(c.uid.as_ptr()))
-        })
-        .flatten()
-        .map(|uid| get_admins().iter().any(|admin| admin.as_ref() == uid))
-        .unwrap_or(false);
-    if !has_admin {
-        log::warn!(
-            "Client needs to have admin to run {}",
-            command.get_command()
-        );
+    if !admin_check(&command, engine, funcs).0 {
         return;
     }
 
@@ -93,16 +76,6 @@ pub fn slay_server_command(command: CCommandResult) {
         .filter(|(player, _)| unsafe { (funcs.is_alive)(*player) != 0 })
         .filter(|(player, name)| filter_target(command.get_arg(0), player, name))
         .for_each(|(player, _)| die_player(funcs, player));
-}
-
-fn filter_target(filter: Option<&str>, player: &CPlayer, name: &str) -> bool {
-    match filter {
-        Some("all") => true,
-        Some("imc") => unsafe { *player.team.get_inner() == 2 },
-        Some("militia") => unsafe { *player.team.get_inner() == 3 },
-        Some(fname) => name.starts_with(fname),
-        None => false,
-    }
 }
 
 fn die_player(funcs: &ServerFunctions, player: &mut CPlayer) {

@@ -14,9 +14,6 @@ use crate::{
 
 use super::{BotData, BotWeaponState, SIMULATE_TYPE_CONVAR, TASK_MAP};
 
-// #[repr(i64)]
-// enum weapon_c
-
 #[derive(Clone)]
 pub struct CUserCmdHelper<'a> {
     pub globals: &'a CGlobalVars,
@@ -511,7 +508,7 @@ unsafe fn find_closest_player<'a>(
     if let Some(target) = unsafe {
         (0..32)
             .filter_map(|i| (helper.sv_funcs.get_player_by_index)(i + 1).as_mut())
-            .filter(|player| **player.team != team)
+            .filter(|player| **player.team != team && **player.team != 0)
             .filter(|player| (helper.sv_funcs.is_alive)(*player) != 0)
             .map(|player| (*player.get_origin(&mut v), player))
             .map(|(target, player)| (view_rate(helper, pos, target, player), player))
@@ -524,7 +521,7 @@ unsafe fn find_closest_player<'a>(
     let mut targets = unsafe {
         (0..32)
             .filter_map(|i| (helper.sv_funcs.get_player_by_index)(i + 1).as_mut())
-            .filter(|player| **player.team != team)
+            .filter(|player| **player.team != team && **player.team != 0)
             .filter(|player| (helper.sv_funcs.is_alive)(*player) != 0)
             .map(|player| (*player.get_origin(&mut v), player))
             // .map(|(target, player)| (view_rate(helper, pos, target, player), player))
