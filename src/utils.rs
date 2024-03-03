@@ -1,4 +1,3 @@
-use rrplug::bindings::cvar::convar::Color;
 use rrplug::prelude::*;
 use std::{
     ffi::{c_char, c_void, CStr},
@@ -82,47 +81,47 @@ pub(crate) unsafe fn patch(addr: usize, bytes: &[u8]) {
     );
 }
 
-#[allow(unused)]
-pub(crate) unsafe fn draw_line(
-    v1: &Vector3,
-    v2: &Vector3,
-    color: Color,
-    depthtest: bool,
-    duration: f32,
-) {
-    let line_overlay: unsafe extern "C" fn(
-        *const (),
-        *const Vector3,
-        *const Vector3,
-        i32,
-        i32,
-        i32,
-        i32,
-        bool,
-        f32,
-    ) = std::mem::transmute(
-        ENGINE_INTERFACES
-            .get()
-            .unwrap_unchecked()
-            .debug_overlay
-            .as_ref()
-            .unwrap()
-            .as_ref()
-            .unwrap()[4],
-    );
+// #[allow(unused)]
+// pub(crate) unsafe fn draw_line(
+//     v1: &Vector3,
+//     v2: &Vector3,
+//     color: Color,
+//     depthtest: bool,
+//     duration: f32,
+// ) {
+//     let line_overlay: unsafe extern "C" fn(
+//         *const (),
+//         *const Vector3,
+//         *const Vector3,
+//         i32,
+//         i32,
+//         i32,
+//         i32,
+//         bool,
+//         f32,
+//     ) = std::mem::transmute(
+//         ENGINE_INTERFACES
+//             .get()
+//             .unwrap_unchecked()
+//             .debug_overlay
+//             .as_ref()
+//             .unwrap()
+//             .as_ref()
+//             .unwrap()[4],
+//     );
 
-    line_overlay(
-        std::ptr::null(),
-        v1,
-        v2,
-        color._color[0] as i32,
-        color._color[1] as i32,
-        color._color[2] as i32,
-        color._color[3] as i32,
-        depthtest,
-        duration,
-    )
-}
+//     line_overlay(
+//         std::ptr::null(),
+//         v1,
+//         v2,
+//         color._color[0] as i32,
+//         color._color[1] as i32,
+//         color._color[2] as i32,
+//         color._color[3] as i32,
+//         depthtest,
+//         duration,
+//     )
+// }
 
 pub(crate) unsafe fn client_command(edict: u16, command: *const c_char) {
     const ZERO_STRING: *const c_char = "\0".as_ptr() as *const _;

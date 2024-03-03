@@ -259,7 +259,6 @@ offset_functions! {
         ent_fire = unsafe extern "C" fn(entityInstance: *mut CBaseEntity, inputName: *const c_char, args: *const c_void, delay: f32, otherEntity: *mut CBaseEntity, unkOrNull: *const c_void, unk:c_char ) where offset(0x29ea70);
 
         register_con_command = unsafe extern "C" fn(concommand: *mut ConCommand,name: *const c_char, callback: FnCommandCallback_t, helpString: *const c_char,flags: i32, completion: unsafe extern "C-unwind" fn(arg1: *const ::std::os::raw::c_char, arg2: *mut [::std::os::raw::c_char; 128usize]) -> ::std::os::raw::c_int) -> *mut ConCommand where offset(0x723fa0);
-        // nav_mesh = *mut *mut dtNavMesh where offset(0x105F5D0);
 
         get_pet_titan = unsafe extern "C" fn(*const CPlayer) -> *const CBaseEntity where offset(0x5dd940);
     }

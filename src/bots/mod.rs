@@ -1,6 +1,7 @@
 use once_cell::sync::Lazy;
 use rand::Rng;
 use rrplug::bindings::class_types::cplayer::CPlayer;
+use rrplug::mid::source_alloc::SOURCE_ALLOC;
 use rrplug::mid::utils::try_cstring;
 use rrplug::prelude::*;
 use rrplug::{
@@ -11,6 +12,8 @@ use rrplug::{
     exports::OnceCell,
     high::engine::convars::{ConVarRegister, ConVarStruct},
 };
+use std::alloc::{GlobalAlloc, Layout};
+use std::mem::MaybeUninit;
 use std::{
     cell::RefCell,
     ffi::CStr,
@@ -19,6 +22,8 @@ use std::{
 
 use self::detour::{hook_engine, hook_server};
 use self::{convars::register_required_convars, debug_commands::register_debug_concommands};
+use crate::navmesh::bindings::{dtNavMeshQuery, dtNodeQueue};
+use crate::navmesh::{HULL_HUMAN, RECAST_DETOUR};
 use crate::utils::set_c_char_array;
 use crate::{
     bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
@@ -36,7 +41,7 @@ mod set_on_join;
 static CLAN_TAG_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
 pub static SIMULATE_TYPE_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
 pub static DRAWWORLD_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
-pub const DEFAULT_SIMULATE_TYPE: i32 = 5;
+pub const DEFAULT_SIMULATE_TYPE: i32 = 7;
 
 thread_local! {
     pub static MAX_PLAYERS: RefCell<u32> = const { RefCell::new(32) };
@@ -74,6 +79,7 @@ pub(super) struct BotData {
     weapon_state: BotWeaponState,
     titan: TitanClass,
     counter: u32,
+    nav_query: Option<dtNavMeshQuery>,
 }
 
 #[derive(Debug)]
@@ -300,10 +306,69 @@ fn spawn_fake_player(command: CCommandResult) {
             &PLUGIN.wait().bots.clang_tag.lock().expect("how"),
         );
 
+        // TODO: don't forget to free this on level swap
+        let mut nav_query = MaybeUninit::zeroed();
+
+        let dt_funcs = RECAST_DETOUR.wait();
+
+        (dt_funcs.ZeroOutdtNavMesh)(nav_query.as_mut_ptr());
+        let hull_index = (dt_funcs.GetNavMeshHullIndex)(HULL_HUMAN);
+        let navmesh = &**dt_funcs.nav_mesh.add(hull_index as usize);
+
+        for hull in 0..4 {
+            let hull_index = (dt_funcs.GetNavMeshHullIndex)(hull);
+            let navmesh = *dt_funcs.nav_mesh.add(hull_index as usize);
+            log::info!(
+                "NAVMESH AT HULL {hull} HULL_INDEX {hull_index} is 0x{:X}",
+                navmesh as usize
+            )
+        }
+
+        log::info!("navmesh: {:?}", navmesh);
+
+        let mut nav_query = nav_query.assume_init();
+
+        // let node_queue = SOURCE_ALLOC
+        //     .alloc(Layout::new::<dtNodeQueue>())
+        //     .cast::<dtNodeQueue>()
+        //     .as_mut()
+        //     .expect("this was just allocated a second ago; how?");
+
+        // const QUEUE_SIZE: usize = 100;
+
+        // // don't forget to drop this later
+        // *node_queue = dtNodeQueue {
+        //     m_heap: SOURCE_ALLOC
+        //         .alloc(Layout::array::<usize>(QUEUE_SIZE).expect("how"))
+        //         .cast(),
+        //     m_capacity: QUEUE_SIZE as i32,
+        //     m_size: 0,
+        // };
+
+        // nav_query.m_openList = node_queue;
+
+        if dbg!((dt_funcs.dtNavMeshQuery__init)(
+            &mut nav_query,
+            navmesh,
+            2048
+        )) != 0x40000000
+        // success
+        {
+            log::warn!("huh oh")
+        }
+
+        log::info!(
+            "function pointer : {:X}",
+            dt_funcs.dtNavMeshQuery__init as usize
+        );
+
+        println!("{:?}", nav_query);
+
         *TASK_MAP
             .get_mut(**client.edict as usize)
             .expect("tried to get an invalid edict") = BotData {
             sim_type,
+            nav_query: Some(nav_query),
             ..Default::default()
         };
     }

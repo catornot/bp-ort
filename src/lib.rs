@@ -1,6 +1,7 @@
-#![feature(result_option_inspect)]
+#![feature(result_option_inspect, c_variadic, iter_array_chunks)]
 
 use admin_abuse::AdminAbuse;
+use navmesh::{RecastDetour, RECAST_DETOUR};
 use rrplug::prelude::*;
 
 mod admin_abuse;
@@ -8,6 +9,7 @@ mod bindings;
 mod bots;
 mod disguise;
 mod interfaces;
+mod navmesh;
 mod utils;
 
 use crate::{
@@ -37,6 +39,10 @@ impl Plugin for HooksPlugin {
         PluginInfo::new("whoks\0", "WHOKS0000\0", "WHOKS\0", PluginContext::all());
 
     fn new(reloaded: bool) -> Self {
+        if reloaded {
+            panic!("bad things will happen if this is reloaded")
+        }
+
         Self {
             bots: Bots::new(reloaded),
             disguise: Disguise::new(reloaded),
@@ -57,6 +63,7 @@ impl Plugin for HooksPlugin {
             ClientFunctions::try_init(dll_ptr, &CLIENT_FUNCTIONS);
             ServerFunctions::try_init(dll_ptr, &SERVER_FUNCTIONS);
             MatSysFunctions::try_init(dll_ptr, &MATSYS_FUNCTIONS);
+            RecastDetour::try_init(dll_ptr, &RECAST_DETOUR);
         }
 
         match dll_ptr.which_dll() {

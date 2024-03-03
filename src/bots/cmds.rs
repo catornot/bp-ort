@@ -9,6 +9,8 @@ use crate::{
         Action, CBaseEntity, CGlobalVars, CUserCmd, EngineFunctions, ServerFunctions, TraceResults,
         ENGINE_FUNCTIONS, SERVER_FUNCTIONS,
     },
+    interfaces::ENGINE_INTERFACES,
+    navmesh::{bindings::dtQueryFilter, RECAST_DETOUR},
     utils::{client_command, iterate_c_array_sized},
 };
 
@@ -483,11 +485,124 @@ pub(super) fn get_cmd(
                 &helper,
             )
         },
-        7 => CUserCmd::new_basic_move(
-            Vector3::new(1., 0., 0.),
-            Action::Forward as u32 | Action::Walk as u32,
-            &helper,
-        ),
+        7 => 'end: {
+            let dt_funcs = RECAST_DETOUR.wait();
+            let debug = ENGINE_INTERFACES.wait().debug_overlay;
+            let Some(nav) = local_data.nav_query.as_mut() else {
+                log::warn!("null nav");
+                break 'end CUserCmd::new_empty(&helper);
+            };
+
+            log::info!("query: {:?}", nav);
+
+            let mut filter: dtQueryFilter = unsafe { MaybeUninit::zeroed().assume_init() };
+            filter.m_areaCost = [
+                1621.6901, 1274.1852, 1698.9136, 1158.3501, 1814.7485, 2123.6418, 0.0, 0.0,
+                3243.3801, 2123.6418, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2123.6418, 0.0,
+                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            ]; // magic numbers
+
+            // should move it to local_data
+            // let filter = unsafe { *(dt_funcs.navmesh_maybe_init_filter)(filter.as_mut_ptr()) };
+
+            const GOAL: Vector3 = Vector3::new(-207.0, -1750.0, 1.0);
+            const START: Vector3 = Vector3::new(-214.0, -771.0, 1.0);
+            const EXTENTS: Vector3 = Vector3::new(100.0, 100.0, 136.0);
+
+            let mut v = Vector3::ZERO;
+
+            let origin = unsafe { *player.get_center_position(&mut v) };
+            let target = unsafe {
+                *(helper.sv_funcs.get_player_by_index)(1)
+                    .as_mut()
+                    .unwrap_or(player)
+                    .get_center_position(&mut v)
+            };
+
+            let mut ref_start = 0;
+            let mut start = Vector3::ZERO;
+            let mut ref_goal = 0;
+            let mut goal = Vector3::ZERO;
+
+            let status = unsafe {
+                (dt_funcs.dtNavMeshQuery__findNearestPoly)(
+                    nav,
+                    &target,
+                    &EXTENTS,
+                    // std::ptr::null(),
+                    &filter,
+                    &mut ref_goal,
+                    &mut goal,
+                )
+                .eq(&0x40000000)
+                .then(|| {
+                    (dt_funcs.dtNavMeshQuery__findNearestPoly)(
+                        nav,
+                        &origin,
+                        &EXTENTS,
+                        // std::ptr::null(),
+                        &filter,
+                        &mut ref_start,
+                        &mut start,
+                    )
+                    .eq(&0x40000000)
+                })
+                .unwrap_or(false)
+            };
+
+            unsafe { debug.AddLineOverlay(&start, &goal, 255, 0, 0, true, 2.) };
+            unsafe { debug.AddLineOverlay(&target, &origin, 255, 0, 0, true, 10.) };
+
+            if !status || ref_goal == 0 || ref_start == 0 {
+                log::warn!(
+                    "failed to find nearest poly, with goal {} start {}",
+                    ref_goal,
+                    ref_start
+                );
+                break 'end CUserCmd::new_empty(&helper);
+            }
+            log::info!(
+                "found nearest poly, with goal {} {:?} start {} {:?}",
+                ref_goal,
+                goal,
+                ref_start,
+                start
+            );
+
+            let mut path = [0; 100];
+            let mut path_size = 0;
+            let unk: i64 = 0;
+
+            unsafe {
+                (dt_funcs.dtNavMeshQuery__findPath)(
+                    nav,
+                    ref_start,
+                    ref_goal,
+                    &start,
+                    &goal,
+                    // std::ptr::null(),
+                    &filter,
+                    path.as_mut_ptr(),
+                    (&unk as *const i64).cast(),
+                    &mut path_size,
+                    path.len() as i32,
+                )
+            };
+
+            if path_size == 0 {
+                log::warn!("failed to find path");
+                break 'end CUserCmd::new_empty(&helper);
+            }
+
+            log::info!("{path_size} {path:?}");
+
+            // for polyref in path.iter().cloned().array_chunks::<2>() {
+
+            // }
+            // ENGINE_INTERFACES.wait().debug_overlay.AddLineOverlay(, , , , , , )
+
+            CUserCmd::new_empty(&helper)
+        }
         _ => CUserCmd::new_empty(&helper),
     })?;
 
