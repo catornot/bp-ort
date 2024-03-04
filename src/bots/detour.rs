@@ -93,16 +93,44 @@ fn find_nearest_poly_hook(
     nearest_pt: *mut Vector3,
 ) -> dtStatus64 {
     log::info!("find_nearest_poly called");
+    // unsafe {
+    //     log::info!("this {:?}", this.as_ref());
+    //     log::info!(
+    //         "open list {:?}",
+    //         this.as_ref().map(|this| this.m_openList.as_ref())
+    //     );
+    //     log::info!("center {:?}", center.as_ref());
+    //     log::info!("half_extents {:?}", half_extents.as_ref());
+    //     log::info!("filter {:?}", filter.as_ref());
+    // }
+
+    let mut goal_ref = 0;
+    let mut goal = Vector3::ZERO;
+    let lfilter: dtQueryFilter = unsafe { MaybeUninit::zeroed().assume_init() };
+
+    const GOAL: Vector3 = Vector3::new(-207.0, -1750.0, 1.0);
+    const EXTENTS: Vector3 = Vector3::new(80.0, 80.0, 36.0);
+
+    let status = unsafe {
+        dtNavMeshQuery__findNearestPoly.call(
+            this,
+            &GOAL,
+            &EXTENTS,
+            &lfilter,
+            &mut goal_ref,
+            &mut goal,
+        )
+    };
+
     unsafe {
-        log::info!("this {:?}", this.as_ref());
-        log::info!(
-            "open list {:?}",
-            this.as_ref().map(|this| this.m_openList.as_ref())
-        );
-        log::info!("center {:?}", center.as_ref());
-        log::info!("half_extents {:?}", half_extents.as_ref());
-        log::info!("filter {:?}", filter.as_ref());
+        log::info!("goal_ref {:?}", goal_ref);
+        log::info!("goal {:?}", goal);
     }
+    // unsafe {
+    //     log::info!("nearest_ref {:?}", nearest_ref.as_ref());
+    //     log::info!("nearest_pt {:?}", nearest_pt.as_ref());
+    // }
+    log::info!("status {:X}", status);
 
     let status = unsafe {
         dtNavMeshQuery__findNearestPoly.call(
@@ -114,12 +142,6 @@ fn find_nearest_poly_hook(
             nearest_pt,
         )
     };
-
-    unsafe {
-        log::info!("nearest_ref {:?}", nearest_ref.as_ref());
-        log::info!("nearest_pt {:?}", nearest_pt.as_ref());
-    }
-    log::info!("status {:X}", status);
 
     status
 }
