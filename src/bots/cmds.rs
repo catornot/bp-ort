@@ -495,12 +495,15 @@ pub(super) fn get_cmd(
 
             log::info!("query: {:?}", nav);
 
-            let mut filter: dtQueryFilter = unsafe { MaybeUninit::zeroed().assume_init() };
-            filter.m_areaCost = [
-                1621.6901, 1274.1852, 1698.9136, 1158.3501, 1814.7485, 2123.6418, 0.0, 0.0,
-                3243.3801, 2123.6418, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2123.6418, 0.0,
-                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-            ]; // magic numbers
+            let filter = dtQueryFilter {
+                m_areaCost: [
+                    1621.6901, 1274.1852, 1698.9136, 1158.3501, 1814.7485, 2123.6418, 0.0, 0.0,
+                    3243.3801, 2123.6418, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2123.6418,
+                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                ], // magic numbers
+                m_includeFlags: u16::MAX, // magic inlcude
+                m_excludeFlags: 0,        // don't exclude anything
+            };
 
             // should move it to local_data
             // let filter = unsafe { *(dt_funcs.navmesh_maybe_init_filter)(filter.as_mut_ptr()) };
@@ -529,7 +532,6 @@ pub(super) fn get_cmd(
                     nav,
                     &target,
                     &EXTENTS,
-                    // std::ptr::null(),
                     &filter,
                     &mut ref_goal,
                     &mut goal,
@@ -540,7 +542,6 @@ pub(super) fn get_cmd(
                         nav,
                         &origin,
                         &EXTENTS,
-                        // std::ptr::null(),
                         &filter,
                         &mut ref_start,
                         &mut start,
@@ -550,8 +551,8 @@ pub(super) fn get_cmd(
                 .unwrap_or(false)
             };
 
-            unsafe { debug.AddLineOverlay(&start, &goal, 255, 0, 0, true, 2.) };
-            unsafe { debug.AddLineOverlay(&target, &origin, 255, 0, 0, true, 10.) };
+            unsafe { debug.AddLineOverlay(&start, &goal, 255, 0, 0, true, 1.) };
+            unsafe { debug.AddLineOverlay(&target, &origin, 255, 0, 0, true, 1.) };
 
             if !status || ref_goal == 0 || ref_start == 0 {
                 log::warn!(

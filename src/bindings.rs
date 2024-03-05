@@ -256,6 +256,8 @@ offset_functions! {
 
         trace_line_simple = unsafe extern "C" fn(*const Vector3, *const Vector3, c_char, c_char, i32, i32, i32, *mut TraceResults )  where offset(0x2725c0);
 
+        draw_debug_line = unsafe extern "C" fn(point1: *const Vector3, point2: *const Vector3, r: i32, g: i32, b: i32, throught_walls: bool, time: f32) where offset(0x001ccf40);
+
         ent_fire = unsafe extern "C" fn(entityInstance: *mut CBaseEntity, inputName: *const c_char, args: *const c_void, delay: f32, otherEntity: *mut CBaseEntity, unkOrNull: *const c_void, unk:c_char ) where offset(0x29ea70);
 
         register_con_command = unsafe extern "C" fn(concommand: *mut ConCommand,name: *const c_char, callback: FnCommandCallback_t, helpString: *const c_char,flags: i32, completion: unsafe extern "C-unwind" fn(arg1: *const ::std::os::raw::c_char, arg2: *mut [::std::os::raw::c_char; 128usize]) -> ::std::os::raw::c_int) -> *mut ConCommand where offset(0x723fa0);

@@ -8,7 +8,7 @@ use rrplug::{
 };
 use std::{
     ffi::{c_char, c_short, c_uchar, c_void},
-    mem::{self, MaybeUninit},
+    mem,
 };
 
 use super::{cmds::run_bots_cmds, set_on_join::set_stuff_on_join, DRAWWORLD_CONVAR};
@@ -84,101 +84,6 @@ fn hook_trace_line(
     }
 }
 
-fn find_nearest_poly_hook(
-    this: *mut dtNavMeshQuery,
-    center: *const Vector3,
-    half_extents: *const Vector3,
-    filter: *const dtQueryFilter,
-    nearest_ref: *mut dtPolyRef,
-    nearest_pt: *mut Vector3,
-) -> dtStatus64 {
-    log::info!("find_nearest_poly called");
-    // unsafe {
-    //     log::info!("this {:?}", this.as_ref());
-    //     log::info!(
-    //         "open list {:?}",
-    //         this.as_ref().map(|this| this.m_openList.as_ref())
-    //     );
-    //     log::info!("center {:?}", center.as_ref());
-    //     log::info!("half_extents {:?}", half_extents.as_ref());
-    //     log::info!("filter {:?}", filter.as_ref());
-    // }
-
-    let mut goal_ref = 0;
-    let mut goal = Vector3::ZERO;
-    let lfilter: dtQueryFilter = unsafe { MaybeUninit::zeroed().assume_init() };
-
-    const GOAL: Vector3 = Vector3::new(-207.0, -1750.0, 1.0);
-    const EXTENTS: Vector3 = Vector3::new(80.0, 80.0, 36.0);
-
-    let status = unsafe {
-        dtNavMeshQuery__findNearestPoly.call(
-            this,
-            &GOAL,
-            &EXTENTS,
-            &lfilter,
-            &mut goal_ref,
-            &mut goal,
-        )
-    };
-
-    unsafe {
-        log::info!("goal_ref {:?}", goal_ref);
-        log::info!("goal {:?}", goal);
-    }
-    // unsafe {
-    //     log::info!("nearest_ref {:?}", nearest_ref.as_ref());
-    //     log::info!("nearest_pt {:?}", nearest_pt.as_ref());
-    // }
-    log::info!("status {:X}", status);
-
-    let status = unsafe {
-        dtNavMeshQuery__findNearestPoly.call(
-            this,
-            center,
-            half_extents,
-            filter,
-            nearest_ref,
-            nearest_pt,
-        )
-    };
-
-    status
-}
-
-fn query_init_hook(this: *mut dtNavMeshQuery, nav: *const dtNavMesh, maxnodes: i32) -> dtStatus64 {
-    log::info!("query_init_hook called");
-    unsafe {
-        log::info!("this {:?}", this.as_ref());
-        log::info!("query_init_hook {:?}", nav.as_ref());
-        log::info!("half_extents {}", maxnodes);
-    }
-
-    let status = unsafe { dtNavMeshQuery__init.call(this, nav, maxnodes) };
-
-    unsafe {
-        log::info!("this {:?}", this.as_ref());
-    }
-    log::info!("status 0x{:X}", status);
-
-    if this.is_null() || nav.is_null() {
-        return status;
-    }
-
-    // unsafe { this.as_mut().unwrap().m_openList = std::mem::transmute(0x449f45ed44cab615usize) };
-
-    let filter: dtQueryFilter = unsafe { MaybeUninit::zeroed().assume_init() };
-
-    const GOAL: Vector3 = Vector3::new(-207.0, -1750.0, 1.0);
-    const EXTENTS: Vector3 = Vector3::new(80.0, 80.0, 36.0);
-
-    let mut _ref = 0;
-    let mut goal_pos = Vector3::ZERO;
-    find_nearest_poly_hook(this, &GOAL, &EXTENTS, &filter, &mut _ref, &mut goal_pos);
-
-    status
-}
-
 pub fn hook_server(addr: *const c_void) {
     log::info!("hooking server functions");
 
@@ -212,25 +117,6 @@ pub fn hook_server(addr: *const c_void) {
         // .expect("failure to enable the ProcessUsercmds hook");
 
         log::info!("hooked ProcessUsercmds");
-
-        dtNavMeshQuery__findNearestPoly
-            .initialize(
-                mem::transmute(addr.offset(0x3ebe50)),
-                find_nearest_poly_hook,
-            ) //0xb7f80
-            .expect("failed to hook dtNavMeshQuery__findNearestPoly")
-            .enable()
-            .expect("failure to enable the dtNavMeshQuery__findNearestPoly");
-
-        log::info!("hooked dtNavMeshQuery__findNearestPoly");
-
-        dtNavMeshQuery__init
-            .initialize(mem::transmute(addr.offset(0x3f0980)), query_init_hook) //0xb7f80
-            .expect("failed to hook dtNavMeshQuery__init")
-            .enable()
-            .expect("failure to enable the dtNavMeshQuery__init");
-
-        log::info!("hooked dtNavMeshQuery__init");
     }
 }
 

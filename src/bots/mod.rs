@@ -301,11 +301,6 @@ fn spawn_fake_player(command: CCommandResult) {
             CStr::from_ptr(client.name.as_ref() as *const [i8] as *const i8).to_string_lossy()
         );
 
-        set_c_char_array(
-            &mut client.clan_tag,
-            &PLUGIN.wait().bots.clang_tag.lock().expect("how"),
-        );
-
         // TODO: don't forget to free this on level swap
         let mut nav_query = MaybeUninit::zeroed();
 
@@ -314,19 +309,6 @@ fn spawn_fake_player(command: CCommandResult) {
         (dt_funcs.ZeroOutdtNavMesh)(nav_query.as_mut_ptr());
         let hull_index = (dt_funcs.GetNavMeshHullIndex)(HULL_HUMAN);
         let navmesh = &**dt_funcs.nav_mesh.add(hull_index as usize);
-
-        for hull in 0..4 {
-            let hull_index = (dt_funcs.GetNavMeshHullIndex)(hull);
-            let navmesh = *dt_funcs.nav_mesh.add(hull_index as usize);
-            log::info!(
-                "NAVMESH AT HULL {hull} HULL_INDEX {hull_index} is 0x{:X}",
-                navmesh as usize
-            )
-        }
-
-        log::info!("navmesh: {:?}", navmesh);
-
-        let mut nav_query = nav_query.assume_init();
 
         // let node_queue = SOURCE_ALLOC
         //     .alloc(Layout::new::<dtNodeQueue>())
@@ -348,7 +330,7 @@ fn spawn_fake_player(command: CCommandResult) {
         // nav_query.m_openList = node_queue;
 
         if dbg!((dt_funcs.dtNavMeshQuery__init)(
-            &mut nav_query,
+            nav_query.as_mut_ptr(),
             navmesh,
             2048
         )) != 0x40000000
@@ -357,12 +339,7 @@ fn spawn_fake_player(command: CCommandResult) {
             log::warn!("huh oh")
         }
 
-        log::info!(
-            "function pointer : {:X}",
-            dt_funcs.dtNavMeshQuery__init as usize
-        );
-
-        println!("{:?}", nav_query);
+        let nav_query = nav_query.assume_init();
 
         *TASK_MAP
             .get_mut(**client.edict as usize)

@@ -45,6 +45,10 @@ impl Plugin for Interfaces {
 
         let Some(engine) = engine else { return };
 
+        let convar = ConVarStruct::find_convar_by_name("enable_debug_overlays", token)
+            .expect("enable_debug_overlays should exist");
+        convar.set_value_i32(1, token);
+
         register_concommands(engine, token);
 
         _ = unsafe {

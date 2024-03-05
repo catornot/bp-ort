@@ -373,7 +373,7 @@ pub type PdtQueryFilter = *mut dtQueryFilter;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct dtQueryFilter {
-    pub m_areaCost: [f32; 31usize],
+    pub m_areaCost: [f32; 32usize],
     pub m_includeFlags: ushort,
     pub m_excludeFlags: ushort,
 }
