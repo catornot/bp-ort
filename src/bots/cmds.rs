@@ -731,29 +731,11 @@ unsafe fn view_rate(
 ) -> f32 {
     const POS_OFFSET: Vector3 = Vector3::new(0., 0., 20.);
 
-    // let (v1, v2) = (v1, v2);
-
-    // let id = ((player.offset(0x30) as usize) & 0xffff);
-    // let id = (helper.sv_funcs.base.offset(0xb6ab58) as usize + id * 30) as i8 * -1;
-
     const TRACE_MASK_SHOT: i32 = 1178615859;
     const TRACE_MASK_SOLID_BRUSHONLY: i32 = 16907;
     const TRACE_COLLISION_GROUP_BLOCK_WEAPONS: i32 = 0x12; // 18
 
     let mut result: MaybeUninit<TraceResults> = MaybeUninit::zeroed();
-    // (helper.sv_funcs.util_trace_line)(
-    //     &v2,
-    //     &v1,
-    //     // TRACE_MASK_SHOT as i8,
-    //     TRACE_MASK_SHOT.to_be_bytes()[3] as i8,
-    //     (player as usize).to_be_bytes()[3] as i8,
-    //     TRACE_COLLISION_GROUP_BLOCK_WEAPONS,
-    //     20, // z offset
-    //     0,
-    //     result.as_mut_ptr(),
-    // );
-    // let result = result.assume_init();
-
     let mut ray = Ray {
         start: VectorAligned { vec: v1, w: 0. },
         delta: VectorAligned {

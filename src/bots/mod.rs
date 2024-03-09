@@ -11,14 +11,12 @@ use rrplug::{
     exports::OnceCell,
     high::engine::convars::{ConVarRegister, ConVarStruct},
 };
-use std::mem::MaybeUninit;
 use std::{
     cell::RefCell,
     ffi::CStr,
     {ops::Deref, sync::Mutex},
 };
 
-use crate::bindings::{EngineFunctions, Ray, TraceResults, VectorAligned};
 use crate::{
     bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
     bots::{
@@ -125,124 +123,9 @@ impl Plugin for Bots {
         // DISABLED IN LIBS.RS
         match handle.get_context() {
             // doesn't seam to work anymore?
-            ScriptContext::SERVER => return,
-            // ScriptContext::SERVER => {}
+            ScriptContext::SERVER => {}
             _ => return,
         }
-        const POS_OFFSET: Vector3 = Vector3::new(0., 0., 20.);
-
-        let v1 = Vector3::new(0., 0., 100.);
-        let v2 = Vector3::new(0., 1000., -100.);
-
-        const TRACE_MASK_SHOT: i32 = 1178615859;
-        const TRACE_MASK_SOLID_BRUSHONLY: i32 = 16907;
-        const TRACE_COLLISION_GROUP_BLOCK_WEAPONS: i32 = 0x12; // 18
-
-        let mut result: MaybeUninit<TraceResults> = MaybeUninit::zeroed();
-        // (helper.sv_funcs.util_trace_line)(
-        //     &v2,
-        //     &v1,
-        //     // TRACE_MASK_SHOT as i8,
-        //     TRACE_MASK_SHOT.to_be_bytes()[3] as i8,
-        //     (player as usize).to_be_bytes()[3] as i8,
-        //     TRACE_COLLISION_GROUP_BLOCK_WEAPONS,
-        //     20, // z offset
-        //     0,
-        //     result.as_mut_ptr(),
-        // );
-        // let result = unsafe { result.assume_init() };
-
-        log::info!("trace");
-
-        let mut ray = Ray {
-            start: VectorAligned { vec: v1, w: 0. },
-            delta: VectorAligned {
-                vec: v2 - v1 + POS_OFFSET,
-                w: 0.,
-            },
-            offset: VectorAligned {
-                vec: Vector3::new(0., 0., 20.),
-                w: 0.,
-            },
-            unk3: 0.,
-            unk4: 0,
-            unk5: 0.,
-            unk6: 1103806595072,
-            // unk6: 1103806595072,
-            unk7: 0.,
-            is_ray: true,
-            is_swept: false,
-            is_smth: false,
-            flags: 0,
-        };
-        let engine_funcs = ENGINE_FUNCTIONS.wait();
-        let server_funcs = SERVER_FUNCTIONS.wait();
-
-        unsafe {
-            log::info!(
-                "{:?} {:?}",
-                server_funcs
-                    .ctraceengine
-                    .as_ref()
-                    .unwrap()
-                    .as_ref()
-                    .unwrap()
-                    .add(25) as usize,
-                *server_funcs
-                    .ctraceengine
-                    .as_ref()
-                    .unwrap()
-                    .as_ref()
-                    .unwrap()
-                    .add(25)
-                    .cast::<*const usize>()
-            )
-        }
-
-        unsafe {
-            // std::mem::transmute::<
-            //     _,
-            //     unsafe extern "fastcall-unwind" fn(
-            //         this: *const libc::c_void,
-            //         ray: *const Ray,
-            //         maskf: u32,
-            //         filter: *const libc::c_void,
-            //         trace: *mut TraceResults,
-            //     ),
-            // >(
-            //     *server_funcs
-            //         .ctraceengine
-            //         .as_ref()
-            //         .unwrap()
-            //         .as_ref()
-            //         .unwrap()
-            //         .add(3),
-            // )
-            (engine_funcs.trace_ray)(
-                (*server_funcs.ctraceengine) as *const libc::c_void,
-                &mut ray,
-                TRACE_MASK_SHOT as u32,
-                // std::ptr::null_mut(),
-                result.as_mut_ptr(),
-            );
-        }
-        let result = unsafe { result.assume_init() };
-
-        // (result.fraction * 1000.) as i64
-        // if result.fraction_left_solid == 0.0 || !result.start_solid {
-        //     result.fraction
-        // } else {
-        //     0.0
-        // }
-
-        log::info!(
-            "trace {}",
-            if !result.start_solid {
-                result.fraction
-            } else {
-                0.0
-            }
-        );
 
         let max_players: u32 = unsafe {
             CStr::from_ptr((ENGINE_FUNCTIONS.wait().get_current_playlist_var)(

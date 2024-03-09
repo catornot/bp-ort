@@ -17,7 +17,7 @@ mod concommands;
 mod hooks;
 
 pub static ENGINE_INTERFACES: OnceCell<EngineInterfaces> = OnceCell::new();
-pub static HAS_BEEN_FORCED_BOX: EngineGlobal<RefCell<Option<ConVarStruct>>> =
+pub static FORCE_BOX_CONVAR: EngineGlobal<RefCell<Option<ConVarStruct>>> =
     EngineGlobal::new(RefCell::new(None));
 
 pub struct EngineInterfaces {
@@ -64,7 +64,7 @@ impl Plugin for Interfaces {
         let box_convar = ConVarStruct::try_new(
             &ConVarRegister::new(
                 "force_mp_box",
-                "1",
+                "0",
                 0,
                 "will put into mp_box if you are not on mp_box",
             ),
@@ -72,7 +72,7 @@ impl Plugin for Interfaces {
         )
         .unwrap();
 
-        _ = HAS_BEEN_FORCED_BOX.get(token).replace(Some(box_convar));
+        _ = FORCE_BOX_CONVAR.get(token).replace(Some(box_convar));
 
         register_concommands(engine, token);
 
@@ -98,7 +98,7 @@ impl Plugin for Interfaces {
     }
 
     fn runframe(&self, token: EngineToken) {
-        match HAS_BEEN_FORCED_BOX.get(token).borrow().as_ref() {
+        match FORCE_BOX_CONVAR.get(token).borrow().as_ref() {
             Some(convar) if convar.get_value_i32() == 1 => {
                 let engine = ENGINE_FUNCTIONS.wait();
                 let host_state = unsafe {
