@@ -11,20 +11,25 @@ use std::{
     mem,
 };
 
-use super::{cmds::run_bots_cmds, set_on_join::set_stuff_on_join, DRAWWORLD_CONVAR};
+use super::{
+    cmds::{replace_cmd, run_bots_cmds},
+    set_on_join::set_stuff_on_join,
+    DRAWWORLD_CONVAR,
+};
 use crate::{
-    bindings::{CUserCmd, TraceResults},
+    bindings::{CUserCmd, Ray, TraceResults},
     navmesh::bindings::{dtNavMesh, dtNavMeshQuery, dtPolyRef, dtQueryFilter, dtStatus64},
     utils::from_c_string,
 };
 
 static_detour! {
-    static Physics_RunThinkFunctions: unsafe extern "C" fn(c_char);
+    static Physics_RunThinkFunctions: unsafe extern "C" fn(bool);
     // static CClient__Connect: unsafe extern "C" fn(CClientPtr, *const c_char, *const c_void, c_char, *const c_void, [c_char;256] this is a *mut c_char, *const c_void ) -> bool;
     static SomeFuncInConnectProcedure: unsafe extern "C" fn(*mut CClient, *const c_void);
     static SomeVoiceFunc: unsafe extern "C" fn(*const c_void, *const c_void) -> *const c_void;
     static PlayerRunCommand: unsafe extern "C" fn(*mut CPlayer, *const CUserCmd, *const c_void);
     static ProcessUsercmds: unsafe extern "C" fn(*mut CPlayer, c_short, *const CUserCmd, i32, i32, c_char, c_uchar); // c_uchar might be wrong since undefined
+    static CreateNullUserCmd: unsafe extern "C" fn(*mut CUserCmd) -> *mut CUserCmd;
     static SomeFuncInDisconnectProcedure: unsafe extern "C" fn(*mut CClient, *const c_void,c_uchar);
     static CClient__Disconnect: unsafe extern "C" fn(*mut CClient, c_uchar, *const c_void, *const c_void);
     static TraceLineSimple: unsafe extern "C" fn(*const Vector3, *const Vector3, c_char, c_char, i32, i32, i32, *mut TraceResults);
@@ -34,11 +39,16 @@ static_detour! {
     static dtNavMeshQuery__findNearestPoly: unsafe extern "C" fn( *mut dtNavMeshQuery, *const Vector3, *const Vector3, *const dtQueryFilter, *mut dtPolyRef, *mut Vector3) -> dtStatus64;
     static dtNavMeshQuery__init: unsafe extern "C" fn( *mut dtNavMeshQuery, *const dtNavMesh, i32) -> dtStatus64;
 }
+// lmao hit the recusion limit
+static_detour! {
+    static CEngineTraceServer__TraceRayFiltered: unsafe extern "C" fn(*mut c_void, *const Ray, u32, *const c_void, *mut TraceResults);
+    static SomeTraceFunction: unsafe extern "C" fn(*mut Ray,usize,i32,u32,c_char, *const TraceResults);
+}
 
-fn some_run_user_cmd_hook(parm: c_char) {
-    run_bots_cmds();
+fn physics_run_think_functions_hook(paused: bool) {
+    run_bots_cmds(paused);
 
-    unsafe { Physics_RunThinkFunctions.call(parm) }
+    unsafe { Physics_RunThinkFunctions.call(paused) }
 }
 
 fn hook_proccess_user_cmds(
@@ -84,6 +94,54 @@ fn hook_trace_line(
     }
 }
 
+fn some_trace_function_hook(
+    ray: *mut Ray,
+    unk1: usize,
+    unk2: i32,
+    fmask: u32,
+    unk3: c_char,
+    trace: *const TraceResults,
+) {
+    unsafe {
+        log::info!("ray: {:?}", ray.as_ref());
+        log::info!("fmask: {:?}", fmask);
+        log::info!("unk1: {:?}", unk1);
+        log::info!("unk2: {:?}", unk2);
+        log::info!("unk3: {:?}", unk3);
+        log::info!("trace: {:?}", trace.as_ref());
+    }
+
+    unsafe { SomeTraceFunction.call(ray, unk1, unk2, fmask, unk3, trace) }
+}
+
+fn trace_ray_filter_hook(
+    this: *mut c_void,
+    ray: *const Ray,
+    fmask: u32,
+    filter: *const c_void,
+    trace: *mut TraceResults,
+) {
+    unsafe {
+        log::info!("ray: {:?}", ray.as_ref());
+        log::info!("fmask: {:?}", fmask);
+    }
+
+    unsafe { CEngineTraceServer__TraceRayFiltered.call(this, ray, fmask, filter, trace) }
+
+    unsafe {
+        log::info!("trace: {:?}", trace.as_ref());
+    }
+}
+
+fn create_null_cmd_hook(cmd: *mut CUserCmd) -> *mut CUserCmd {
+    replace_cmd()
+        .map(|new_cmd| {
+            unsafe { *cmd = *new_cmd };
+            cmd
+        })
+        .unwrap_or_else(|| unsafe { CreateNullUserCmd.call(cmd) })
+}
+
 pub fn hook_server(addr: *const c_void) {
     log::info!("hooking server functions");
 
@@ -91,7 +149,7 @@ pub fn hook_server(addr: *const c_void) {
         Physics_RunThinkFunctions
             .initialize(
                 mem::transmute(addr.offset(0x483A50)),
-                some_run_user_cmd_hook,
+                physics_run_think_functions_hook,
             )
             .expect("failed to hook Physics_RunThinkFunctions")
             .enable()
@@ -117,6 +175,14 @@ pub fn hook_server(addr: *const c_void) {
         // .expect("failure to enable the ProcessUsercmds hook");
 
         log::info!("hooked ProcessUsercmds");
+
+        CreateNullUserCmd
+            .initialize(mem::transmute(addr.offset(0x25f790)), create_null_cmd_hook)
+            .expect("failed to hook CreateNullUserCmd")
+            .enable()
+            .expect("failure to enable the CreateNullUserCmd hook");
+
+        log::info!("hooked CreateNullUserCmd");
     }
 }
 
@@ -163,6 +229,25 @@ pub fn hook_engine(addr: *const c_void) {
     }
 
     unsafe {
+        CEngineTraceServer__TraceRayFiltered
+            .initialize(mem::transmute(addr.offset(0x14eeb0)), trace_ray_filter_hook)
+            .expect("failed to hook CEngineTraceServer__TraceRayFiltered");
+        // .enable()
+        // .expect("failure to enable the CEngineTraceServer__TraceRayFiltered hook");
+
+        log::info!("hooked CEngineTraceServer__TraceRayFiltered");
+
+        SomeTraceFunction
+            .initialize(
+                mem::transmute(addr.offset(0x1241f0)),
+                some_trace_function_hook,
+            )
+            .expect("failed to hook SomeTraceFunction");
+        // .enable()
+        // .expect("failure to enable the SomeTraceFunction hook");
+
+        log::info!("hooked SomeTraceFunction");
+
         SomeFuncInConnectProcedure
             .initialize(
                 mem::transmute(addr.offset(0x106270)),

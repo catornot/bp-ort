@@ -1,7 +1,6 @@
 use once_cell::sync::Lazy;
 use rand::Rng;
 use rrplug::bindings::class_types::cplayer::CPlayer;
-use rrplug::mid::source_alloc::SOURCE_ALLOC;
 use rrplug::mid::utils::try_cstring;
 use rrplug::prelude::*;
 use rrplug::{
@@ -12,7 +11,6 @@ use rrplug::{
     exports::OnceCell,
     high::engine::convars::{ConVarRegister, ConVarStruct},
 };
-use std::alloc::{GlobalAlloc, Layout};
 use std::mem::MaybeUninit;
 use std::{
     cell::RefCell,
@@ -20,13 +18,15 @@ use std::{
     {ops::Deref, sync::Mutex},
 };
 
-use self::detour::{hook_engine, hook_server};
-use self::{convars::register_required_convars, debug_commands::register_debug_concommands};
-use crate::navmesh::bindings::{dtNavMeshQuery, dtNodeQueue};
-use crate::navmesh::{HULL_HUMAN, RECAST_DETOUR};
-use crate::utils::set_c_char_array;
+use crate::bindings::{EngineFunctions, Ray, TraceResults, VectorAligned};
 use crate::{
     bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
+    bots::{
+        convars::register_required_convars,
+        debug_commands::register_debug_concommands,
+        detour::{hook_engine, hook_server},
+    },
+    navmesh::{navigation::Navigation, Hull},
     utils::iterate_c_array_sized,
     PLUGIN,
 };
@@ -41,24 +41,13 @@ mod set_on_join;
 static CLAN_TAG_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
 pub static SIMULATE_TYPE_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
 pub static DRAWWORLD_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
-pub const DEFAULT_SIMULATE_TYPE: i32 = 7;
+pub const DEFAULT_SIMULATE_TYPE: i32 = 6;
 
 thread_local! {
     pub static MAX_PLAYERS: RefCell<u32> = const { RefCell::new(32) };
 }
 pub(super) static mut TASK_MAP: Lazy<[BotData; 64]> =
     Lazy::new(|| std::array::from_fn(|_| BotData::default()));
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub enum BotWeaponState {
-    #[default]
-    ApReady,
-    ApPrepare,
-    AtReady,
-    AtPrepare,
-    TitanReady,
-    TitanPrepare,
-}
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum TitanClass {
@@ -76,10 +65,12 @@ pub enum TitanClass {
 pub(super) struct BotData {
     sim_type: Option<i32>,
     edict: u16,
-    weapon_state: BotWeaponState,
     titan: TitanClass,
     counter: u32,
-    nav_query: Option<dtNavMeshQuery>,
+    nav_query: Option<Navigation>,
+    next_target_pos: Vector3,
+    last_time_node_reached: f32,
+    last_target_index: u32,
 }
 
 #[derive(Debug)]
@@ -134,9 +125,124 @@ impl Plugin for Bots {
         // DISABLED IN LIBS.RS
         match handle.get_context() {
             // doesn't seam to work anymore?
-            ScriptContext::UI => {}
+            ScriptContext::SERVER => return,
+            // ScriptContext::SERVER => {}
             _ => return,
         }
+        const POS_OFFSET: Vector3 = Vector3::new(0., 0., 20.);
+
+        let v1 = Vector3::new(0., 0., 100.);
+        let v2 = Vector3::new(0., 1000., -100.);
+
+        const TRACE_MASK_SHOT: i32 = 1178615859;
+        const TRACE_MASK_SOLID_BRUSHONLY: i32 = 16907;
+        const TRACE_COLLISION_GROUP_BLOCK_WEAPONS: i32 = 0x12; // 18
+
+        let mut result: MaybeUninit<TraceResults> = MaybeUninit::zeroed();
+        // (helper.sv_funcs.util_trace_line)(
+        //     &v2,
+        //     &v1,
+        //     // TRACE_MASK_SHOT as i8,
+        //     TRACE_MASK_SHOT.to_be_bytes()[3] as i8,
+        //     (player as usize).to_be_bytes()[3] as i8,
+        //     TRACE_COLLISION_GROUP_BLOCK_WEAPONS,
+        //     20, // z offset
+        //     0,
+        //     result.as_mut_ptr(),
+        // );
+        // let result = unsafe { result.assume_init() };
+
+        log::info!("trace");
+
+        let mut ray = Ray {
+            start: VectorAligned { vec: v1, w: 0. },
+            delta: VectorAligned {
+                vec: v2 - v1 + POS_OFFSET,
+                w: 0.,
+            },
+            offset: VectorAligned {
+                vec: Vector3::new(0., 0., 20.),
+                w: 0.,
+            },
+            unk3: 0.,
+            unk4: 0,
+            unk5: 0.,
+            unk6: 1103806595072,
+            // unk6: 1103806595072,
+            unk7: 0.,
+            is_ray: true,
+            is_swept: false,
+            is_smth: false,
+            flags: 0,
+        };
+        let engine_funcs = ENGINE_FUNCTIONS.wait();
+        let server_funcs = SERVER_FUNCTIONS.wait();
+
+        unsafe {
+            log::info!(
+                "{:?} {:?}",
+                server_funcs
+                    .ctraceengine
+                    .as_ref()
+                    .unwrap()
+                    .as_ref()
+                    .unwrap()
+                    .add(25) as usize,
+                *server_funcs
+                    .ctraceengine
+                    .as_ref()
+                    .unwrap()
+                    .as_ref()
+                    .unwrap()
+                    .add(25)
+                    .cast::<*const usize>()
+            )
+        }
+
+        unsafe {
+            // std::mem::transmute::<
+            //     _,
+            //     unsafe extern "fastcall-unwind" fn(
+            //         this: *const libc::c_void,
+            //         ray: *const Ray,
+            //         maskf: u32,
+            //         filter: *const libc::c_void,
+            //         trace: *mut TraceResults,
+            //     ),
+            // >(
+            //     *server_funcs
+            //         .ctraceengine
+            //         .as_ref()
+            //         .unwrap()
+            //         .as_ref()
+            //         .unwrap()
+            //         .add(3),
+            // )
+            (engine_funcs.trace_ray)(
+                (*server_funcs.ctraceengine) as *const libc::c_void,
+                &mut ray,
+                TRACE_MASK_SHOT as u32,
+                // std::ptr::null_mut(),
+                result.as_mut_ptr(),
+            );
+        }
+        let result = unsafe { result.assume_init() };
+
+        // (result.fraction * 1000.) as i64
+        // if result.fraction_left_solid == 0.0 || !result.start_solid {
+        //     result.fraction
+        // } else {
+        //     0.0
+        // }
+
+        log::info!(
+            "trace {}",
+            if !result.start_solid {
+                result.fraction
+            } else {
+                0.0
+            }
+        );
 
         let max_players: u32 = unsafe {
             CStr::from_ptr((ENGINE_FUNCTIONS.wait().get_current_playlist_var)(
@@ -301,51 +407,11 @@ fn spawn_fake_player(command: CCommandResult) {
             CStr::from_ptr(client.name.as_ref() as *const [i8] as *const i8).to_string_lossy()
         );
 
-        // TODO: don't forget to free this on level swap
-        let mut nav_query = MaybeUninit::zeroed();
-
-        let dt_funcs = RECAST_DETOUR.wait();
-
-        (dt_funcs.ZeroOutdtNavMesh)(nav_query.as_mut_ptr());
-        let hull_index = (dt_funcs.GetNavMeshHullIndex)(HULL_HUMAN);
-        let navmesh = &**dt_funcs.nav_mesh.add(hull_index as usize);
-
-        // let node_queue = SOURCE_ALLOC
-        //     .alloc(Layout::new::<dtNodeQueue>())
-        //     .cast::<dtNodeQueue>()
-        //     .as_mut()
-        //     .expect("this was just allocated a second ago; how?");
-
-        // const QUEUE_SIZE: usize = 100;
-
-        // // don't forget to drop this later
-        // *node_queue = dtNodeQueue {
-        //     m_heap: SOURCE_ALLOC
-        //         .alloc(Layout::array::<usize>(QUEUE_SIZE).expect("how"))
-        //         .cast(),
-        //     m_capacity: QUEUE_SIZE as i32,
-        //     m_size: 0,
-        // };
-
-        // nav_query.m_openList = node_queue;
-
-        if dbg!((dt_funcs.dtNavMeshQuery__init)(
-            nav_query.as_mut_ptr(),
-            navmesh,
-            2048
-        )) != 0x40000000
-        // success
-        {
-            log::warn!("huh oh")
-        }
-
-        let nav_query = nav_query.assume_init();
-
         *TASK_MAP
             .get_mut(**client.edict as usize)
             .expect("tried to get an invalid edict") = BotData {
             sim_type,
-            nav_query: Some(nav_query),
+            nav_query: Navigation::new(Hull::Human),
             ..Default::default()
         };
     }

@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use rrplug::{
     bindings::class_types::{client::SignonState, cplayer::CPlayer},
     high::vector::Vector3,
@@ -6,15 +7,22 @@ use std::mem::MaybeUninit;
 
 use crate::{
     bindings::{
-        Action, CBaseEntity, CGlobalVars, CUserCmd, EngineFunctions, ServerFunctions, TraceResults,
-        ENGINE_FUNCTIONS, SERVER_FUNCTIONS,
+        Action, CBaseEntity, CGlobalVars, CUserCmd, EngineFunctions, Ray, ServerFunctions,
+        TraceResults, VectorAligned, ENGINE_FUNCTIONS, SERVER_FUNCTIONS,
     },
     interfaces::ENGINE_INTERFACES,
-    navmesh::{bindings::dtQueryFilter, RECAST_DETOUR},
+    navmesh::{Hull, RECAST_DETOUR},
     utils::{client_command, iterate_c_array_sized},
 };
 
-use super::{BotData, BotWeaponState, SIMULATE_TYPE_CONVAR, TASK_MAP};
+use super::{BotData, SIMULATE_TYPE_CONVAR, TASK_MAP};
+
+// const GROUND_OFFSET: Vector3 = Vector3::new(0., 0., 50.);
+const BOT_VISON_RANGE: f32 = 3000.;
+const BOT_PATH_NODE_RANGE: f32 = 50.;
+const BOT_PATH_RECAL_RANGE: f32 = 600.;
+
+static mut LAST_CMD: Option<CUserCmd> = None;
 
 #[derive(Clone)]
 pub struct CUserCmdHelper<'a> {
@@ -88,7 +96,7 @@ impl CUserCmd {
                 weaponselect: 0,
                 meleetarget: 0,
                 camera_pos: Vector3::ZERO,
-                camera_angles: Vector3::ZERO,
+                camera_angles: helper.angles,
                 tick_something: **helper.globals.tick_count as i32,
                 dword90: **helper.globals.tick_count + 4,
                 ..CUserCmd::init_default(helper.sv_funcs)
@@ -97,13 +105,17 @@ impl CUserCmd {
     }
 }
 
-pub fn run_bots_cmds() {
+pub fn replace_cmd() -> Option<&'static CUserCmd> {
+    unsafe { LAST_CMD.as_ref() }
+}
+
+pub fn run_bots_cmds(_paused: bool) {
     let sim_type = SIMULATE_TYPE_CONVAR.wait().get_value_i32();
     let server_functions = SERVER_FUNCTIONS.wait();
     let engine_functions = ENGINE_FUNCTIONS.wait();
     let player_by_index = server_functions.get_player_by_index;
     let run_null_command = server_functions.run_null_command;
-    let add_user_cmd_to_player = server_functions.add_user_cmd_to_player;
+    // let add_user_cmd_to_player = server_functions.add_user_cmd_to_player;
     // let set_base_time = server_functions.set_base_time;
     // let player_run_command = server_functions.player_run_command;
     // let move_helper = server_functions.move_helper.cast_const();
@@ -120,7 +132,7 @@ pub fn run_bots_cmds() {
 
     let bot_tasks = unsafe { TASK_MAP.as_mut() };
 
-    for (cmd, player) in unsafe {
+    for (mut cmd, player) in unsafe {
         iterate_c_array_sized::<_, 32>(engine_functions.client_array.into())
             .enumerate()
             .filter(|(_, client)| **client.signon == SignonState::FULL)
@@ -140,26 +152,35 @@ pub fn run_bots_cmds() {
                 ))
             }) // can collect here to stop the globals from complaning about mutability
     } {
+        cmd.frame_time = unsafe { globals.tick_interval.copy_inner() };
         unsafe {
-            add_user_cmd_to_player(
-                player, &cmd, 1, // was amount
-                1, // was amount
-                0, // was amount as u32, seams like it was causing the dropped packets spam but also it was stoping the bots from going faster?
-                0,
-            );
+            // add_user_cmd_to_player(
+            //     player,
+            //     &cmd,
+            //     1, // was amount
+            //     1, // was amount
+            //     1, // was amount as u32, seams like it was causing the dropped packets spam but also it was stoping the bots from going faster?
+            //     paused as i8,
+            // );
+
+            LAST_CMD = Some(cmd);
+
+            // so hook the createnullmove function in run_null_command and return the current cmd or the thing it does if it's null
+            // should be safe it's called on single frame
 
             // let frametime = **globals.frametime;
             // let cur_time = **globals.cur_time;
 
+            // *player.cplayer_state_fixangle.get_inner_mut() = 0;
             // set_base_time(player, cur_time);
 
-            // run_null_command(player);
+            // // run_null_command(player);
             // player_run_command(player, &mut cmd, move_helper);
             // *player.latest_command_run.get_inner_mut() = cmd.command_number;
-            // (server_functions.set_last_cmd)(
-            //     (player as *mut _ as *mut CUserCmd).offset(0x20a0).cast(),
-            //     &mut cmd,
-            // );
+            // // (server_functions.set_last_cmd)(
+            // //     (player as *mut _ as *mut CUserCmd).offset(0x20a0).cast(),
+            // //     &mut cmd,
+            // // );
             // #[allow(invalid_reference_casting)] // tmp
             // {
             //     *((globals.frametime.get_inner() as *const f32).cast_mut()) = frametime;
@@ -167,7 +188,12 @@ pub fn run_bots_cmds() {
             // }
 
             run_null_command(player); // doesn't really work?
+
+            *player.angles.get_inner_mut() = cmd.world_view_angles
+
+            // (server_functions.simulate_player)(player);
         }
+        unsafe { LAST_CMD = None }
     }
 }
 
@@ -186,10 +212,24 @@ pub(super) fn get_cmd(
             ..CUserCmdHelper::construct_from_global(helper)
         }
     };
-
+    {
+        let desired_hull = if unsafe { (helper.sv_funcs.is_titan)(player) } {
+            Hull::Titan
+        } else {
+            Hull::Human
+        };
+        if Some(desired_hull) != local_data.nav_query.as_ref().map(|q| q.hull) {
+            local_data.nav_query = local_data
+                .nav_query
+                .take()
+                .and_then(|mut q| q.switch_query(desired_hull));
+        }
+    }
     let mut cmd = Some(match sim_type {
         _ if unsafe { (helper.sv_funcs.is_alive)(player) == 0 } => {
-            local_data.weapon_state = BotWeaponState::ApReady;
+            if let Some(query) = local_data.nav_query.as_mut() {
+                query.path_points.clear()
+            }
 
             unsafe {
                 client_command(
@@ -200,11 +240,22 @@ pub(super) fn get_cmd(
 
             CUserCmd::new_empty(&helper)
         }
-        1 => {
-            if unsafe { (helper.sv_funcs.is_on_ground)(player) } != 0 {
+        1 | 8 => {
+            local_data.counter += 1;
+            if unsafe { (helper.sv_funcs.is_on_ground)(player) } != 0
+                && local_data.counter / 10 % 4 == 0
+            {
                 CUserCmd::new_basic_move(Vector3::new(0., 0., 1.), Action::Jump as u32, &helper)
             } else {
-                CUserCmd::new_basic_move(Vector3::new(0., 0., 0.), Action::Duck as u32, &helper)
+                CUserCmd::new_basic_move(
+                    Vector3::new(0., 0., 0.),
+                    if sim_type == 8 {
+                        Action::Attack
+                    } else {
+                        Action::Duck
+                    } as u32,
+                    &helper,
+                )
             }
         }
         2 => {
@@ -290,28 +341,26 @@ pub(super) fn get_cmd(
             let diff = target - origin;
             cmd.world_view_angles.y = diff.y.atan2(diff.x) * 180. / std::f32::consts::PI;
 
+            *player.angles.get_inner_mut() = cmd.world_view_angles;
+
             cmd
         },
-        4 | 5 => {
+        4..=6 => {
             let origin = unsafe { *player.get_origin(&mut v) };
             let team = unsafe { **player.team };
 
             let target = unsafe {
-                find_closest_player(origin, team, &helper).map(|(player, should_shoot)| {
+                find_player_in_view(origin, team, &helper).map(|(player, should_shoot)| {
                     ((*player.get_origin(&mut v), player), should_shoot)
                 })
             };
 
-            let mut cmd = CUserCmd::new_basic_move(Vector3::ZERO, Action::Zoom as u32, &helper);
+            let mut cmd = CUserCmd::new_basic_move(Vector3::ZERO, 0, &helper);
 
-            if sim_type == 5 && target.is_some() {
-                'ifstmt: {
+            match (sim_type, &target) {
+                (5, Some((ref target, _))) => {
                     cmd.move_ = Vector3::new(1., 0., 0.);
                     cmd.buttons |= Action::Forward as u32 | Action::Walk as u32;
-
-                    let Some((ref target, _)) = target else {
-                        break 'ifstmt;
-                    };
 
                     let is_titan = unsafe { (helper.sv_funcs.is_titan)(player) };
 
@@ -331,18 +380,91 @@ pub(super) fn get_cmd(
                         cmd.buttons |= Action::Dodge as u32;
                     }
                 }
+                (6, Some(((target_pos, target), false))) => 'end: {
+                    let dt_funcs = RECAST_DETOUR.wait();
+                    let debug = ENGINE_INTERFACES.wait().debug_overlay;
+                    let Some(nav) = local_data.nav_query.as_mut() else {
+                        log::warn!("null nav");
+                        break 'end;
+                    };
+
+                    if distance(*target_pos, origin) <= BOT_PATH_NODE_RANGE + 20. {
+                        break 'end;
+                    }
+
+                    _ = nav.path_points.last().map(|point| unsafe {
+                        debug.AddLineOverlay(&origin, point, 0, 255, 0, true, 0.1)
+                    });
+                    nav.path_points
+                        .iter()
+                        .cloned()
+                        .tuple_windows()
+                        .for_each(|(p1, p2)| unsafe {
+                            debug.AddLineOverlay(&p1, &p2, 0, 255, 0, true, 0.5)
+                        });
+                    _ = nav.path_points.last().map(|point| unsafe {
+                        debug.AddLineOverlay(point, target_pos, 0, 255, 0, true, 0.1)
+                    });
+
+                    if nav
+                        .path_points
+                        .first()
+                        .map(|point| distance(*point, *target_pos) > BOT_PATH_RECAL_RANGE)
+                        .map(|should_recalculate| {
+                            should_recalculate
+                                || local_data.last_target_index
+                                    != unsafe { target.player_index.copy_inner() }
+                        })
+                        .unwrap_or(true)
+                    {
+                        local_data.last_time_node_reached =
+                            unsafe { helper.globals.cur_time.copy_inner() };
+                        local_data.next_target_pos = origin;
+                        if let Err(err) = nav.new_path(origin, *target_pos, dt_funcs) {
+                            log::warn!("navigation pathing failed stuck somewhere probably! {err}");
+                            try_avoid_obstacle(&mut cmd, &helper);
+
+                            break 'end;
+                        }
+                    }
+                    local_data.last_target_index = unsafe { target.player_index.copy_inner() };
+
+                    if distance(local_data.next_target_pos, origin) <= BOT_PATH_NODE_RANGE {
+                        local_data.last_time_node_reached =
+                            unsafe { helper.globals.cur_time.copy_inner() };
+                        local_data.next_target_pos = nav
+                            .next_point()
+                            .expect("should always have enough points here");
+                    }
+
+                    let diff = local_data.next_target_pos - origin;
+                    let angley = diff.y.atan2(diff.x) * 180. / std::f32::consts::PI;
+
+                    cmd.world_view_angles = Vector3::new(0., angley, 0.);
+                    cmd.move_.x = 1.0;
+                    cmd.buttons |= Action::Forward as u32 | Action::Speed as u32;
+
+                    if is_timedout(local_data.last_time_node_reached, &helper, 100.) {
+                        try_avoid_obstacle(&mut cmd, &helper);
+                    }
+                }
+                _ => {}
             }
 
             if let Some(((target, target_player), should_shoot)) = target {
                 cmd.buttons |= if should_shoot {
-                    Action::Attack as u32
+                    Action::Zoom as u32
+                        | (unsafe { helper.globals.frame_count.copy_inner() } / 2 % 4 != 0)
+                            .then_some(Action::Attack as u32)
+                            .unwrap_or_default()
                 } else {
                     0
                 };
 
-                let target = if let Some(titan) =
-                    unsafe { (helper.sv_funcs.get_pet_titan)(player).as_ref() }
-                {
+                let target = if let (Some(titan), false) = (
+                    unsafe { (helper.sv_funcs.get_pet_titan)(player).as_ref() },
+                    sim_type != 6, // nav is broken for titans anyway :(
+                ) {
                     let titan_pos = unsafe {
                         *(helper.sv_funcs.get_origin)(
                             (titan as *const CBaseEntity).cast::<CPlayer>(),
@@ -364,67 +486,23 @@ pub(super) fn get_cmd(
                     target
                 };
 
-                let diff = target - origin;
-                let angley = diff.y.atan2(diff.x) * 180. / std::f32::consts::PI;
-                let anglex = diff.z.atan2((diff.x.powi(2) + diff.y.powi(2)).sqrt()) * 180.
-                    / std::f32::consts::PI;
+                if should_shoot || sim_type != 6 {
+                    let diff = target - origin;
+                    let angley = diff.y.atan2(diff.x) * 180. / std::f32::consts::PI;
+                    let anglex = diff.z.atan2((diff.x.powi(2) + diff.y.powi(2)).sqrt()) * 180.
+                        / std::f32::consts::PI;
 
-                cmd.world_view_angles = Vector3::new(-anglex, angley, 0.);
+                    cmd.world_view_angles = Vector3::new(-anglex, angley, 0.);
+                }
 
                 let enemy_is_titan = unsafe { (helper.sv_funcs.is_titan)(target_player) };
                 let is_titan = unsafe { (helper.sv_funcs.is_titan)(player) };
-                match (local_data.weapon_state, enemy_is_titan, is_titan) {
-                    (BotWeaponState::ApReady, true, false) => {
-                        local_data.weapon_state = BotWeaponState::AtPrepare
-                    }
-                    (BotWeaponState::ApPrepare, _, false) => unsafe {
-                        // (helper.sv_funcs.set_weapon_by_slot)(
-                        //     (player as *const _ as *const c_void).offset(0x12f8), // offset to inventory
-                        //     "0\0".as_ptr() as *const i8,
-                        // );
-                        (helper.sv_funcs.replace_weapon)(
-                            player,
-                            "mp_weapon_rspn101\0".as_ptr() as *const i8,
-                            std::ptr::null(),
-                            std::ptr::null(),
-                        );
-                        // TODO: look at how givecurrentammo works
 
-                        local_data.weapon_state = BotWeaponState::ApReady;
-                    },
-                    (BotWeaponState::AtReady, false, false) => {
-                        local_data.weapon_state = BotWeaponState::ApPrepare
-                    }
-                    (BotWeaponState::AtPrepare, _, false) => unsafe {
-                        (helper.sv_funcs.replace_weapon)(
-                            player,
-                            "mp_weapon_defender\0".as_ptr() as *const i8,
-                            std::ptr::null(),
-                            std::ptr::null(),
-                        );
-
-                        local_data.weapon_state = BotWeaponState::AtReady;
-                    },
-                    (bot_weapon, _, true)
-                        if bot_weapon != BotWeaponState::TitanReady
-                            || bot_weapon != BotWeaponState::TitanPrepare =>
-                    {
-                        local_data.weapon_state = BotWeaponState::TitanPrepare
-                    }
-                    (BotWeaponState::TitanReady, _, false) => {
-                        local_data.weapon_state = BotWeaponState::ApPrepare
-                    }
-                    (BotWeaponState::TitanPrepare, _, true) => unsafe {
-                        (helper.sv_funcs.replace_weapon)(
-                            player,
-                            "mp_titanweapon_sniper\0".as_ptr() as *const i8,
-                            std::ptr::null(),
-                            std::ptr::null(),
-                        );
-
-                        local_data.weapon_state = BotWeaponState::TitanReady;
-                    },
-                    _ => {}
+                match (enemy_is_titan, is_titan) {
+                    (true, true) => cmd.weaponselect = 0, // switch to default,
+                    (true, false) => cmd.weaponselect = 1,
+                    (false, true) => cmd.weaponselect = 0, // switch to default,
+                    (false, false) => cmd.weaponselect = 0, // switch to default,
                 }
 
                 if is_titan {
@@ -454,155 +532,118 @@ pub(super) fn get_cmd(
                     };
                     local_data.counter += 1;
                 }
-
-                // unsafe {
-                //     (helper.engine_funcs.render_line)(
-                //         &origin,
-                //         &target,
-                //         Color {
-                //             _color: [255, 0, 0, 255],
-                //         },
-                //         true,
-                //     );
-                // }
             } else {
                 cmd.buttons = Action::Reload as u32;
 
                 cmd.world_view_angles.x = 0.;
             }
 
+            cmd.camera_angles = cmd.world_view_angles;
+
             cmd
         }
-        6 => unsafe {
-            dbg!("befor crash");
-
-            // server_command(to_c_string!(const "echo test\0").as_ptr());
-            client_command(local_data.edict, "say test\0".as_ptr() as *const i8);
-
-            CUserCmd::new_basic_move(
-                Vector3::new(1., 0., 0.),
-                Action::Forward as u32 | Action::Walk as u32,
-                &helper,
-            )
-        },
         7 => 'end: {
             let dt_funcs = RECAST_DETOUR.wait();
             let debug = ENGINE_INTERFACES.wait().debug_overlay;
+            let mut cmd = CUserCmd::new_empty(&helper);
             let Some(nav) = local_data.nav_query.as_mut() else {
                 log::warn!("null nav");
-                break 'end CUserCmd::new_empty(&helper);
+                break 'end cmd;
             };
 
-            log::info!("query: {:?}", nav);
-
-            let filter = dtQueryFilter {
-                m_areaCost: [
-                    1621.6901, 1274.1852, 1698.9136, 1158.3501, 1814.7485, 2123.6418, 0.0, 0.0,
-                    3243.3801, 2123.6418, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2123.6418,
-                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                ], // magic numbers
-                m_includeFlags: u16::MAX, // magic inlcude
-                m_excludeFlags: 0,        // don't exclude anything
-            };
-
-            // should move it to local_data
-            // let filter = unsafe { *(dt_funcs.navmesh_maybe_init_filter)(filter.as_mut_ptr()) };
-
-            const GOAL: Vector3 = Vector3::new(-207.0, -1750.0, 1.0);
-            const START: Vector3 = Vector3::new(-214.0, -771.0, 1.0);
-            const EXTENTS: Vector3 = Vector3::new(100.0, 100.0, 136.0);
-
+            let origin = unsafe { *player.get_origin(&mut v) };
+            let team = unsafe { **player.team };
             let mut v = Vector3::ZERO;
 
-            let origin = unsafe { *player.get_center_position(&mut v) };
-            let target = unsafe {
-                *(helper.sv_funcs.get_player_by_index)(1)
-                    .as_mut()
-                    .unwrap_or(player)
-                    .get_center_position(&mut v)
+            let Some(target) = farthest_player(origin, team, &helper) else {
+                break 'end cmd;
             };
+            let target_pos = unsafe { *target.get_origin(&mut v) };
 
-            let mut ref_start = 0;
-            let mut start = Vector3::ZERO;
-            let mut ref_goal = 0;
-            let mut goal = Vector3::ZERO;
+            if distance(target_pos, origin) <= BOT_PATH_NODE_RANGE + 20. {
+                break 'end cmd;
+            }
 
-            let status = unsafe {
-                (dt_funcs.dtNavMeshQuery__findNearestPoly)(
-                    nav,
-                    &target,
-                    &EXTENTS,
-                    &filter,
-                    &mut ref_goal,
-                    &mut goal,
-                )
-                .eq(&0x40000000)
-                .then(|| {
-                    (dt_funcs.dtNavMeshQuery__findNearestPoly)(
-                        nav,
-                        &origin,
-                        &EXTENTS,
-                        &filter,
-                        &mut ref_start,
-                        &mut start,
-                    )
-                    .eq(&0x40000000)
+            _ = nav
+                .path_points
+                .last()
+                .map(|point| unsafe { debug.AddLineOverlay(&origin, point, 0, 255, 0, true, 0.1) });
+            nav.path_points
+                .iter()
+                .cloned()
+                .tuple_windows()
+                .for_each(|(p1, p2)| unsafe {
+                    debug.AddLineOverlay(&p1, &p2, 0, 255, 0, true, 0.5)
+                });
+            _ = nav.path_points.last().map(|point| unsafe {
+                debug.AddLineOverlay(point, &target_pos, 0, 255, 0, true, 0.1)
+            });
+
+            if nav
+                .path_points
+                .first()
+                .map(|point| distance(*point, target_pos) > BOT_PATH_RECAL_RANGE)
+                .map(|should_recalculate| {
+                    should_recalculate
+                        || local_data.last_target_index
+                            != unsafe { target.player_index.copy_inner() }
                 })
-                .unwrap_or(false)
-            };
+                .unwrap_or(true)
+            {
+                local_data.last_time_node_reached = unsafe { helper.globals.cur_time.copy_inner() };
+                local_data.next_target_pos = origin;
+                if let Err(err) = nav.new_path(origin, target_pos, dt_funcs) {
+                    log::warn!("navigation pathing failed stuck somewhere probably! {err}");
+                    try_avoid_obstacle(&mut cmd, &helper);
 
-            unsafe { debug.AddLineOverlay(&start, &goal, 255, 0, 0, true, 1.) };
-            unsafe { debug.AddLineOverlay(&target, &origin, 255, 0, 0, true, 1.) };
-
-            if !status || ref_goal == 0 || ref_start == 0 {
-                log::warn!(
-                    "failed to find nearest poly, with goal {} start {}",
-                    ref_goal,
-                    ref_start
-                );
-                break 'end CUserCmd::new_empty(&helper);
+                    break 'end cmd;
+                }
             }
-            log::info!(
-                "found nearest poly, with goal {} {:?} start {} {:?}",
-                ref_goal,
-                goal,
-                ref_start,
-                start
+            local_data.last_target_index = unsafe { target.player_index.copy_inner() };
+
+            if distance(local_data.next_target_pos, origin) <= BOT_PATH_NODE_RANGE {
+                local_data.last_time_node_reached = unsafe { helper.globals.cur_time.copy_inner() };
+                local_data.next_target_pos = nav
+                    .next_point()
+                    .expect("should always have enough points here");
+            }
+
+            let diff = local_data.next_target_pos - origin;
+            let angley = diff.y.atan2(diff.x) * 180. / std::f32::consts::PI;
+            let anglex = diff.z.atan2((diff.x.powi(2) + diff.y.powi(2)).sqrt()) * 180.
+                / std::f32::consts::PI;
+
+            cmd.world_view_angles = Vector3::new(-anglex, angley, 0.);
+            cmd.move_.x = 1.0;
+            cmd.buttons |= Action::Forward as u32 | Action::Speed as u32;
+
+            if is_timedout(local_data.last_time_node_reached, &helper, 100.) {
+                try_avoid_obstacle(&mut cmd, &helper);
+            }
+
+            cmd
+        }
+        9 => {
+            let mut cmd = CUserCmd::new_empty(&helper);
+            cmd.world_view_angles = helper.angles + Vector3::new(0., 10., 0.);
+
+            local_data.counter += 1;
+            if local_data.counter % 4 == 0 {
+                cmd.buttons |= Action::Duck as u32;
+            }
+
+            cmd
+        }
+        10 => {
+            let mut cmd = CUserCmd::new_basic_move(
+                Vector3::new(1.0, 0., 0.),
+                Action::Forward as u32,
+                &helper,
             );
+            cmd.world_view_angles = Vector3::new(0., 10., 0.);
+            cmd.local_view_angles = helper.angles + Vector3::new(0., 10., 0.);
 
-            let mut path = [0; 100];
-            let mut path_size = 0;
-            let unk: i64 = 0;
-
-            unsafe {
-                (dt_funcs.dtNavMeshQuery__findPath)(
-                    nav,
-                    ref_start,
-                    ref_goal,
-                    &start,
-                    &goal,
-                    // std::ptr::null(),
-                    &filter,
-                    path.as_mut_ptr(),
-                    (&unk as *const i64).cast(),
-                    &mut path_size,
-                    path.len() as i32,
-                )
-            };
-
-            if path_size == 0 {
-                log::warn!("failed to find path");
-                break 'end CUserCmd::new_empty(&helper);
-            }
-
-            log::info!("{path_size} {path:?}");
-
-            // for polyref in path.iter().cloned().array_chunks::<2>() {
-
-            // }
-            // ENGINE_INTERFACES.wait().debug_overlay.AddLineOverlay(, , , , , , )
-
-            CUserCmd::new_empty(&helper)
+            cmd
         }
         _ => CUserCmd::new_empty(&helper),
     })?;
@@ -615,10 +656,18 @@ pub(super) fn get_cmd(
     Some(cmd)
 }
 
-unsafe fn find_closest_player<'a>(
+fn is_timedout(
+    last_time_node_reached: f32,
+    helper: &CUserCmdHelper<'_>,
+    time_elasped: f32,
+) -> bool {
+    last_time_node_reached + time_elasped <= unsafe { helper.globals.cur_time.copy_inner() }
+}
+
+unsafe fn find_player_in_view<'a>(
     pos: Vector3,
     team: i32,
-    helper: &CUserCmdHelper,
+    helper: &'a CUserCmdHelper,
 ) -> Option<(&'a mut CPlayer, bool)> {
     let mut v = Vector3::ZERO;
     if let Some(target) = unsafe {
@@ -627,31 +676,50 @@ unsafe fn find_closest_player<'a>(
             .filter(|player| **player.team != team && **player.team != 0)
             .filter(|player| (helper.sv_funcs.is_alive)(*player) != 0)
             .map(|player| (*player.get_origin(&mut v), player))
-            .map(|(target, player)| (view_rate(helper, pos, target, player), player))
+            .filter(|(target, _)| distance(*target, pos) <= BOT_VISON_RANGE)
+            .map(|(target, player)| (dbg!(view_rate(helper, pos, target, player)), player))
             .find(|(dist, _)| *dist >= 1.0)
             .map(|(_, player)| player)
     } {
         return Some((target, true));
     }
 
-    let mut targets = unsafe {
-        (0..32)
-            .filter_map(|i| (helper.sv_funcs.get_player_by_index)(i + 1).as_mut())
-            .filter(|player| **player.team != team && **player.team != 0)
-            .filter(|player| (helper.sv_funcs.is_alive)(*player) != 0)
-            .map(|player| (*player.get_origin(&mut v), player))
-            // .map(|(target, player)| (view_rate(helper, pos, target, player), player))
-            .map(|(target, player)| (distance_rate(pos, target), player))
-            // .filter(|(target, _)| view_rate(helper, pos, *target) == 1000)
-            .collect::<Vec<(i64, &mut CPlayer)>>()
-    };
+    closest_player(pos, team, helper).map(|player| (player, false))
+}
 
-    targets.sort_by(|(dis1, _), (dis2, _)| dis1.cmp(dis2));
-    // targets.into_iter().last().map(|(_, player)| player) // for view_rate
-    targets
-        .into_iter()
-        .next()
-        .map(|(_, player)| (player, false)) // for distance_rate
+fn farthest_player<'a>(
+    pos: Vector3,
+    team: i32,
+    helper: &'a CUserCmdHelper,
+) -> Option<&'a mut CPlayer> {
+    distance_iterator(&pos, &team, helper)
+        .reduce(|closer, other| if closer.0 < other.0 { other } else { closer })
+        .map(|(_, player)| player)
+}
+
+fn closest_player<'a>(
+    pos: Vector3,
+    team: i32,
+    helper: &'a CUserCmdHelper,
+) -> Option<&'a mut CPlayer> {
+    distance_iterator(&pos, &team, helper)
+        .reduce(|closer, other| if closer.0 < other.0 { other } else { closer })
+        .map(|(_, player)| player)
+}
+
+#[inline(always)]
+fn distance_iterator<'b, 'a: 'b>(
+    pos: &'b Vector3,
+    team: &'b i32,
+    helper: &'a CUserCmdHelper,
+) -> impl Iterator<Item = (i64, &'a mut CPlayer)> + 'b {
+    static mut V: Vector3 = Vector3::ZERO;
+    (0..32)
+        .filter_map(|i| unsafe { (helper.sv_funcs.get_player_by_index)(i + 1).as_mut() })
+        .filter(|player| unsafe { **player.team != *team && **player.team != 0 })
+        .filter(|player| unsafe { (helper.sv_funcs.is_alive)(*player) != 0 })
+        .map(|player| (unsafe { *player.get_origin(&mut V) }, player))
+        .map(|(target, player)| (distance(*pos, target) as i64, player))
 }
 
 #[allow(unused)]
@@ -661,34 +729,85 @@ unsafe fn view_rate(
     v2: Vector3,
     player: *mut CPlayer,
 ) -> f32 {
-    const POS_OFFSET: Vector3 = Vector3::new(0., 0., 50.);
+    const POS_OFFSET: Vector3 = Vector3::new(0., 0., 20.);
 
-    let (v1, v2) = (v1 + POS_OFFSET, v2 + POS_OFFSET);
+    // let (v1, v2) = (v1, v2);
 
     // let id = ((player.offset(0x30) as usize) & 0xffff);
     // let id = (helper.sv_funcs.base.offset(0xb6ab58) as usize + id * 30) as i8 * -1;
 
     const TRACE_MASK_SHOT: i32 = 1178615859;
     const TRACE_MASK_SOLID_BRUSHONLY: i32 = 16907;
+    const TRACE_COLLISION_GROUP_BLOCK_WEAPONS: i32 = 0x12; // 18
 
     let mut result: MaybeUninit<TraceResults> = MaybeUninit::zeroed();
-    (helper.sv_funcs.trace_line_simple)(
-        &v2,
-        &v1,
-        TRACE_MASK_SHOT as i8,
-        0,
-        0,
-        0,
-        0,
+    // (helper.sv_funcs.util_trace_line)(
+    //     &v2,
+    //     &v1,
+    //     // TRACE_MASK_SHOT as i8,
+    //     TRACE_MASK_SHOT.to_be_bytes()[3] as i8,
+    //     (player as usize).to_be_bytes()[3] as i8,
+    //     TRACE_COLLISION_GROUP_BLOCK_WEAPONS,
+    //     20, // z offset
+    //     0,
+    //     result.as_mut_ptr(),
+    // );
+    // let result = result.assume_init();
+
+    let mut ray = Ray {
+        start: VectorAligned { vec: v1, w: 0. },
+        delta: VectorAligned {
+            vec: v2 - v1 + POS_OFFSET,
+            w: 0.,
+        },
+        offset: VectorAligned {
+            vec: Vector3::new(0., 0., 0.),
+            w: 0.,
+        },
+        unk3: 0.,
+        unk4: 0,
+        unk5: 0.,
+        unk6: 1103806595072,
+        unk7: 0.,
+        is_ray: true,
+        is_swept: false,
+        is_smth: false,
+        flags: 0,
+    };
+
+    (helper.engine_funcs.trace_ray)(
+        (*helper.sv_funcs.ctraceengine) as *const libc::c_void,
+        &mut ray,
+        TRACE_MASK_SHOT as u32,
+        // std::ptr::null_mut(),
         result.as_mut_ptr(),
     );
     let result = result.assume_init();
 
-    // (result.fraction * 1000.) as i64
-    result.fraction
+    if !result.start_solid && result.fraction_left_solid == 0.0 {
+        result.fraction
+    } else {
+        0.0
+    }
 }
 
-#[allow(unused)]
-fn distance_rate(pos: Vector3, target: Vector3) -> i64 {
-    ((pos.x - target.x).powi(2) as f64 * (pos.y - target.y).powi(2) as f64) as i64
+fn try_avoid_obstacle(cmd: &mut CUserCmd, helper: &CUserCmdHelper) {
+    cmd.move_ = Vector3::new(
+        1.,
+        if unsafe { helper.globals.frame_count.copy_inner() } / 100 % 2 == 0 {
+            -1.
+        } else {
+            1.
+        },
+        0.,
+    );
+    cmd.buttons |= Action::Forward as u32
+        | Action::Walk as u32
+        | (unsafe { helper.globals.frame_count.copy_inner() } / 10 % 4 == 0)
+            .then_some(Action::Jump as u32)
+            .unwrap_or_default();
+}
+
+fn distance(pos: Vector3, target: Vector3) -> f32 {
+    ((pos.x - target.x).powi(2) + (pos.y - target.y).powi(2)).sqrt()
 }

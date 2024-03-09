@@ -1,5 +1,7 @@
 #![allow(clippy::too_many_arguments)]
 
+use std::cell::RefCell;
+
 use libc::{c_char, c_void};
 use once_cell::sync::OnceCell;
 use rrplug::{
@@ -7,7 +9,7 @@ use rrplug::{
     prelude::*,
 };
 
-use crate::utils::create_source_interface;
+use crate::{bindings::ENGINE_FUNCTIONS, utils::create_source_interface};
 
 use self::concommands::register_concommands;
 
@@ -15,6 +17,8 @@ mod concommands;
 mod hooks;
 
 pub static ENGINE_INTERFACES: OnceCell<EngineInterfaces> = OnceCell::new();
+pub static HAS_BEEN_FORCED_BOX: EngineGlobal<RefCell<Option<ConVarStruct>>> =
+    EngineGlobal::new(RefCell::new(None));
 
 pub struct EngineInterfaces {
     pub debug_overlay: &'static IVDebugOverlay, // since it's a ptr to class which has a ptr to vtable
@@ -40,14 +44,35 @@ impl Plugin for Interfaces {
         Self {}
     }
 
+    fn on_sqvm_created(&self, _sqvm_handle: &CSquirrelVMHandle, _engine_token: EngineToken) {}
+
     fn on_dll_load(&self, engine: Option<&EngineData>, dll_ptr: &DLLPointer, token: EngineToken) {
         hooks::hook(dll_ptr);
 
+        if let WhichDll::Server = dll_ptr.which_dll() {
+            let convar = ConVarStruct::find_convar_by_name("enable_debug_overlays", token)
+                .expect("enable_debug_overlays should exist");
+            convar.set_value_i32(1, token);
+        }
+
         let Some(engine) = engine else { return };
 
-        let convar = ConVarStruct::find_convar_by_name("enable_debug_overlays", token)
-            .expect("enable_debug_overlays should exist");
-        convar.set_value_i32(1, token);
+        engine
+            .register_convar("try_set_pos", "1", "test", 0, token)
+            .unwrap();
+
+        let box_convar = ConVarStruct::try_new(
+            &ConVarRegister::new(
+                "force_mp_box",
+                "1",
+                0,
+                "will put into mp_box if you are not on mp_box",
+            ),
+            token,
+        )
+        .unwrap();
+
+        _ = HAS_BEEN_FORCED_BOX.get(token).replace(Some(box_convar));
 
         register_concommands(engine, token);
 
@@ -73,6 +98,49 @@ impl Plugin for Interfaces {
     }
 
     fn runframe(&self, token: EngineToken) {
+        match HAS_BEEN_FORCED_BOX.get(token).borrow().as_ref() {
+            Some(convar) if convar.get_value_i32() == 1 => {
+                let engine = ENGINE_FUNCTIONS.wait();
+                let host_state = unsafe {
+                    engine
+                        .host_state
+                        .as_mut()
+                        .expect("host state should be valid")
+                };
+
+                let level_name = host_state
+                    .level_name
+                    .iter()
+                    .cloned()
+                    .filter(|i| *i != 0)
+                    .filter_map(|i| char::from_u32(i as u32))
+                    .collect::<String>();
+
+                if level_name != "mp_box" {
+                    log::info!("go to mp_box. NOW!");
+
+                    unsafe {
+                        (engine.cbuf_add_text)(
+                            (engine.cbuf_get_current_player)(),
+                            "map mp_box\0".as_ptr().cast(),
+                            crate::bindings::CmdSource::Code,
+                        )
+                    };
+                    // host_state.next_state = HostState::NewGame;
+                    // unsafe { set_c_char_array(&mut host_state.level_name, "mp_box") };
+                } else {
+                    convar.set_value_i32(0, token)
+                }
+            }
+            None => {}
+            Some(_) => {}
+        }
+
+        if ConVarStruct::find_convar_by_name("try_set_pos", token)
+            .map(|convar| convar.get_value_i32() == 1)
+            .unwrap_or_default()
+        {};
+
         let Ok(convar) = ConVarStruct::find_convar_by_name("idcolor_ally", token) else {
             return;
         };
@@ -150,4 +218,5 @@ create_external_interface! {
 // class IVDebugOverlay
 // {
 //   public:
+// };
 // };

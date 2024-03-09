@@ -138,9 +138,10 @@ offset_struct! {
         absolute_frame_time: f32 where offset(0xc),
         cur_time: f32 where offset(0x10),
         frametime: f32 where offset(0x30),
+
         // there is stuff here too (I skiped things)
         tick_count: u32 where offset(0x3C),
-        // there is more but I don't n eed more
+        tick_interval: f32 where offset(0x40),
     }
 }
 
@@ -162,9 +163,11 @@ pub enum CmdSource {
 }
 
 #[repr(C)]
+#[repr(align(32))]
 #[derive(Debug)]
 pub struct TraceResults {
-    pub gap_0: [c_char; 15],
+    pub start_pos: Vector3,
+    pub unk1: f32,
     pub end_pos: Vector3,
     pub gap_0x1c: [c_char; 4],
     pub surfce_normal: Vector3,
@@ -186,6 +189,65 @@ pub struct TraceResults {
     pub static_prop_index: i32,
 }
 
+#[repr(C)]
+#[allow(dead_code)]
+pub enum HostState {
+    NewGame = 0,
+    LoadGame,
+    ChangeLevelSp,
+    ChangeLevelMp,
+    Run,
+    GameShutdown,
+    Shutdown,
+    Restart,
+}
+
+#[repr(C)]
+pub struct CHostState {
+    pub current_state: HostState,
+    pub next_state: HostState,
+    pub vec_location: [i32; 3],
+    pub ang_location: [i32; 3],
+    pub level_name: [c_char; 32],
+    pub map_group_name: [c_char; 32],
+    pub landmark_name: [c_char; 32],
+    pub save_name: [c_char; 32],
+    pub short_frame_time: i32, // run a few one-tick frames to avoid large timesteps while loading assets
+    pub active_game: bool,
+    pub remember_location: bool,
+    pub background_level: bool,
+    pub waiting_for_connection: bool,
+    pub let_tools_override_load_game_ents: bool, // During a load game, this tells Foundry to override ents that are selected in Hammer.
+    pub split_screen_connect: bool,
+    pub game_has_shut_down_and_flushed_memory: bool, // This is false once we load a map into memory, and set to true once the map is unloaded
+    pub workshop_map_download_pending: bool,
+}
+
+#[repr(C)]
+#[repr(align(16))]
+#[derive(Debug, Copy, Clone)]
+pub struct VectorAligned {
+    pub vec: Vector3,
+    pub w: f32,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct Ray {
+    pub start: VectorAligned,
+    pub delta: VectorAligned,
+    pub offset: VectorAligned,
+    pub unk3: f32,
+    pub unk4: ::std::os::raw::c_longlong,
+    pub unk5: f32,
+    pub unk6: ::std::os::raw::c_longlong,
+    pub unk7: f32,
+    pub is_ray: bool,
+    pub is_swept: bool,
+    pub is_smth: bool,
+    pub flags: ::std::os::raw::c_int,
+}
+
 // struct IServerGameEnts {}
 
 // a really interesting function : FUN_00101370
@@ -204,9 +266,9 @@ offset_functions! {
         get_current_playlist_var = unsafe extern "C" fn(*const c_char, c_int) -> *const c_char where offset(0x18C680);
         globals = *mut CGlobalVars where offset(0x7C6F70);
         render_line = unsafe extern "C" fn(*const Vector3, *const Vector3, Color, bool) where offset(0x192A70);
+        cgame_client_client_printf = unsafe extern "C" fn(edict: u16, msg: *const c_char) where offset(0x1016A0);
 
         props_and_wolrd_filter = *const c_void where offset(0x5eb980);
-        trace_ray = unsafe extern "C" fn(this: *const c_void, ray: *const c_void, maskf: f32, filter: *const c_void, trace: *mut TraceResults ) where offset(0x14eeb0);
 
         cbuf_add_text = unsafe extern "C" fn(i32, *const c_char, CmdSource) where offset(0x1203B0);
         cbuf_execute = unsafe extern "C" fn() where offset(0x1204B0);
@@ -215,8 +277,10 @@ offset_functions! {
         cmd_exec_f = unsafe extern "C" fn(*const CCommand, bool, bool) -> () where offset(0x418380);
         cengine_client_server_cmd = unsafe extern "C" fn(*const c_void, *const c_char, bool) -> () where offset(0x54840);
         cengine_client_client_cmd = unsafe extern "C" fn(*const c_void, *const c_char) -> () where offset(0x4fb50);
+        host_state = *mut CHostState where offset(0x7CF180);
 
-        ctraceengine = *const c_void where offset(0x7c9900);
+        trace_ray_filter = unsafe extern "fastcall-unwind" fn(this: *const c_void, ray: *const Ray, maskf: u32, filter: *const c_void, trace: *mut TraceResults ) where offset(0x14eeb0);
+        trace_ray = unsafe extern "fastcall-unwind" fn(this: *const c_void, ray: *const Ray, maskf: u32, trace: *mut TraceResults ) where offset(0x14f7a0);
     }
 }
 
@@ -254,7 +318,7 @@ offset_functions! {
         replace_weapon = unsafe extern "C" fn(*const CPlayer, *const c_char, *const c_void, *const c_void) where offset(0xdbae0);
         get_active_weapon = unsafe extern "C" fn(*const CPlayer) -> *const CBaseEntity where offset(0xea4c0);
 
-        trace_line_simple = unsafe extern "C" fn(*const Vector3, *const Vector3, c_char, c_char, i32, i32, i32, *mut TraceResults )  where offset(0x2725c0);
+        util_trace_line = unsafe extern "C" fn(*const Vector3, *const Vector3, c_char, c_char, i32, i32, i32, *mut TraceResults )  where offset(0x2725c0);
 
         draw_debug_line = unsafe extern "C" fn(point1: *const Vector3, point2: *const Vector3, r: i32, g: i32, b: i32, throught_walls: bool, time: f32) where offset(0x001ccf40);
 
@@ -263,6 +327,8 @@ offset_functions! {
         register_con_command = unsafe extern "C" fn(concommand: *mut ConCommand,name: *const c_char, callback: FnCommandCallback_t, helpString: *const c_char,flags: i32, completion: unsafe extern "C-unwind" fn(arg1: *const ::std::os::raw::c_char, arg2: *mut [::std::os::raw::c_char; 128usize]) -> ::std::os::raw::c_int) -> *mut ConCommand where offset(0x723fa0);
 
         get_pet_titan = unsafe extern "C" fn(*const CPlayer) -> *const CBaseEntity where offset(0x5dd940);
+
+        ctraceengine = *const *const *const fn() where offset(0xbfbdc8);
     }
 }
 // very intersting call at server.dll + 0x151782
@@ -271,6 +337,7 @@ offset_functions! {
 offset_functions! {
     CLIENT_FUNCTIONS + ClientFunctions for WhichDll::Client => {
         get_c_player_by_index = unsafe extern "C" fn(i32) -> *mut C_Player where offset(0x348650);
+        get_local_c_player = unsafe extern "C" fn() -> *mut C_Player where offset(0x14ef40);
     }
 }
 

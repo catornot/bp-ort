@@ -1,4 +1,9 @@
-#![feature(result_option_inspect, c_variadic, iter_array_chunks)]
+#![feature(
+    result_option_inspect,
+    c_variadic,
+    iter_array_chunks,
+    iter_collect_into
+)]
 
 use admin_abuse::AdminAbuse;
 use navmesh::{RecastDetour, RECAST_DETOUR};
@@ -90,9 +95,26 @@ impl Plugin for HooksPlugin {
                     base + 0x15191a,
                     &[0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90],
                 ); // removes 1 max player on sp
+                   // utils::patch(
+                   //     base + 0x5aa01f,
+                   //     &[0x90; 30], // 40 bytes
+                   // ); // removes the world view write in run_null_command
             },
             _ => {}
         }
+    }
+
+    fn on_sqvm_created(&self, sqvm_handle: &CSquirrelVMHandle, token: EngineToken) {
+        self.bots.on_sqvm_created(sqvm_handle, token);
+        self.interfaces.on_sqvm_created(sqvm_handle, token);
+    }
+
+    fn on_sqvm_destroyed(&self, sqvm_handle: &CSquirrelVMHandle, token: EngineToken) {
+        self.bots.on_sqvm_destroyed(sqvm_handle, token)
+    }
+
+    fn runframe(&self, token: EngineToken) {
+        self.interfaces.runframe(token)
     }
 }
 

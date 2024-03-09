@@ -35,7 +35,7 @@ pub const dtPolyTypes_DT_POLYTYPE_OFFMESH_CONNECTION: dtPolyTypes = 1;
 pub type dtPolyTypes = ::std::os::raw::c_int;
 #[doc = " Configuration parameters used to define multi-tile navigation meshes.\n The values are used to allocate space during the initialization of a navigation mesh.\n @see dtNavMesh::init()\n @ingroup detour"]
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct dtNavMeshParams {
     #[doc = "< The world space origin of the navigation mesh's tile space. [(x, y, z)]"]
     pub orig: [f32; 3usize],
@@ -54,7 +54,7 @@ pub struct dtNavMeshParams {
 }
 #[doc = " Defines an navigation mesh off-mesh connection within a dtMeshTile object.\n An off-mesh connection is a user defined traversable connection made up to two vertices."]
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct dtOffMeshConnection {
     #[doc = " The endpoints of the connection."]
     pub origin: Vector3,
@@ -74,7 +74,7 @@ pub struct dtOffMeshConnection {
 }
 #[doc = " A navigation mesh based on tiles of convex polygons.\n @ingroup detour"]
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct dtNavMesh {
     #[doc = "< Tile hash lookup."]
     pub m_posLookup: *mut *mut dtMeshTile,
@@ -109,7 +109,7 @@ pub struct dtNavMesh {
 }
 #[doc = " Defines the location of detail sub-mesh data within a dtMeshTile."]
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct dtPolyDetail {
     #[doc = "< The offset of the vertices in the dtMeshTile::detailVerts array."]
     pub vertBase: ::std::os::raw::c_uint,
@@ -122,7 +122,7 @@ pub struct dtPolyDetail {
 }
 #[doc = " Defines a navigation mesh tile.\n @ingroup detour"]
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct dtMeshTile {
     #[doc = "< Counter describing modifications to the tile."]
     pub salt: ::std::os::raw::c_int,
@@ -159,7 +159,7 @@ pub struct dtMeshTile {
 }
 #[doc = " Provides high level information related to a dtMeshTile object.\n @ingroup detour"]
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct dtMeshHeader {
     #[doc = "< Tile magic number. (Used to identify the data format.)"]
     pub magic: ::std::os::raw::c_int,
@@ -206,7 +206,7 @@ pub struct dtMeshHeader {
 }
 #[doc = " Defines a polygon within a dtMeshTile object.\n @ingroup detour"]
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct dtPoly {
     #[doc = " Index to first link in linked list. (Or #DT_NULL_LINK if there is no link.)"]
     pub firstLink: ::std::os::raw::c_uint,
@@ -226,7 +226,7 @@ pub struct dtPoly {
 }
 #[doc = " Defines a link between polygons.\n @note This structure is rarely if ever used by the end user.\n @see dtMeshTile"]
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct dtLink {
     #[doc = "< Neighbour reference. (The neighbor that is linked to.)"]
     pub ref_: dtPolyRef,
@@ -246,7 +246,7 @@ pub struct dtLink {
 }
 #[doc = " Bounding volume node.\n @note This structure is rarely if ever used by the end user.\n @see dtMeshTile"]
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct dtBVNode {
     #[doc = "< Minimum bounds of the node's AABB. [(x, y, z)]"]
     pub bmin: [::std::os::raw::c_ushort; 3usize],
@@ -293,7 +293,7 @@ pub type PS5 = *mut S5;
 pub type PS4 = *mut S4;
 pub type PS2 = *mut S2;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct S3 {
     pub entry_0: longlong,
     pub entry_1: *mut S4,
@@ -302,19 +302,19 @@ pub struct S3 {
     pub entry_4: ::std::os::raw::c_int,
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct S4 {
     pub entry_0: longlong,
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct S5 {
     pub entry_0: longlong,
     pub entry_1: ::std::os::raw::c_int,
     pub entry_2: ::std::os::raw::c_int,
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct S6 {
     pub entry_0: [::std::os::raw::c_char; 4672usize],
     pub entry_1: ::std::os::raw::c_int,
@@ -325,7 +325,7 @@ pub struct S6 {
 }
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct dtQueryData {
     pub status: dtStatus,
     pub lastBestNode: *const dtBVNode,
@@ -339,14 +339,14 @@ pub struct dtQueryData {
     pub raycastLimitSqr: f32,
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct dtNodeQueue {
     pub m_heap: *const *const (),
     pub m_capacity: i32,
     pub m_size: i32,
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct dtNavMeshQuery {
     pub nav: *mut dtNavMesh,
     pub data: dtQueryData,
@@ -355,7 +355,7 @@ pub struct dtNavMeshQuery {
     pub m_openList: *const dtNodeQueue,
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct S1 {
     pub entry_0: longlong,
     pub entry_1: *mut S2,
@@ -365,13 +365,13 @@ pub struct S1 {
     pub entry_5: ::std::os::raw::c_int,
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct S2 {
     pub entry_0: longlong,
 }
 pub type PdtQueryFilter = *mut dtQueryFilter;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct dtQueryFilter {
     pub m_areaCost: [f32; 32usize],
     pub m_includeFlags: ushort,
@@ -384,7 +384,7 @@ pub type dtStatus64 = i64;
 
 pub const MAX_HULLS: ::std::os::raw::c_int = 5;
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct CAI_NodeLink {
     pub srcId: ::std::os::raw::c_short,
     pub destId: ::std::os::raw::c_short,
@@ -395,7 +395,7 @@ pub struct CAI_NodeLink {
     pub flags: i64,
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct CAI_NodeLinkDisk {
     pub srcId: ::std::os::raw::c_short,
     pub destId: ::std::os::raw::c_short,
@@ -403,7 +403,7 @@ pub struct CAI_NodeLinkDisk {
     pub hulls: [bool; 5usize],
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct CAI_Node {
     pub index: ::std::os::raw::c_int,
     pub x: f32,
@@ -428,7 +428,7 @@ pub struct CAI_Node {
     pub unk10: [::std::os::raw::c_char; 8usize],
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct CAI_NodeDisk {
     pub x: f32,
     pub y: f32,
@@ -444,7 +444,7 @@ pub struct CAI_NodeDisk {
     pub unk6: [::std::os::raw::c_char; 8usize],
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct UnkNodeStruct0 {
     pub index: ::std::os::raw::c_int,
     pub unk0: ::std::os::raw::c_char,
@@ -465,7 +465,7 @@ pub struct UnkNodeStruct0 {
     pub unk5: ::std::os::raw::c_char,
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct UnkLinkStruct1 {
     pub unk0: ::std::os::raw::c_short,
     pub unk1: ::std::os::raw::c_short,
@@ -475,7 +475,7 @@ pub struct UnkLinkStruct1 {
     pub unk5: ::std::os::raw::c_char,
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct CAI_ScriptNode {
     pub x: f32,
     pub y: f32,
@@ -483,7 +483,7 @@ pub struct CAI_ScriptNode {
     pub scriptdata: u64,
 }
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct CAI_Network {
     pub unk0: [::std::os::raw::c_char; 8usize],
     pub linkcount: ::std::os::raw::c_int,

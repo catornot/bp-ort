@@ -2,7 +2,7 @@ use rrplug::{bindings::class_types::cplayer::CPlayer, prelude::*};
 
 use crate::{
     bindings::{EngineFunctions, ServerFunctions},
-    utils::from_c_string,
+    utils::{from_c_string, send_client_print},
 };
 
 use self::{slay::register_slay_command, switch::register_switch_command};
@@ -122,6 +122,15 @@ pub fn admin_check<'a, 'b>(
             "Client needs to have admin to run {}",
             command.get_command()
         );
+        if let Some(admin) = caller_player.as_ref() {
+            _ = send_client_print(
+                admin,
+                &format!(
+                    "You need to be an admin on this server to run {}",
+                    command.get_command()
+                ),
+            )
+        }
     }
 
     (has_admin, caller_player)

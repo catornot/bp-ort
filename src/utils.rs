@@ -1,4 +1,4 @@
-use rrplug::prelude::*;
+use rrplug::{bindings::class_types::cplayer::CPlayer, mid::utils::try_cstring, prelude::*};
 use std::{
     ffi::{c_char, c_void, CStr},
     marker::PhantomData,
@@ -10,7 +10,7 @@ use windows_sys::Win32::System::{
     Threading::GetCurrentProcess,
 };
 
-use crate::interfaces::ENGINE_INTERFACES;
+use crate::{bindings::ENGINE_FUNCTIONS, interfaces::ENGINE_INTERFACES};
 
 pub struct Pointer<'a, T> {
     pub ptr: *const T,
@@ -81,47 +81,22 @@ pub(crate) unsafe fn patch(addr: usize, bytes: &[u8]) {
     );
 }
 
-// #[allow(unused)]
-// pub(crate) unsafe fn draw_line(
-//     v1: &Vector3,
-//     v2: &Vector3,
-//     color: Color,
-//     depthtest: bool,
-//     duration: f32,
-// ) {
-//     let line_overlay: unsafe extern "C" fn(
-//         *const (),
-//         *const Vector3,
-//         *const Vector3,
-//         i32,
-//         i32,
-//         i32,
-//         i32,
-//         bool,
-//         f32,
-//     ) = std::mem::transmute(
-//         ENGINE_INTERFACES
-//             .get()
-//             .unwrap_unchecked()
-//             .debug_overlay
-//             .as_ref()
-//             .unwrap()
-//             .as_ref()
-//             .unwrap()[4],
-//     );
+pub(crate) fn send_client_print(player: &CPlayer, msg: &str) -> Option<()> {
+    let engine = ENGINE_FUNCTIONS.wait();
 
-//     line_overlay(
-//         std::ptr::null(),
-//         v1,
-//         v2,
-//         color._color[0] as i32,
-//         color._color[1] as i32,
-//         color._color[2] as i32,
-//         color._color[3] as i32,
-//         depthtest,
-//         duration,
-//     )
-// }
+    let edict = unsafe {
+        engine
+            .client_array
+            .add(player.player_index.copy_inner() as usize - 1)
+            .as_ref()
+    }
+    .map(|client| unsafe { client.edict.copy_inner() })?;
+    let msg = try_cstring(msg).ok()?;
+
+    unsafe { (engine.cgame_client_client_printf)(edict, msg.as_ptr()) };
+
+    Some(())
+}
 
 pub(crate) unsafe fn client_command(edict: u16, command: *const c_char) {
     const ZERO_STRING: *const c_char = "\0".as_ptr() as *const _;
