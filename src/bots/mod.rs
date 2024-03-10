@@ -68,6 +68,7 @@ pub(super) struct BotData {
     nav_query: Option<Navigation>,
     next_target_pos: Vector3,
     last_time_node_reached: f32,
+    last_bad_path: f32,
     last_target_index: u32,
 }
 

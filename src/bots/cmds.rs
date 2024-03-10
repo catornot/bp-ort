@@ -17,7 +17,7 @@ use crate::{
 
 use super::{BotData, SIMULATE_TYPE_CONVAR, TASK_MAP};
 
-// const GROUND_OFFSET: Vector3 = Vector3::new(0., 0., 50.);
+const GROUND_OFFSET: Vector3 = Vector3::new(0., 0., 20.);
 const BOT_VISON_RANGE: f32 = 3000.;
 const BOT_PATH_NODE_RANGE: f32 = 50.;
 const BOT_PATH_RECAL_RANGE: f32 = 600.;
@@ -420,9 +420,22 @@ pub(super) fn get_cmd(
                         local_data.last_time_node_reached =
                             unsafe { helper.globals.cur_time.copy_inner() };
                         local_data.next_target_pos = origin;
+
+                        // this might be the reason of the sudden aim shift or not really idk
+                        if local_data.last_bad_path + 1.
+                            >= unsafe { helper.globals.cur_time.copy_inner() }
+                        {
+                            try_avoid_obstacle(&mut cmd, &helper);
+
+                            break 'end;
+                        }
+
                         if let Err(err) = nav.new_path(origin, *target_pos, dt_funcs) {
                             log::warn!("navigation pathing failed stuck somewhere probably! {err}");
                             try_avoid_obstacle(&mut cmd, &helper);
+
+                            local_data.last_bad_path =
+                                unsafe { helper.globals.cur_time.copy_inner() };
 
                             break 'end;
                         }
@@ -677,8 +690,8 @@ unsafe fn find_player_in_view<'a>(
             .filter(|player| (helper.sv_funcs.is_alive)(*player) != 0)
             .map(|player| (*player.get_origin(&mut v), player))
             .filter(|(target, _)| distance(*target, pos) <= BOT_VISON_RANGE)
-            .map(|(target, player)| (dbg!(view_rate(helper, pos, target, player)), player))
-            .find(|(dist, _)| *dist >= 1.0)
+            .map(|(target, player)| ((view_rate(helper, pos, target, player)), player))
+            .find(|(dist, _)| *dist == 1.0)
             .map(|(_, player)| player)
     } {
         return Some((target, true));
@@ -729,8 +742,6 @@ unsafe fn view_rate(
     v2: Vector3,
     player: *mut CPlayer,
 ) -> f32 {
-    const POS_OFFSET: Vector3 = Vector3::new(0., 0., 20.);
-
     const TRACE_MASK_SHOT: i32 = 1178615859;
     const TRACE_MASK_SOLID_BRUSHONLY: i32 = 16907;
     const TRACE_COLLISION_GROUP_BLOCK_WEAPONS: i32 = 0x12; // 18
@@ -739,7 +750,7 @@ unsafe fn view_rate(
     let mut ray = Ray {
         start: VectorAligned { vec: v1, w: 0. },
         delta: VectorAligned {
-            vec: v2 - v1 + POS_OFFSET,
+            vec: v2 - v1 + GROUND_OFFSET,
             w: 0.,
         },
         offset: VectorAligned {
@@ -749,7 +760,7 @@ unsafe fn view_rate(
         unk3: 0.,
         unk4: 0,
         unk5: 0.,
-        unk6: 1103806595072,
+        unk6: 0x201400b, // 1103806595072,
         unk7: 0.,
         is_ray: true,
         is_swept: false,
