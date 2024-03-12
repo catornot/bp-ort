@@ -6,10 +6,9 @@ use rrplug::{
     mid::utils::str_from_char_ptr,
     prelude::*,
 };
-use std::ffi::c_char;
 
 use crate::{
-    admin_abuse::{admin_check, filter_target},
+    admin_abuse::{admin_check, execute_for_matches, forward_to_server},
     bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
     utils::{from_c_string, iterate_c_array_sized},
 };
@@ -17,7 +16,7 @@ use crate::{
 pub fn register_switch_command(engine_data: &EngineData, token: EngineToken) {
     _ = engine_data.register_concommand_with_completion(
         "switch",
-        switch_command,
+        forward_to_server,
         "switch the team of the target",
         FCVAR_CLIENTDLL as i32,
         switch_completion,
@@ -44,26 +43,7 @@ pub fn register_switch_command(engine_data: &EngineData, token: EngineToken) {
 }
 
 #[rrplug::concommand]
-pub fn switch_command(command: CCommandResult) {
-    unsafe {
-        let engine = ENGINE_FUNCTIONS.wait();
-        let cmd = format!(
-            "switch_server {}\0",
-            command
-                .get_args()
-                .iter()
-                .cloned()
-                .map(|s| s + " ")
-                .collect::<String>()
-        );
-        let cmd_ptr = cmd.as_ptr() as *const c_char;
-
-        (engine.cengine_client_server_cmd)(std::ptr::null_mut(), cmd_ptr, true);
-    }
-}
-
-#[rrplug::concommand]
-pub fn switch_server_command(command: CCommandResult) {
+fn switch_server_command(command: CCommandResult) {
     let engine = ENGINE_FUNCTIONS.wait();
     let funcs = SERVER_FUNCTIONS.wait();
 
@@ -71,11 +51,12 @@ pub fn switch_server_command(command: CCommandResult) {
     if !check {
         return;
     }
-    let client_array = ENGINE_FUNCTIONS.wait().client_array;
+
     let filter = command.get_arg(0).or_else(|| unsafe {
         admin.and_then(|admin| {
             str_from_char_ptr(
-                client_array
+                engine
+                    .client_array
                     .add(admin.player_index.copy_inner() as usize - 1)
                     .as_ref()?
                     .name
@@ -85,24 +66,19 @@ pub fn switch_server_command(command: CCommandResult) {
         })
     });
 
-    unsafe { iterate_c_array_sized::<_, 32>(client_array.into()) }
-        .enumerate()
-        .filter(|(_, client)| unsafe { *client.signon.get_inner() } == SignonState::FULL)
-        .filter_map(|(e, client)| unsafe {
-            Some((
-                (funcs.get_player_by_index)(e as i32 + 1).as_mut()?,
-                from_c_string::<String>(client.name.get_inner().as_ptr()),
-            ))
-        })
-        .filter(|(player, _)| unsafe { (funcs.is_alive)(*player) != 0 })
-        .filter(|(player, name)| filter_target(filter, player, name))
-        .for_each(|(player, _)| unsafe {
+    execute_for_matches(
+        filter,
+        |player| unsafe {
             *player.team.get_inner_mut() = if player.team.copy_inner() == 2 { 3 } else { 2 }
-        });
+        },
+        false,
+        funcs,
+        engine,
+    );
 }
 
 #[rrplug::concommand]
-pub fn setteam(command: CCommandResult) {
+fn setteam(command: CCommandResult) {
     if command.get_arg(0).is_none() {
         log::warn!("Usage:  {} < team >", command.get_command());
         return;

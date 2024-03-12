@@ -1,7 +1,7 @@
 use once_cell::sync::Lazy;
 use rand::Rng;
 use rrplug::bindings::class_types::cplayer::CPlayer;
-use rrplug::mid::utils::try_cstring;
+use rrplug::mid::utils::{str_from_char_ptr, try_cstring};
 use rrplug::prelude::*;
 use rrplug::{
     bindings::{
@@ -17,6 +17,7 @@ use std::{
     {ops::Deref, sync::Mutex},
 };
 
+use crate::bindings::{EngineFunctions, ServerFunctions};
 use crate::{
     bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
     bots::{
@@ -44,8 +45,10 @@ pub const DEFAULT_SIMULATE_TYPE: i32 = 6;
 thread_local! {
     pub static MAX_PLAYERS: RefCell<u32> = const { RefCell::new(32) };
 }
-pub(super) static mut TASK_MAP: Lazy<[BotData; 64]> =
-    Lazy::new(|| std::array::from_fn(|_| BotData::default()));
+pub(super) static BOT_DATA_MAP: EngineGlobal<RefCell<Lazy<[BotData; 64]>>> =
+    EngineGlobal::new(RefCell::new(Lazy::new(|| {
+        std::array::from_fn(|_| BotData::default())
+    })));
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum TitanClass {
@@ -70,6 +73,7 @@ pub(super) struct BotData {
     last_time_node_reached: f32,
     last_bad_path: f32,
     last_target_index: u32,
+    target_pos: Vector3,
 }
 
 #[derive(Debug)]
@@ -84,6 +88,7 @@ impl Plugin for Bots {
 
     fn new(_: bool) -> Self {
         register_sq_functions(bot_set_titan);
+        register_sq_functions(bot_set_target_pos);
 
         Self {
             clang_tag: Mutex::new("BOT".into()),
@@ -103,7 +108,7 @@ impl Plugin for Bots {
                     "okhuh",
                     "BOT-7274",
                     "Standby_For_BotFall",
-                    "ifissmthismodded",
+                    "ifthisismodded",
                     "whenmp_boxgameplay?",
                     "rust<3",
                     "hi_Fifty",
@@ -114,16 +119,14 @@ impl Plugin for Bots {
                     "bornet",
                 ]
                 .into_iter()
-                .map(|s| s.to_string())
+                .map(str::to_string)
                 .collect(),
             ),
         }
     }
 
     fn on_sqvm_created(&self, handle: &CSquirrelVMHandle, _token: EngineToken) {
-        // DISABLED IN LIBS.RS
         match handle.get_context() {
-            // doesn't seam to work anymore?
             ScriptContext::SERVER => {}
             _ => return,
         }
@@ -213,7 +216,7 @@ impl Plugin for Bots {
 
         _ = engine.register_concommand_with_completion(
             "bot_spawn",
-            spawn_fake_player,
+            spawn_fake_player_command,
             "spawns a bot",
             FCVAR_GAMEDLL as i32,
             spawn_fake_player_completion,
@@ -224,8 +227,70 @@ impl Plugin for Bots {
     }
 }
 
+fn spawn_fake_player(
+    name: String,
+    team: i32,
+    sim_type: Option<i32>,
+    server_funcs: &ServerFunctions,
+    engine_funcs: &EngineFunctions,
+    token: EngineToken,
+) -> Option<i32> {
+    let players = unsafe { iterate_c_array_sized::<_, 32>(engine_funcs.client_array.into()) }
+        .filter(|c| unsafe { c.signon.get_inner() } >= &SignonState::CONNECTED)
+        .count() as u32;
+    let max_players = MAX_PLAYERS.with(|i| *i.borrow());
+    if players >= max_players {
+        log::warn!(
+            "max players({}) reached({}) can't add more",
+            max_players,
+            players
+        );
+        return None;
+    }
+
+    let name = try_cstring(&name).unwrap_or_default();
+    let bot = unsafe {
+        (engine_funcs.create_fake_client)(
+            engine_funcs.server,
+            name.as_ptr(),
+            &'\0' as *const char as *const i8,
+            &'\0' as *const char as *const i8,
+            team,
+            0,
+        )
+    };
+
+    let client = match unsafe { bot.cast_mut().as_mut() } {
+        Some(c) => c,
+        None => {
+            log::warn!("spawned a invalid bot");
+            return None;
+        }
+    };
+
+    let edict = unsafe { **client.edict };
+    unsafe { (server_funcs.client_fully_connected)(std::ptr::null(), edict, true) };
+
+    log::info!(
+        "spawned a bot : {}",
+        unsafe { str_from_char_ptr(client.name.as_ptr()) }.unwrap_or("UNK")
+    );
+
+    *BOT_DATA_MAP
+        .get(token)
+        .borrow_mut()
+        .get_mut(edict as usize)
+        .expect("tried to get an invalid edict") = BotData {
+        sim_type,
+        nav_query: Navigation::new(Hull::Human),
+        ..Default::default()
+    };
+
+    Some(edict as i32)
+}
+
 #[rrplug::concommand]
-fn spawn_fake_player(command: CCommandResult) {
+fn spawn_fake_player_command(command: CCommandResult) {
     let plugin = PLUGIN.wait();
     let engine_funcs = ENGINE_FUNCTIONS.wait();
     let mut rng = rand::thread_rng();
@@ -250,55 +315,16 @@ fn spawn_fake_player(command: CCommandResult) {
     let sim_type = command
         .get_args()
         .get(2)
-        .and_then(|t| t.parse::<i32>().ok()); // doesn't work?
+        .and_then(|t| t.parse::<i32>().ok());
 
-    let name = try_cstring(&name).unwrap_or_default();
-    unsafe {
-        let players = iterate_c_array_sized::<_, 32>(engine_funcs.client_array.into())
-            .filter(|c| c.signon.get_inner() >= &SignonState::CONNECTED)
-            .count() as u32;
-        let max_players = MAX_PLAYERS.with(|i| *i.borrow());
-        if players >= max_players {
-            log::warn!(
-                "max players({}) reached({}) can't add more",
-                max_players,
-                players
-            );
-            return;
-        }
-
-        let bot = (engine_funcs.create_fake_client)(
-            engine_funcs.server,
-            name.as_ptr(),
-            &'\0' as *const char as *const i8,
-            &'\0' as *const char as *const i8,
-            team,
-            0,
-        );
-
-        let client = match bot.cast_mut().as_mut() {
-            Some(c) => c,
-            None => {
-                log::warn!("spawned a invalid bot");
-                return;
-            }
-        };
-
-        (SERVER_FUNCTIONS.wait().client_fully_connected)(std::ptr::null(), **client.edict, true);
-
-        log::info!(
-            "spawned a bot : {}",
-            CStr::from_ptr(client.name.as_ref() as *const [i8] as *const i8).to_string_lossy()
-        );
-
-        *TASK_MAP
-            .get_mut(**client.edict as usize)
-            .expect("tried to get an invalid edict") = BotData {
-            sim_type,
-            nav_query: Navigation::new(Hull::Human),
-            ..Default::default()
-        };
-    }
+    _ = spawn_fake_player(
+        name,
+        team,
+        sim_type,
+        SERVER_FUNCTIONS.wait(),
+        engine_funcs,
+        engine_token,
+    );
 }
 
 #[rrplug::completion]
@@ -328,6 +354,7 @@ fn spawn_fake_player_completion(current: CurrentCommand, suggestions: CommandCom
 
     suggestions.commands_used()
 }
+
 fn choose_team() -> i32 {
     let server_functions = SERVER_FUNCTIONS.wait();
 
@@ -372,19 +399,18 @@ fn clang_tag_changed() {
 
 #[rrplug::sqfunction(VM = "Server", ExportName = "BotSetTitan")]
 fn bot_set_titan(bot: Option<&mut CPlayer>, titan: String) -> Option<()> {
-    let bot_handle = unsafe {
-        TASK_MAP.get_mut(
-            ENGINE_FUNCTIONS
-                .wait()
-                .client_array
-                .add((bot?.player_index.copy_inner() - 1) as usize)
-                .as_ref()?
-                .edict
-                .copy_inner() as usize,
-        )
-    }?;
+    let mut data_maps = BOT_DATA_MAP.get(engine_token).try_borrow_mut().ok()?;
+    let bot_data = data_maps.as_mut().get_mut(unsafe {
+        ENGINE_FUNCTIONS
+            .wait()
+            .client_array
+            .add((bot?.player_index.copy_inner() - 1) as usize)
+            .as_ref()?
+            .edict
+            .copy_inner() as usize
+    })?;
 
-    bot_handle.titan = match titan.as_str().trim() {
+    bot_data.titan = match titan.as_str().trim() {
         "titan_stryder_arc" | "titan_stryder_leadwall" | "titan_stryder_ronin_prime" => {
             TitanClass::Ronin
         }
@@ -396,6 +422,34 @@ fn bot_set_titan(bot: Option<&mut CPlayer>, titan: String) -> Option<()> {
         "titan_ogre_minigun" | "titan_ogre_legion_prime" => TitanClass::Legion,
         _ => TitanClass::Ion,
     };
+
+    None
+}
+
+#[rrplug::sqfunction(VM = "Server", ExportName = "BotSetTargetPos")]
+fn bot_set_target_pos(bot: Option<&mut CPlayer>, target: Vector3) -> Option<()> {
+    let mut data_maps = BOT_DATA_MAP.get(engine_token).try_borrow_mut().ok()?;
+    let bot_data = data_maps
+        .as_mut()
+        .get_mut(unsafe { bot?.player_index.copy_inner() - 1 } as usize)?;
+
+    bot_data.target_pos = target;
+
+    None
+}
+
+#[rrplug::sqfunction(VM = "Server", ExportName = "BotSetSimulationType")]
+fn bot_set_sim_type(bot: Option<&mut CPlayer>, sim_type: i32) -> Option<()> {
+    let mut data_maps = BOT_DATA_MAP.get(engine_token).try_borrow_mut().ok()?;
+    let bot_data = data_maps
+        .as_mut()
+        .get_mut(unsafe { bot?.player_index.copy_inner() - 1 } as usize)?;
+
+    if sim_type >= 0 {
+        bot_data.sim_type = Some(sim_type);
+    } else {
+        bot_data.sim_type = None;
+    }
 
     None
 }

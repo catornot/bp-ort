@@ -2,6 +2,7 @@ use itertools::Itertools;
 use rrplug::{
     bindings::class_types::{client::SignonState, cplayer::CPlayer},
     high::vector::Vector3,
+    prelude::EngineToken,
 };
 use std::mem::MaybeUninit;
 
@@ -15,7 +16,7 @@ use crate::{
     utils::{client_command, iterate_c_array_sized},
 };
 
-use super::{BotData, SIMULATE_TYPE_CONVAR, TASK_MAP};
+use super::{BotData, BOT_DATA_MAP, SIMULATE_TYPE_CONVAR};
 
 const GROUND_OFFSET: Vector3 = Vector3::new(0., 0., 20.);
 const BOT_VISON_RANGE: f32 = 3000.;
@@ -130,7 +131,9 @@ pub fn run_bots_cmds(_paused: bool) {
         engine_functions,
     );
 
-    let bot_tasks = unsafe { TASK_MAP.as_mut() };
+    let mut bot_tasks = BOT_DATA_MAP
+        .get(unsafe { EngineToken::new_unchecked() })
+        .borrow_mut();
 
     for (mut cmd, player) in unsafe {
         iterate_c_array_sized::<_, 32>(engine_functions.client_array.into())
@@ -144,7 +147,7 @@ pub fn run_bots_cmds(_paused: bool) {
                 ))
             })
             .filter_map(|(p, edict)| {
-                let data = bot_tasks.get_mut(edict)?;
+                let data = bot_tasks.as_mut().get_mut(edict)?;
                 data.edict = edict as u16;
                 Some((
                     get_cmd(p, &helper, data.sim_type.unwrap_or(sim_type), data)?,
@@ -187,9 +190,9 @@ pub fn run_bots_cmds(_paused: bool) {
             //     *((globals.cur_time.get_inner() as *const f32).cast_mut()) = cur_time;
             // }
 
-            run_null_command(player); // doesn't really work?
+            run_null_command(player);
 
-            *player.angles.get_inner_mut() = cmd.world_view_angles
+            *player.angles.get_inner_mut() = cmd.world_view_angles // this is not really great -> bad aim
 
             // (server_functions.simulate_player)(player);
         }
@@ -240,7 +243,7 @@ pub(super) fn get_cmd(
 
             CUserCmd::new_empty(&helper)
         }
-        1 | 8 => {
+        1 | 12 => {
             local_data.counter += 1;
             if unsafe { (helper.sv_funcs.is_on_ground)(player) } != 0
                 && local_data.counter / 10 % 4 == 0
@@ -345,7 +348,7 @@ pub(super) fn get_cmd(
 
             cmd
         },
-        4..=6 => {
+        4..=7 => {
             let origin = unsafe { *player.get_origin(&mut v) };
             let team = unsafe { **player.team };
 
@@ -380,86 +383,27 @@ pub(super) fn get_cmd(
                         cmd.buttons |= Action::Dodge as u32;
                     }
                 }
-                (6, Some(((target_pos, target), false))) => 'end: {
-                    let dt_funcs = RECAST_DETOUR.wait();
-                    let debug = ENGINE_INTERFACES.wait().debug_overlay;
-                    let Some(nav) = local_data.nav_query.as_mut() else {
-                        log::warn!("null nav");
-                        break 'end;
-                    };
-
-                    if distance(*target_pos, origin) <= BOT_PATH_NODE_RANGE + 20. {
-                        break 'end;
+                (6, Some(((target_pos, target), false))) => {
+                    if path_to_target(
+                        &mut cmd,
+                        local_data,
+                        origin,
+                        *target_pos,
+                        local_data.last_target_index != unsafe { target.player_index.copy_inner() },
+                        &helper,
+                    ) {
+                        local_data.last_target_index = unsafe { target.player_index.copy_inner() }
                     }
-
-                    _ = nav.path_points.last().map(|point| unsafe {
-                        debug.AddLineOverlay(&origin, point, 0, 255, 0, true, 0.1)
-                    });
-                    nav.path_points
-                        .iter()
-                        .cloned()
-                        .tuple_windows()
-                        .for_each(|(p1, p2)| unsafe {
-                            debug.AddLineOverlay(&p1, &p2, 0, 255, 0, true, 0.5)
-                        });
-                    _ = nav.path_points.last().map(|point| unsafe {
-                        debug.AddLineOverlay(point, target_pos, 0, 255, 0, true, 0.1)
-                    });
-
-                    if nav
-                        .path_points
-                        .first()
-                        .map(|point| distance(*point, *target_pos) > BOT_PATH_RECAL_RANGE)
-                        .map(|should_recalculate| {
-                            should_recalculate
-                                || local_data.last_target_index
-                                    != unsafe { target.player_index.copy_inner() }
-                        })
-                        .unwrap_or(true)
-                    {
-                        local_data.last_time_node_reached =
-                            unsafe { helper.globals.cur_time.copy_inner() };
-                        local_data.next_target_pos = origin;
-
-                        // this might be the reason of the sudden aim shift or not really idk
-                        if local_data.last_bad_path + 1.
-                            >= unsafe { helper.globals.cur_time.copy_inner() }
-                        {
-                            try_avoid_obstacle(&mut cmd, &helper);
-
-                            break 'end;
-                        }
-
-                        if let Err(err) = nav.new_path(origin, *target_pos, dt_funcs) {
-                            log::warn!("navigation pathing failed stuck somewhere probably! {err}");
-                            try_avoid_obstacle(&mut cmd, &helper);
-
-                            local_data.last_bad_path =
-                                unsafe { helper.globals.cur_time.copy_inner() };
-
-                            break 'end;
-                        }
-                    }
-                    local_data.last_target_index = unsafe { target.player_index.copy_inner() };
-
-                    if distance(local_data.next_target_pos, origin) <= BOT_PATH_NODE_RANGE {
-                        local_data.last_time_node_reached =
-                            unsafe { helper.globals.cur_time.copy_inner() };
-                        local_data.next_target_pos = nav
-                            .next_point()
-                            .expect("should always have enough points here");
-                    }
-
-                    let diff = local_data.next_target_pos - origin;
-                    let angley = diff.y.atan2(diff.x) * 180. / std::f32::consts::PI;
-
-                    cmd.world_view_angles = Vector3::new(0., angley, 0.);
-                    cmd.move_.x = 1.0;
-                    cmd.buttons |= Action::Forward as u32 | Action::Speed as u32;
-
-                    if is_timedout(local_data.last_time_node_reached, &helper, 100.) {
-                        try_avoid_obstacle(&mut cmd, &helper);
-                    }
+                }
+                (7, Some((_, true))) => {
+                    _ = path_to_target(
+                        &mut cmd,
+                        local_data,
+                        origin,
+                        local_data.target_pos,
+                        false,
+                        &helper,
+                    );
                 }
                 _ => {}
             }
@@ -555,88 +499,37 @@ pub(super) fn get_cmd(
 
             cmd
         }
-        7 => 'end: {
-            let dt_funcs = RECAST_DETOUR.wait();
-            let debug = ENGINE_INTERFACES.wait().debug_overlay;
+        8 | 9 => 'end: {
             let mut cmd = CUserCmd::new_empty(&helper);
-            let Some(nav) = local_data.nav_query.as_mut() else {
-                log::warn!("null nav");
-                break 'end cmd;
-            };
 
             let origin = unsafe { *player.get_origin(&mut v) };
             let team = unsafe { **player.team };
             let mut v = Vector3::ZERO;
 
-            let Some(target) = farthest_player(origin, team, &helper) else {
+            let maybe_target = if sim_type == 7 {
+                farthest_player(origin, team, &helper)
+            } else {
+                closest_player(origin, team, &helper)
+            };
+
+            let Some(target) = maybe_target else {
                 break 'end cmd;
             };
             let target_pos = unsafe { *target.get_origin(&mut v) };
 
-            if distance(target_pos, origin) <= BOT_PATH_NODE_RANGE + 20. {
-                break 'end cmd;
+            if path_to_target(
+                &mut cmd,
+                local_data,
+                origin,
+                target_pos,
+                local_data.last_target_index != unsafe { target.player_index.copy_inner() },
+                &helper,
+            ) {
+                local_data.last_target_index = unsafe { target.player_index.copy_inner() }
             }
-
-            _ = nav
-                .path_points
-                .last()
-                .map(|point| unsafe { debug.AddLineOverlay(&origin, point, 0, 255, 0, true, 0.1) });
-            nav.path_points
-                .iter()
-                .cloned()
-                .tuple_windows()
-                .for_each(|(p1, p2)| unsafe {
-                    debug.AddLineOverlay(&p1, &p2, 0, 255, 0, true, 0.5)
-                });
-            _ = nav.path_points.last().map(|point| unsafe {
-                debug.AddLineOverlay(point, &target_pos, 0, 255, 0, true, 0.1)
-            });
-
-            if nav
-                .path_points
-                .first()
-                .map(|point| distance(*point, target_pos) > BOT_PATH_RECAL_RANGE)
-                .map(|should_recalculate| {
-                    should_recalculate
-                        || local_data.last_target_index
-                            != unsafe { target.player_index.copy_inner() }
-                })
-                .unwrap_or(true)
-            {
-                local_data.last_time_node_reached = unsafe { helper.globals.cur_time.copy_inner() };
-                local_data.next_target_pos = origin;
-                if let Err(err) = nav.new_path(origin, target_pos, dt_funcs) {
-                    log::warn!("navigation pathing failed stuck somewhere probably! {err}");
-                    try_avoid_obstacle(&mut cmd, &helper);
-
-                    break 'end cmd;
-                }
-            }
-            local_data.last_target_index = unsafe { target.player_index.copy_inner() };
-
-            if distance(local_data.next_target_pos, origin) <= BOT_PATH_NODE_RANGE {
-                local_data.last_time_node_reached = unsafe { helper.globals.cur_time.copy_inner() };
-                local_data.next_target_pos = nav
-                    .next_point()
-                    .expect("should always have enough points here");
-            }
-
-            let diff = local_data.next_target_pos - origin;
-            let angley = diff.y.atan2(diff.x) * 180. / std::f32::consts::PI;
-            let anglex = diff.z.atan2((diff.x.powi(2) + diff.y.powi(2)).sqrt()) * 180.
-                / std::f32::consts::PI;
-
-            cmd.world_view_angles = Vector3::new(-anglex, angley, 0.);
-            cmd.move_.x = 1.0;
-            cmd.buttons |= Action::Forward as u32 | Action::Speed as u32;
-
-            if is_timedout(local_data.last_time_node_reached, &helper, 100.) {
-                try_avoid_obstacle(&mut cmd, &helper);
-            }
-
             cmd
         }
-        9 => {
+        10 => {
             let mut cmd = CUserCmd::new_empty(&helper);
             cmd.world_view_angles = helper.angles + Vector3::new(0., 10., 0.);
 
@@ -645,9 +538,11 @@ pub(super) fn get_cmd(
                 cmd.buttons |= Action::Duck as u32;
             }
 
+            cmd.weaponselect = 2;
+
             cmd
         }
-        10 => {
+        11 => {
             let mut cmd = CUserCmd::new_basic_move(
                 Vector3::new(1.0, 0., 0.),
                 Action::Forward as u32,
@@ -667,6 +562,87 @@ pub(super) fn get_cmd(
     }
 
     Some(cmd)
+}
+
+fn path_to_target(
+    cmd: &mut CUserCmd,
+    local_data: &mut BotData,
+    origin: Vector3,
+    target_pos: Vector3,
+    should_recalcute_path: bool,
+    helper: &CUserCmdHelper,
+) -> bool {
+    let dt_funcs = RECAST_DETOUR.wait();
+    let debug = ENGINE_INTERFACES.wait().debug_overlay;
+    let Some(nav) = local_data.nav_query.as_mut() else {
+        log::warn!("null nav");
+        return false;
+    };
+
+    if distance(target_pos, origin) <= BOT_PATH_NODE_RANGE + 20. {
+        return false;
+    }
+
+    _ = nav
+        .path_points
+        .last()
+        .map(|point| unsafe { debug.AddLineOverlay(&origin, point, 0, 255, 0, true, 0.1) });
+    nav.path_points
+        .iter()
+        .cloned()
+        .tuple_windows()
+        .for_each(|(p1, p2)| unsafe { debug.AddLineOverlay(&p1, &p2, 0, 255, 0, true, 0.5) });
+    _ = nav
+        .path_points
+        .last()
+        .map(|point| unsafe { debug.AddLineOverlay(point, &target_pos, 0, 255, 0, true, 0.1) });
+
+    if nav
+        .path_points
+        .first()
+        .map(|point| distance(*point, target_pos) > BOT_PATH_RECAL_RANGE)
+        .map(|should_recalculate| should_recalculate || should_recalcute_path)
+        .unwrap_or(true)
+    {
+        local_data.last_time_node_reached = unsafe { helper.globals.cur_time.copy_inner() };
+        local_data.next_target_pos = origin;
+
+        // this might be the reason of the sudden aim shift or not really idk
+        if local_data.last_bad_path + 1. >= unsafe { helper.globals.cur_time.copy_inner() } {
+            try_avoid_obstacle(cmd, helper);
+
+            return false;
+        }
+
+        if let Err(err) = nav.new_path(origin, target_pos, dt_funcs) {
+            log::warn!("navigation pathing failed stuck somewhere probably! {err}");
+            try_avoid_obstacle(cmd, helper);
+
+            local_data.last_bad_path = unsafe { helper.globals.cur_time.copy_inner() };
+
+            return false;
+        }
+    }
+
+    if distance(local_data.next_target_pos, origin) <= BOT_PATH_NODE_RANGE {
+        local_data.last_time_node_reached = unsafe { helper.globals.cur_time.copy_inner() };
+        local_data.next_target_pos = nav
+            .next_point()
+            .expect("should always have enough points here");
+    }
+
+    let diff = local_data.next_target_pos - origin;
+    let angley = diff.y.atan2(diff.x) * 180. / std::f32::consts::PI;
+
+    cmd.world_view_angles = Vector3::new(0., angley, 0.);
+    cmd.move_.x = 1.0;
+    cmd.buttons |= Action::Forward as u32 | Action::Speed as u32;
+
+    if is_timedout(local_data.last_time_node_reached, helper, 100.) {
+        try_avoid_obstacle(cmd, helper);
+    }
+
+    true
 }
 
 fn is_timedout(
@@ -746,6 +722,7 @@ unsafe fn view_rate(
     const TRACE_MASK_SOLID_BRUSHONLY: i32 = 16907;
     const TRACE_COLLISION_GROUP_BLOCK_WEAPONS: i32 = 0x12; // 18
 
+    // should maybe revist the consturction of ray
     let mut result: MaybeUninit<TraceResults> = MaybeUninit::zeroed();
     let mut ray = Ray {
         start: VectorAligned { vec: v1, w: 0. },
@@ -760,7 +737,7 @@ unsafe fn view_rate(
         unk3: 0.,
         unk4: 0,
         unk5: 0.,
-        unk6: 0x201400b, // 1103806595072,
+        unk6: 1103806595072,
         unk7: 0.,
         is_ray: true,
         is_swept: false,

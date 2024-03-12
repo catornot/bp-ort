@@ -1,14 +1,22 @@
-use rrplug::{bindings::class_types::cplayer::CPlayer, prelude::*};
-
-use crate::{
-    bindings::{EngineFunctions, ServerFunctions},
-    utils::{from_c_string, send_client_print},
+use rrplug::{
+    bindings::class_types::{client::SignonState, cplayer::CPlayer},
+    mid::utils::from_char_ptr,
+    prelude::*,
 };
 
-use self::{slay::register_slay_command, switch::register_switch_command};
+use crate::{
+    bindings::{EngineFunctions, ServerFunctions, ENGINE_FUNCTIONS},
+    utils::{from_c_string, iterate_c_array_sized, send_client_print},
+};
+
+use self::{
+    slay::register_slay_command, switch::register_switch_command,
+    teleport::register_teleport_command,
+};
 
 mod slay;
 mod switch;
+mod teleport;
 
 static mut ADMINS: Vec<Box<str>> = Vec::new();
 
@@ -47,6 +55,7 @@ impl Plugin for AdminAbuse {
 
         register_slay_command(engine_data, token);
         register_switch_command(engine_data, token);
+        register_teleport_command(engine_data, token);
     }
 
     fn on_sqvm_created(&self, _sqvm_handle: &CSquirrelVMHandle, token: EngineToken) {
@@ -69,7 +78,7 @@ fn register_grant_admin(token: EngineToken) -> ConVarStruct {
     .expect("something went wrong and convar reg failed!")
 }
 
-pub fn parse_admins(convar: ConVarStruct) {
+fn parse_admins(convar: ConVarStruct) {
     unsafe { &mut ADMINS }.extend(
         convar
             .get_value_str()
@@ -134,4 +143,45 @@ pub fn admin_check<'a, 'b>(
     }
 
     (has_admin, caller_player)
+}
+
+#[rrplug::concommand]
+pub fn forward_to_server(command: CCommandResult) {
+    unsafe {
+        let engine = ENGINE_FUNCTIONS.wait();
+        let cmd = format!(
+            "{}_server {}\0",
+            command.get_command(),
+            command
+                .get_args()
+                .iter()
+                .cloned()
+                .map(|s| s + " ")
+                .collect::<String>()
+        );
+        let cmd_ptr = cmd.as_ptr() as *const libc::c_char;
+
+        (engine.cengine_client_server_cmd)(std::ptr::null_mut(), cmd_ptr, true);
+    }
+}
+
+pub fn execute_for_matches(
+    filter: Option<&str>,
+    execution: impl Fn(&mut CPlayer),
+    should_live: bool,
+    server_funcs: &ServerFunctions,
+    engine_funcs: &EngineFunctions,
+) {
+    unsafe { iterate_c_array_sized::<_, 32>(engine_funcs.client_array.into()) }
+        .enumerate()
+        .filter(|(_, client)| unsafe { *client.signon.get_inner() } == SignonState::FULL)
+        .filter_map(|(e, client)| unsafe {
+            Some((
+                (server_funcs.get_player_by_index)(e as i32 + 1).as_mut()?,
+                from_char_ptr(client.name.get_inner().as_ptr()),
+            ))
+        })
+        .filter(|(player, _)| unsafe { !should_live || (server_funcs.is_alive)(*player) != 0 })
+        .filter(|(player, name)| filter_target(filter, player, name))
+        .for_each(|(player, _)| execution(player));
 }
