@@ -57,6 +57,7 @@ pub type DWORD = ::std::os::raw::c_uint;
 pub type BYTE = ::std::os::raw::c_uchar;
 
 #[repr(C)]
+#[repr(align(4))]
 #[derive(Debug, Copy, Clone)]
 pub struct CUserCmd {
     pub command_number: DWORD,
@@ -82,7 +83,7 @@ pub struct CUserCmd {
     pub predicted_server_event_hack: DWORD,
     pub dword98: DWORD,
     pub frame_time: f32,
-    pub gap_a0: [c_char; 152], // eh
+    // pub gap_a0: [c_char; 152], // eh
 }
 
 impl CUserCmd {
@@ -298,6 +299,7 @@ offset_functions! {
         player_run_command = unsafe extern "C" fn(*mut CPlayer, *mut CUserCmd,*const c_void) -> () where offset(0x5a7d80);
         set_base_time = unsafe extern "C" fn(*mut CPlayer, f32) where offset(0x5b3790);
         set_last_cmd = unsafe extern "C" fn(*mut CUserCmd, *mut CUserCmd) -> () where offset(0x25f860);
+        get_move_helper = unsafe extern "C" fn() -> *const c_void where offset(0x1b56f0);
         get_player_by_index = PlayerByIndex where offset(0x26AA10);
         util_get_command_client = unsafe extern "C" fn() -> *mut CPlayer where offset(0x15bf40);
         interface_regs = *const InterfaceReg where offset(0x01752038);

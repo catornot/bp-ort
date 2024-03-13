@@ -10,10 +10,11 @@ use crate::{
 };
 
 use self::{
-    slay::register_slay_command, switch::register_switch_command,
+    health::register_health_command, slay::register_slay_command, switch::register_switch_command,
     teleport::register_teleport_command,
 };
 
+mod health;
 mod slay;
 mod switch;
 mod teleport;
@@ -56,6 +57,7 @@ impl Plugin for AdminAbuse {
         register_slay_command(engine_data, token);
         register_switch_command(engine_data, token);
         register_teleport_command(engine_data, token);
+        register_health_command(engine_data, token);
     }
 
     fn on_sqvm_created(&self, _sqvm_handle: &CSquirrelVMHandle, token: EngineToken) {

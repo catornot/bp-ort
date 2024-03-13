@@ -64,7 +64,7 @@ impl Plugin for Interfaces {
         let box_convar = ConVarStruct::try_new(
             &ConVarRegister::new(
                 "force_mp_box",
-                "0",
+                "1",
                 0,
                 "will put into mp_box if you are not on mp_box",
             ),

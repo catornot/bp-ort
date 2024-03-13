@@ -115,11 +115,11 @@ pub fn run_bots_cmds(_paused: bool) {
     let server_functions = SERVER_FUNCTIONS.wait();
     let engine_functions = ENGINE_FUNCTIONS.wait();
     let player_by_index = server_functions.get_player_by_index;
-    let run_null_command = server_functions.run_null_command;
+    // let run_null_command = server_functions.run_null_command;
     // let add_user_cmd_to_player = server_functions.add_user_cmd_to_player;
-    // let set_base_time = server_functions.set_base_time;
-    // let player_run_command = server_functions.player_run_command;
-    // let move_helper = server_functions.move_helper.cast_const();
+    let set_base_time = server_functions.set_base_time;
+    let player_run_command = server_functions.player_run_command;
+    let move_helper = server_functions.get_move_helper;
     let globals =
         unsafe { engine_functions.globals.as_mut() }.expect("globals were null for some reason");
 
@@ -162,39 +162,35 @@ pub fn run_bots_cmds(_paused: bool) {
             //     &cmd,
             //     1, // was amount
             //     1, // was amount
-            //     1, // was amount as u32, seams like it was causing the dropped packets spam but also it was stoping the bots from going faster?
+            //     0, // was amount as u32, seams like it was causing the dropped packets spam but also it was stoping the bots from going faster?
             //     paused as i8,
             // );
 
-            LAST_CMD = Some(cmd);
+            // LAST_CMD = Some(cmd);
 
-            // so hook the createnullmove function in run_null_command and return the current cmd or the thing it does if it's null
-            // should be safe it's called on single frame
+            // bots don't trigger triggers for some reason this way
 
-            // let frametime = **globals.frametime;
-            // let cur_time = **globals.cur_time;
+            let frametime = **globals.frametime;
+            let cur_time = **globals.cur_time;
 
-            // *player.cplayer_state_fixangle.get_inner_mut() = 0;
-            // set_base_time(player, cur_time);
+            *player.cplayer_state_fixangle.get_inner_mut() = 0;
+            set_base_time(player, cur_time);
 
-            // // run_null_command(player);
-            // player_run_command(player, &mut cmd, move_helper);
-            // *player.latest_command_run.get_inner_mut() = cmd.command_number;
-            // // (server_functions.set_last_cmd)(
-            // //     (player as *mut _ as *mut CUserCmd).offset(0x20a0).cast(),
-            // //     &mut cmd,
-            // // );
-            // #[allow(invalid_reference_casting)] // tmp
-            // {
-            //     *((globals.frametime.get_inner() as *const f32).cast_mut()) = frametime;
-            //     *((globals.cur_time.get_inner() as *const f32).cast_mut()) = cur_time;
-            // }
+            // run_null_command(player);
+            player_run_command(player, &mut cmd, move_helper());
+            *player.latest_command_run.get_inner_mut() = cmd.command_number;
+            // (server_functions.set_last_cmd)((player as *const ()).offset(0x20a0).cast(), &mut cmd);
+            #[allow(invalid_reference_casting)] // tmp
+            {
+                *((globals.frametime.get_inner() as *const f32).cast_mut()) = frametime;
+                *((globals.cur_time.get_inner() as *const f32).cast_mut()) = cur_time;
+            }
 
-            run_null_command(player);
+            // run_null_command(player);
 
-            *player.angles.get_inner_mut() = cmd.world_view_angles // this is not really great -> bad aim
+            // *player.angles.get_inner_mut() = cmd.world_view_angles // this is not really great -> bad aim
 
-            // (server_functions.simulate_player)(player);
+            (server_functions.simulate_player)(player);
         }
         unsafe { LAST_CMD = None }
     }
@@ -395,7 +391,7 @@ pub(super) fn get_cmd(
                         local_data.last_target_index = unsafe { target.player_index.copy_inner() }
                     }
                 }
-                (7, Some((_, true))) => {
+                (7, Some((_, false))) => {
                     _ = path_to_target(
                         &mut cmd,
                         local_data,
@@ -420,7 +416,7 @@ pub(super) fn get_cmd(
 
                 let target = if let (Some(titan), false) = (
                     unsafe { (helper.sv_funcs.get_pet_titan)(player).as_ref() },
-                    sim_type != 6, // nav is broken for titans anyway :(
+                    sim_type == 5, // nav is broken for titans anyway :(
                 ) {
                     let titan_pos = unsafe {
                         *(helper.sv_funcs.get_origin)(
@@ -443,7 +439,7 @@ pub(super) fn get_cmd(
                     target
                 };
 
-                if should_shoot || sim_type != 6 {
+                if should_shoot || sim_type == 5 {
                     let diff = target - origin;
                     let angley = diff.y.atan2(diff.x) * 180. / std::f32::consts::PI;
                     let anglex = diff.z.atan2((diff.x.powi(2) + diff.y.powi(2)).sqrt()) * 180.
@@ -638,7 +634,7 @@ fn path_to_target(
     cmd.move_.x = 1.0;
     cmd.buttons |= Action::Forward as u32 | Action::Speed as u32;
 
-    if is_timedout(local_data.last_time_node_reached, helper, 100.) {
+    if is_timedout(local_data.last_time_node_reached, helper, 10.) {
         try_avoid_obstacle(cmd, helper);
     }
 
@@ -745,16 +741,17 @@ unsafe fn view_rate(
         flags: 0,
     };
 
-    (helper.engine_funcs.trace_ray)(
+    (helper.engine_funcs.trace_ray_filter)(
         (*helper.sv_funcs.ctraceengine) as *const libc::c_void,
         &mut ray,
         TRACE_MASK_SHOT as u32,
-        // std::ptr::null_mut(),
+        std::ptr::null_mut(),
         result.as_mut_ptr(),
     );
     let result = result.assume_init();
 
     if !result.start_solid && result.fraction_left_solid == 0.0 {
+        dbg!(result.hit_ent);
         result.fraction
     } else {
         0.0

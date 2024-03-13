@@ -27,7 +27,6 @@ pub fn register_switch_command(engine_data: &EngineData, token: EngineToken) {
         "switch_server",
         switch_server_command,
         "",
-        // 0,
         FCVAR_GAMEDLL_FOR_REMOTE_CLIENTS as i32 | FCVAR_GAMEDLL as i32,
         token,
     );
@@ -36,7 +35,6 @@ pub fn register_switch_command(engine_data: &EngineData, token: EngineToken) {
         "setteam",
         setteam,
         "",
-        // 0,
         FCVAR_GAMEDLL_FOR_REMOTE_CLIENTS as i32 | FCVAR_GAMEDLL as i32,
         token,
     );

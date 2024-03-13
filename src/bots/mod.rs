@@ -11,6 +11,7 @@ use rrplug::{
     exports::OnceCell,
     high::engine::convars::{ConVarRegister, ConVarStruct},
 };
+use std::ops::Not;
 use std::{
     cell::RefCell,
     ffi::CStr,
@@ -89,6 +90,8 @@ impl Plugin for Bots {
     fn new(_: bool) -> Self {
         register_sq_functions(bot_set_titan);
         register_sq_functions(bot_set_target_pos);
+        register_sq_functions(bot_set_sim_type);
+        register_sq_functions(bot_spawn);
 
         Self {
             clang_tag: Mutex::new("BOT".into()),
@@ -348,7 +351,7 @@ fn spawn_fake_player_completion(current: CurrentCommand, suggestions: CommandCom
         return suggestions.commands_used();
     };
 
-    (0..=6).for_each(|i| {
+    (0..=12).for_each(|i| {
         _ = suggestions.push(&format!("{} {} {} {}", current.cmd, name, prev_team, i))
     });
 
@@ -452,4 +455,31 @@ fn bot_set_sim_type(bot: Option<&mut CPlayer>, sim_type: i32) -> Option<()> {
     }
 
     None
+}
+
+#[rrplug::sqfunction(VM = "Server", ExportName = "BotSpawn")]
+fn bot_spawn(bot_name: String) -> Option<i32> {
+    let mut rng = rand::thread_rng();
+    let names = &PLUGIN.wait().bots.generic_bot_names.lock().expect("how");
+
+    let name = bot_name
+        .is_empty()
+        .not()
+        .then_some(bot_name)
+        .unwrap_or_else(|| {
+            names
+                .get(rng.gen_range(0..names.len()))
+                .unwrap_or(&names[0])
+                .to_owned()
+        })
+        .to_owned();
+
+    spawn_fake_player(
+        name,
+        choose_team(),
+        None,
+        SERVER_FUNCTIONS.wait(),
+        ENGINE_FUNCTIONS.wait(),
+        engine_token,
+    )
 }

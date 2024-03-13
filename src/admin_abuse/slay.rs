@@ -24,7 +24,6 @@ pub fn register_slay_command(engine_data: &EngineData, token: EngineToken) {
         "slay_server",
         slay_server_command,
         "",
-        // 0,
         FCVAR_GAMEDLL_FOR_REMOTE_CLIENTS as i32 | FCVAR_GAMEDLL as i32,
         token,
     );
