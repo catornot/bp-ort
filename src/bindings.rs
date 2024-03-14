@@ -249,6 +249,23 @@ pub struct Ray {
     pub flags: ::std::os::raw::c_int,
 }
 
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct CTraceFilterSimple {
+    pub vtable: *const fn(),
+    pub unk: i32,
+    pub pass_ent: *const (),
+    pub should_hit_func: *const (),
+    pub collision_group: i32,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct CTraceFilterWorldAndProps {
+    pub vtable: *const fn(),
+    pub pass_ent: *const (),
+}
+
 // struct IServerGameEnts {}
 
 // a really interesting function : FUN_00101370
@@ -269,7 +286,8 @@ offset_functions! {
         render_line = unsafe extern "C" fn(*const Vector3, *const Vector3, Color, bool) where offset(0x192A70);
         cgame_client_client_printf = unsafe extern "C" fn(edict: u16, msg: *const c_char) where offset(0x1016A0);
 
-        props_and_wolrd_filter = *const c_void where offset(0x5eb980);
+        props_and_world_filter = *const fn() where offset(0x5eb980);
+        hit_all_filter = *const fn() where offset(0x5fc520);
 
         cbuf_add_text = unsafe extern "C" fn(i32, *const c_char, CmdSource) where offset(0x1203B0);
         cbuf_execute = unsafe extern "C" fn() where offset(0x1204B0);
@@ -321,6 +339,8 @@ offset_functions! {
         get_active_weapon = unsafe extern "C" fn(*const CPlayer) -> *const CBaseEntity where offset(0xea4c0);
 
         util_trace_line = unsafe extern "C" fn(*const Vector3, *const Vector3, c_char, c_char, i32, i32, i32, *mut TraceResults )  where offset(0x2725c0);
+        ctraceengine = *const *const *const fn() where offset(0xbfbdc8);
+        simple_filter_vtable = *const fn() where offset(0x8ebbf8);
 
         draw_debug_line = unsafe extern "C" fn(point1: *const Vector3, point2: *const Vector3, r: i32, g: i32, b: i32, throught_walls: bool, time: f32) where offset(0x001ccf40);
 
@@ -329,8 +349,6 @@ offset_functions! {
         register_con_command = unsafe extern "C" fn(concommand: *mut ConCommand,name: *const c_char, callback: FnCommandCallback_t, helpString: *const c_char,flags: i32, completion: unsafe extern "C-unwind" fn(arg1: *const ::std::os::raw::c_char, arg2: *mut [::std::os::raw::c_char; 128usize]) -> ::std::os::raw::c_int) -> *mut ConCommand where offset(0x723fa0);
 
         get_pet_titan = unsafe extern "C" fn(*const CPlayer) -> *const CBaseEntity where offset(0x5dd940);
-
-        ctraceengine = *const *const *const fn() where offset(0xbfbdc8);
     }
 }
 // very intersting call at server.dll + 0x151782

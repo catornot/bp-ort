@@ -15,7 +15,7 @@ pub fn register_concommands(engine: &EngineData, token: EngineToken) {
             FCVAR_GAMEDLL as i32 | FCVAR_CLIENTDLL as i32,
             token,
         )
-        .expect("couldn't register concommand bot_find");
+        .expect("couldn't register concommand disguise_name");
 
     engine
         .register_concommand(

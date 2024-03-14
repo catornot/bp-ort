@@ -6,7 +6,7 @@ use rrplug::prelude::*;
 
 use crate::{
     admin_abuse::{admin_check, execute_for_matches, forward_to_server},
-    bindings::{ServerFunctions, ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
+    bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
     utils::{from_c_string, iterate_c_array_sized, send_client_print},
 };
 
@@ -57,19 +57,22 @@ fn health_server_command(command: CCommandResult) {
 
     execute_for_matches(
         command.get_arg(0),
-        |player| set_health(funcs, player, health),
+        |player| set_health(player, health),
         true,
         funcs,
         engine,
     );
 }
 
-fn set_health(funcs: &ServerFunctions, player: &mut CPlayer, mut health: i32) {
+fn set_health(player: &mut CPlayer, mut health: i32) {
     if health >= 524287 {
         health = 524287;
     }
 
-    unsafe { (funcs.set_health)(player, health, 0, 0) }
+    unsafe {
+        *player.max_health.get_inner_mut() = health;
+        *player.health.get_inner_mut() = health;
+    }
 }
 
 #[rrplug::completion]

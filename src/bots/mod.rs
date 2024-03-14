@@ -35,17 +35,17 @@ mod cmds;
 mod convars;
 mod debug_commands;
 mod detour;
-// mod navmesh;
 mod set_on_join;
+
+pub const DEFAULT_SIMULATE_TYPE: i32 = 6;
 
 static CLAN_TAG_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
 pub static SIMULATE_TYPE_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
-pub static DRAWWORLD_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
-pub const DEFAULT_SIMULATE_TYPE: i32 = 6;
 
 thread_local! {
     pub static MAX_PLAYERS: RefCell<u32> = const { RefCell::new(32) };
 }
+
 pub(super) static BOT_DATA_MAP: EngineGlobal<RefCell<Lazy<[BotData; 64]>>> =
     EngineGlobal::new(RefCell::new(Lazy::new(|| {
         std::array::from_fn(|_| BotData::default())
@@ -207,16 +207,6 @@ impl Plugin for Bots {
 
         _ = SIMULATE_TYPE_CONVAR.set(simulate_convar);
 
-        let draw_convar = ConVarStruct::try_new(
-            &ConVarRegister::new("drawworld", "1", FCVAR_GAMEDLL as i32, ""),
-            token,
-        )
-        .expect("failed to register the convar");
-
-        _ = DRAWWORLD_CONVAR.set(draw_convar);
-
-        register_required_convars(engine, token);
-
         _ = engine.register_concommand_with_completion(
             "bot_spawn",
             spawn_fake_player_command,
@@ -226,6 +216,7 @@ impl Plugin for Bots {
             token,
         );
 
+        register_required_convars(engine, token);
         register_debug_concommands(engine, token);
     }
 }

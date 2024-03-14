@@ -5,30 +5,31 @@
     iter_collect_into
 )]
 
-use admin_abuse::AdminAbuse;
-use navmesh::{RecastDetour, RECAST_DETOUR};
 use rrplug::prelude::*;
 
-mod admin_abuse;
-mod bindings;
-mod bots;
-mod disguise;
-mod interfaces;
-mod navmesh;
-mod utils;
-
 use crate::{
+    admin_abuse::AdminAbuse,
     bindings::{
         ClientFunctions, EngineFunctions, MatSysFunctions, ServerFunctions, CLIENT_FUNCTIONS,
         ENGINE_FUNCTIONS, MATSYS_FUNCTIONS, SERVER_FUNCTIONS,
     },
     bots::Bots,
+    devtoys::DevToys,
     disguise::Disguise,
     interfaces::Interfaces,
+    navmesh::{RecastDetour, RECAST_DETOUR},
     screen_detour::hook_materialsystem,
 };
 
+mod admin_abuse;
+mod bindings;
+mod bots;
+mod devtoys;
+mod disguise;
+mod interfaces;
+mod navmesh;
 mod screen_detour;
+mod utils;
 
 #[derive(Debug)]
 pub struct HooksPlugin {
@@ -36,6 +37,7 @@ pub struct HooksPlugin {
     pub disguise: Disguise,
     pub interfaces: Interfaces,
     pub admin_abuse: AdminAbuse,
+    pub devtoys: DevToys,
     is_dedicated_server: bool,
 }
 
@@ -53,6 +55,7 @@ impl Plugin for HooksPlugin {
             disguise: Disguise::new(reloaded),
             interfaces: Interfaces::new(reloaded),
             admin_abuse: AdminAbuse::new(reloaded),
+            devtoys: DevToys::new(reloaded),
             is_dedicated_server: std::env::args().any(|cmd| cmd.starts_with("-dedicated")),
         }
     }
@@ -62,6 +65,7 @@ impl Plugin for HooksPlugin {
         self.disguise.on_dll_load(engine, dll_ptr, token);
         self.interfaces.on_dll_load(engine, dll_ptr, token);
         self.admin_abuse.on_dll_load(engine, dll_ptr, token);
+        self.devtoys.on_dll_load(engine, dll_ptr, token);
 
         unsafe {
             EngineFunctions::try_init(dll_ptr, &ENGINE_FUNCTIONS);
@@ -114,7 +118,8 @@ impl Plugin for HooksPlugin {
     }
 
     fn runframe(&self, token: EngineToken) {
-        self.interfaces.runframe(token)
+        self.interfaces.runframe(token);
+        self.devtoys.runframe(token);
     }
 }
 

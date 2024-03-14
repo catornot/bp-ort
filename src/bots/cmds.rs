@@ -8,8 +8,8 @@ use std::mem::MaybeUninit;
 
 use crate::{
     bindings::{
-        Action, CBaseEntity, CGlobalVars, CUserCmd, EngineFunctions, Ray, ServerFunctions,
-        TraceResults, VectorAligned, ENGINE_FUNCTIONS, SERVER_FUNCTIONS,
+        Action, CBaseEntity, CGlobalVars, CTraceFilterSimple, CUserCmd, EngineFunctions, Ray,
+        ServerFunctions, TraceResults, VectorAligned, ENGINE_FUNCTIONS, SERVER_FUNCTIONS,
     },
     interfaces::ENGINE_INTERFACES,
     navmesh::{Hull, RECAST_DETOUR},
@@ -281,8 +281,7 @@ pub(super) fn get_cmd(
                 local_data.counter += 1;
             }
 
-            let diff = target - origin;
-            cmd.world_view_angles.y = diff.y.atan2(diff.x).to_degrees();
+            cmd.world_view_angles.y = look_at(origin, target).y;
 
             cmd
         }
@@ -425,7 +424,7 @@ pub(super) fn get_cmd(
                         )
                     };
 
-                    if unsafe { view_rate(&helper, titan_pos, origin, player) } >= 1.0 {
+                    if unsafe { view_rate(&helper, titan_pos, origin, player, true) } >= 1.0 {
                         if (origin.x - titan_pos.x).powi(2) * (origin.y - titan_pos.y).powi(2)
                             < 81000.
                         {
@@ -440,12 +439,7 @@ pub(super) fn get_cmd(
                 };
 
                 if should_shoot || sim_type == 5 {
-                    let diff = target - origin;
-                    let angley = diff.y.atan2(diff.x) * 180. / std::f32::consts::PI;
-                    let anglex = diff.z.atan2((diff.x.powi(2) + diff.y.powi(2)).sqrt()) * 180.
-                        / std::f32::consts::PI;
-
-                    cmd.world_view_angles = Vector3::new(-anglex, angley, 0.);
+                    cmd.world_view_angles = look_at(origin, target);
                 }
 
                 let enemy_is_titan = unsafe { (helper.sv_funcs.is_titan)(target_player) };
@@ -560,6 +554,17 @@ pub(super) fn get_cmd(
     Some(cmd)
 }
 
+fn look_at(origin: Vector3, target: Vector3) -> Vector3 {
+    let diff = target - origin;
+    let angley = diff.y.atan2(diff.x).to_degrees();
+    let anglex = diff
+        .z
+        .atan2((diff.x.powi(2) + diff.y.powi(2)).sqrt())
+        .to_degrees();
+
+    Vector3::new(-anglex, angley, 0.)
+}
+
 fn path_to_target(
     cmd: &mut CUserCmd,
     local_data: &mut BotData,
@@ -620,6 +625,19 @@ fn path_to_target(
         }
     }
 
+    if nav
+        .path_points
+        .first()
+        .cloned()
+        .map(|point| distance(point, target_pos) > BOT_PATH_RECAL_RANGE)
+        .unwrap_or(true)
+    {
+        try_avoid_obstacle(cmd, helper);
+        cmd.world_view_angles.y = look_at(origin, target_pos).y;
+
+        return true;
+    }
+
     if distance(local_data.next_target_pos, origin) <= BOT_PATH_NODE_RANGE {
         local_data.last_time_node_reached = unsafe { helper.globals.cur_time.copy_inner() };
         local_data.next_target_pos = nav
@@ -627,10 +645,7 @@ fn path_to_target(
             .expect("should always have enough points here");
     }
 
-    let diff = local_data.next_target_pos - origin;
-    let angley = diff.y.atan2(diff.x) * 180. / std::f32::consts::PI;
-
-    cmd.world_view_angles = Vector3::new(0., angley, 0.);
+    cmd.world_view_angles.y = look_at(origin, local_data.next_target_pos).y;
     cmd.move_.x = 1.0;
     cmd.buttons |= Action::Forward as u32 | Action::Speed as u32;
 
@@ -662,9 +677,17 @@ unsafe fn find_player_in_view<'a>(
             .filter(|player| (helper.sv_funcs.is_alive)(*player) != 0)
             .map(|player| (*player.get_origin(&mut v), player))
             .filter(|(target, _)| distance(*target, pos) <= BOT_VISON_RANGE)
-            .map(|(target, player)| ((view_rate(helper, pos, target, player)), player))
-            .find(|(dist, _)| *dist == 1.0)
-            .map(|(_, player)| player)
+            .find_map(|(target, player)| {
+                view_rate(helper, pos, target, player, false)
+                    .eq(&1.0)
+                    .then(|| {
+                        view_rate(helper, pos, target, player, true)
+                            .eq(&1.0)
+                            .then_some(())
+                    })
+                    .flatten()
+                    .map(|_| player)
+            })
     } {
         return Some((target, true));
     }
@@ -713,6 +736,7 @@ unsafe fn view_rate(
     v1: Vector3,
     v2: Vector3,
     player: *mut CPlayer,
+    corretness: bool,
 ) -> f32 {
     const TRACE_MASK_SHOT: i32 = 1178615859;
     const TRACE_MASK_SOLID_BRUSHONLY: i32 = 16907;
@@ -741,17 +765,34 @@ unsafe fn view_rate(
         flags: 0,
     };
 
-    (helper.engine_funcs.trace_ray_filter)(
-        (*helper.sv_funcs.ctraceengine) as *const libc::c_void,
-        &mut ray,
-        TRACE_MASK_SHOT as u32,
-        std::ptr::null_mut(),
-        result.as_mut_ptr(),
-    );
+    if corretness {
+        let filter: *const CTraceFilterSimple = &CTraceFilterSimple {
+            vtable: helper.sv_funcs.simple_filter_vtable,
+            unk: 0,
+            pass_ent: player.cast(),
+            should_hit_func: std::ptr::null(),
+            collision_group: TRACE_COLLISION_GROUP_BLOCK_WEAPONS,
+        };
+
+        // could use this to get 100% result and trace ray for a aproximation of failure
+        (helper.engine_funcs.trace_ray_filter)(
+            (*helper.sv_funcs.ctraceengine) as *const libc::c_void,
+            &mut ray,
+            TRACE_MASK_SHOT as u32,
+            filter.cast(),
+            result.as_mut_ptr(),
+        );
+    } else {
+        (helper.engine_funcs.trace_ray)(
+            (*helper.sv_funcs.ctraceengine) as *const libc::c_void,
+            &mut ray,
+            TRACE_MASK_SHOT as u32,
+            result.as_mut_ptr(),
+        );
+    }
     let result = result.assume_init();
 
     if !result.start_solid && result.fraction_left_solid == 0.0 {
-        dbg!(result.hit_ent);
         result.fraction
     } else {
         0.0
