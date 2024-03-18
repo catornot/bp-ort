@@ -10,10 +10,12 @@ use crate::{
 };
 
 use self::{
-    health::register_health_command, slay::register_slay_command, switch::register_switch_command,
+    grant_admin::register_grant_admin_command, health::register_health_command,
+    slay::register_slay_command, switch::register_switch_command,
     teleport::register_teleport_command,
 };
 
+mod grant_admin;
 mod health;
 mod slay;
 mod switch;
@@ -58,6 +60,7 @@ impl Plugin for AdminAbuse {
         register_switch_command(engine_data, token);
         register_teleport_command(engine_data, token);
         register_health_command(engine_data, token);
+        register_grant_admin_command(engine_data, token);
     }
 
     fn on_sqvm_created(&self, _sqvm_handle: &CSquirrelVMHandle, token: EngineToken) {
@@ -81,7 +84,9 @@ fn register_grant_admin(token: EngineToken) -> ConVarStruct {
 }
 
 fn parse_admins(convar: ConVarStruct) {
-    unsafe { &mut ADMINS }.extend(
+    let admins = unsafe { &mut ADMINS };
+    admins.clear();
+    admins.extend(
         convar
             .get_value_str()
             .map_err(|_| {

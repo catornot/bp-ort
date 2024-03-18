@@ -6,10 +6,11 @@ use rrplug::{
             command::{CCommand, ConCommand, FnCommandCallback_t},
             convar::Color,
         },
-        squirreldatatypes::CSquirrelVM,
+        squirreldatatypes::{CSquirrelVM, SQObject},
     },
     high::vector::Vector3,
     offset_functions, offset_struct,
+    prelude::HSquirrelVM,
 };
 use std::{
     ffi::{c_char, c_int, c_short, c_uchar, c_void},
@@ -284,7 +285,7 @@ offset_functions! {
         get_current_playlist_var = unsafe extern "C" fn(*const c_char, c_int) -> *const c_char where offset(0x18C680);
         globals = *mut CGlobalVars where offset(0x7C6F70);
         render_line = unsafe extern "C" fn(*const Vector3, *const Vector3, Color, bool) where offset(0x192A70);
-        cgame_client_client_printf = unsafe extern "C" fn(edict: u16, msg: *const c_char) where offset(0x1016A0);
+        cgame_client_printf = unsafe extern "C" fn(client: *const CClient, msg: *const c_char) where offset(0x1016A0);
 
         props_and_world_filter = *const fn() where offset(0x5eb980);
         hit_all_filter = *const fn() where offset(0x5fc520);
@@ -320,6 +321,7 @@ offset_functions! {
         get_move_helper = unsafe extern "C" fn() -> *const c_void where offset(0x1b56f0);
         get_player_by_index = PlayerByIndex where offset(0x26AA10);
         util_get_command_client = unsafe extern "C" fn() -> *mut CPlayer where offset(0x15bf40);
+        command_client_index = *const i32 where offset(0xbfbd84);
         interface_regs = *const InterfaceReg where offset(0x01752038);
         get_eye_pos = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x0043b8d0);
         get_center_pos = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x00407d30); // found these by pocking around in a vtable :)
@@ -332,6 +334,7 @@ offset_functions! {
         is_alive = unsafe extern "C" fn(*const CPlayer) -> usize where offset(0x4461e0);
         is_titan = unsafe extern "C" fn(*const CPlayer) -> bool where offset(0x406a70);
         set_health = unsafe extern "C" fn(*mut CPlayer, i32, usize, usize) -> () where offset(0x42d7f0);
+        create_script_instance = unsafe extern "C" fn(*mut CBaseEntity, *mut HSquirrelVM, usize, usize) -> *const SQObject where offset(0x43f2f0);
 
         get_offhand_weapon = unsafe extern "C" fn(*const CPlayer,u32 ) -> bool where offset(0xe1ec0); // not done
         set_weapon_by_slot = unsafe extern "C" fn(*const c_void, *const c_char) where offset(0xe4ba0);

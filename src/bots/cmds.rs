@@ -218,10 +218,9 @@ pub(super) fn get_cmd(
             Hull::Human
         };
         if Some(desired_hull) != local_data.nav_query.as_ref().map(|q| q.hull) {
-            local_data.nav_query = local_data
-                .nav_query
-                .take()
-                .and_then(|mut q| q.switch_query(desired_hull));
+            if let Some(ref mut query) = local_data.nav_query {
+                _ = query.switch_query(desired_hull);
+            }
         }
     }
     let mut cmd = Some(match sim_type {
@@ -356,30 +355,28 @@ pub(super) fn get_cmd(
             let mut cmd = CUserCmd::new_basic_move(Vector3::ZERO, 0, &helper);
 
             match (sim_type, &target) {
-                (5, Some((ref target, _))) => {
+                (5, Some((_, _))) => {
                     cmd.move_ = Vector3::new(1., 0., 0.);
                     cmd.buttons |= Action::Forward as u32 | Action::Walk as u32;
-
-                    let is_titan = unsafe { (helper.sv_funcs.is_titan)(player) };
-
-                    if (!is_titan
-                        && (origin.x - target.0.x).powi(2) * (origin.y - target.0.y).powi(2)
-                            < 81000.
-                        && (origin.z - target.0.z).abs() < 50.)
-                        || (is_titan
-                            && (origin.x - target.0.x).powi(2) * (origin.y - target.0.y).powi(2)
-                                < 810000.
-                            && (origin.z - target.0.z).abs() < 200.)
-                    {
-                        cmd.buttons |= Action::Melee as u32;
-                    };
-
-                    if is_titan && local_data.counter % 4 == 0 {
-                        cmd.buttons |= Action::Dodge as u32;
-                    }
                 }
                 (6, Some(((target_pos, target), false))) => {
-                    if path_to_target(
+                    if let Some(pet_titan) =
+                        unsafe { (helper.sv_funcs.get_pet_titan)(player).as_ref() }
+                    {
+                        path_to_target(
+                            &mut cmd,
+                            local_data,
+                            origin,
+                            unsafe {
+                                *(helper.sv_funcs.get_origin)(
+                                    (pet_titan as *const CBaseEntity).cast(),
+                                    &mut v,
+                                )
+                            },
+                            false,
+                            &helper,
+                        );
+                    } else if path_to_target(
                         &mut cmd,
                         local_data,
                         origin,
@@ -413,10 +410,9 @@ pub(super) fn get_cmd(
                     0
                 };
 
-                let target = if let (Some(titan), false) = (
-                    unsafe { (helper.sv_funcs.get_pet_titan)(player).as_ref() },
-                    sim_type == 5, // nav is broken for titans anyway :(
-                ) {
+                let target = if let Some(titan) =
+                    unsafe { (helper.sv_funcs.get_pet_titan)(player).as_ref() }
+                {
                     let titan_pos = unsafe {
                         *(helper.sv_funcs.get_origin)(
                             (titan as *const CBaseEntity).cast::<CPlayer>(),
@@ -424,10 +420,12 @@ pub(super) fn get_cmd(
                         )
                     };
 
-                    if unsafe { view_rate(&helper, titan_pos, origin, player, true) } >= 1.0 {
+                    let (dis, ent) = unsafe { view_rate(&helper, titan_pos, origin, player, true) };
+                    if dis >= 1.0 || ent == titan as *const CBaseEntity {
                         if (origin.x - titan_pos.x).powi(2) * (origin.y - titan_pos.y).powi(2)
                             < 81000.
                         {
+                            cmd.world_view_angles = look_at(origin, titan_pos);
                             cmd.buttons |= Action::Use as u32;
                         }
                         titan_pos
@@ -444,6 +442,20 @@ pub(super) fn get_cmd(
 
                 let enemy_is_titan = unsafe { (helper.sv_funcs.is_titan)(target_player) };
                 let is_titan = unsafe { (helper.sv_funcs.is_titan)(player) };
+
+                if (!is_titan
+                    && (origin.x - target.x).powi(2) * (origin.y - target.y).powi(2) < 81000.
+                    && (origin.z - target.z).abs() < 50.)
+                    || (is_titan
+                        && (origin.x - target.x).powi(2) * (origin.y - target.y).powi(2) < 810000.
+                        && (origin.z - target.z).abs() < 200.)
+                {
+                    cmd.buttons |= Action::Melee as u32;
+                };
+
+                if is_titan && local_data.counter % 4 == 0 {
+                    cmd.buttons |= Action::Dodge as u32;
+                }
 
                 match (enemy_is_titan, is_titan) {
                     (true, true) => cmd.weaponselect = 0, // switch to default,
@@ -649,7 +661,7 @@ fn path_to_target(
     cmd.move_.x = 1.0;
     cmd.buttons |= Action::Forward as u32 | Action::Speed as u32;
 
-    if is_timedout(local_data.last_time_node_reached, helper, 10.) {
+    if is_timedout(local_data.last_time_node_reached, helper, 5.) {
         try_avoid_obstacle(cmd, helper);
     }
 
@@ -679,9 +691,11 @@ unsafe fn find_player_in_view<'a>(
             .filter(|(target, _)| distance(*target, pos) <= BOT_VISON_RANGE)
             .find_map(|(target, player)| {
                 view_rate(helper, pos, target, player, false)
+                    .0
                     .eq(&1.0)
                     .then(|| {
                         view_rate(helper, pos, target, player, true)
+                            .0
                             .eq(&1.0)
                             .then_some(())
                     })
@@ -737,7 +751,7 @@ unsafe fn view_rate(
     v2: Vector3,
     player: *mut CPlayer,
     corretness: bool,
-) -> f32 {
+) -> (f32, *const CBaseEntity) {
     const TRACE_MASK_SHOT: i32 = 1178615859;
     const TRACE_MASK_SOLID_BRUSHONLY: i32 = 16907;
     const TRACE_COLLISION_GROUP_BLOCK_WEAPONS: i32 = 0x12; // 18
@@ -793,9 +807,9 @@ unsafe fn view_rate(
     let result = result.assume_init();
 
     if !result.start_solid && result.fraction_left_solid == 0.0 {
-        result.fraction
+        (result.fraction, result.hit_ent)
     } else {
-        0.0
+        (0.0, result.hit_ent)
     }
 }
 

@@ -34,7 +34,7 @@ pub struct Navigation {
 impl Navigation {
     pub fn new(hull: Hull) -> Option<Self> {
         Some(Self {
-            query: generate_nav_query(hull)?,
+            query: generate_nav_query(hull, None)?,
             extents: hull_to_extents(hull),
             hull,
             filter: dtQueryFilter {
@@ -47,18 +47,15 @@ impl Navigation {
         })
     }
 
-    pub fn switch_query(&mut self, hull: Hull) -> Option<Self> {
+    pub fn switch_query(&mut self, hull: Hull) -> Option<()> {
         self.path.clear();
         self.path_points.clear();
 
-        Some(Self {
-            query: generate_nav_query(hull)?,
-            extents: hull_to_extents(hull),
-            hull,
-            filter: self.filter.clone(),
-            path: self.path.clone(),
-            path_points: self.path_points.clone(),
-        })
+        self.query = generate_nav_query(hull, Some(&self.query))?;
+        self.extents = hull_to_extents(hull);
+        self.hull = hull;
+
+        Some(())
     }
 
     pub fn new_path(
@@ -174,8 +171,10 @@ impl Drop for Navigation {
     }
 }
 
-fn generate_nav_query(hull: Hull) -> Option<dtNavMeshQuery> {
-    let mut query = MaybeUninit::zeroed();
+fn generate_nav_query(hull: Hull, prev_query: Option<&dtNavMeshQuery>) -> Option<dtNavMeshQuery> {
+    let mut query = prev_query
+        .map(|query| MaybeUninit::new(query.clone()))
+        .unwrap_or_else(MaybeUninit::zeroed);
 
     let dt_funcs = RECAST_DETOUR.wait();
 

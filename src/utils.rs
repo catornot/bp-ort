@@ -84,18 +84,17 @@ pub(crate) unsafe fn patch(addr: usize, bytes: &[u8]) {
 pub(crate) fn send_client_print(player: &CPlayer, msg: &str) -> Option<()> {
     let engine = ENGINE_FUNCTIONS.wait();
 
-    let edict = unsafe {
+    let client = unsafe {
         engine
             .client_array
             .add(player.player_index.copy_inner() as usize - 1)
-            .as_ref()
-    }
-    .map(|client| unsafe { client.edict.copy_inner() })?;
+            .as_ref()?
+    };
     let msg = try_cstring(msg).ok()?;
 
-    unsafe { (engine.cgame_client_client_printf)(edict, msg.as_ptr()) };
+    unsafe { (engine.cgame_client_printf)(client, msg.as_ptr()) };
 
-    Some(())
+    None
 }
 
 pub(crate) unsafe fn client_command(edict: u16, command: *const c_char) {

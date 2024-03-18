@@ -111,6 +111,7 @@ impl Plugin for HooksPlugin {
     fn on_sqvm_created(&self, sqvm_handle: &CSquirrelVMHandle, token: EngineToken) {
         self.bots.on_sqvm_created(sqvm_handle, token);
         self.interfaces.on_sqvm_created(sqvm_handle, token);
+        self.admin_abuse.on_sqvm_created(sqvm_handle, token);
     }
 
     fn on_sqvm_destroyed(&self, sqvm_handle: &CSquirrelVMHandle, token: EngineToken) {
