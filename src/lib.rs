@@ -1,9 +1,4 @@
-#![feature(
-    result_option_inspect,
-    c_variadic,
-    iter_array_chunks,
-    iter_collect_into
-)]
+#![feature(c_variadic, iter_array_chunks, iter_collect_into)]
 
 use rrplug::prelude::*;
 
@@ -43,7 +38,7 @@ pub struct HooksPlugin {
 
 impl Plugin for HooksPlugin {
     const PLUGIN_INFO: PluginInfo =
-        PluginInfo::new("whoks\0", "WHOKS0000\0", "WHOKS\0", PluginContext::all());
+        PluginInfo::new(c"whoks", c"WHOKS0000", c"WHOKS", PluginContext::all());
 
     fn new(reloaded: bool) -> Self {
         if reloaded {

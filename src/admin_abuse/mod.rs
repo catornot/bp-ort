@@ -28,9 +28,9 @@ pub struct AdminAbuse;
 
 impl Plugin for AdminAbuse {
     const PLUGIN_INFO: PluginInfo = PluginInfo::new(
-        "AdminAbuse\0",
-        "ADMINABUSE\0",
-        "AdminAbuse\0",
+        c"AdminAbuse",
+        c"ADMINABUSE",
+        c"AdminAbuse",
         PluginContext::all(),
     );
 
@@ -84,7 +84,7 @@ fn register_grant_admin(token: EngineToken) -> ConVarStruct {
 }
 
 fn parse_admins(convar: ConVarStruct) {
-    let admins = unsafe { &mut ADMINS };
+    let admins: &mut Vec<Box<str>> = unsafe { ADMINS.as_mut() };
     admins.clear();
     admins.extend(
         convar
@@ -101,7 +101,7 @@ fn parse_admins(convar: ConVarStruct) {
 }
 
 pub fn get_admins() -> &'static [Box<str>] {
-    unsafe { &ADMINS }
+    unsafe { ADMINS.as_ref() }
 }
 
 pub fn filter_target(filter: Option<&str>, player: &CPlayer, name: &str) -> bool {

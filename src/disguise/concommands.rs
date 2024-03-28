@@ -60,7 +60,7 @@ pub fn register_concommands(engine: &EngineData, token: EngineToken) {
 
 #[rrplug::concommand]
 pub fn disguise_name(command: CCommandResult) -> Option<()> {
-    let index: usize = command.get_args().get(0)?.parse().ok()?;
+    let index: usize = command.get_arg(0)?.parse().ok()?;
 
     let name = command.get_args().get(1)?;
 
@@ -79,7 +79,7 @@ pub fn disguise_name(command: CCommandResult) -> Option<()> {
 
 #[rrplug::concommand]
 pub fn disguise_tag(command: CCommandResult) -> Option<()> {
-    let index: usize = command.get_args().get(0)?.parse().ok()?;
+    let index: usize = command.get_arg(0)?.parse().ok()?;
 
     let tag = command.get_args().get(1)?;
 
@@ -98,13 +98,13 @@ pub fn disguise_tag(command: CCommandResult) -> Option<()> {
 #[rrplug::concommand]
 pub fn disguise_travesal(command: CCommandResult) -> Option<()> {
     unsafe {
-        let index: i32 = command.get_args().get(0)?.parse().ok()?;
+        let index: i32 = command.get_arg(0)?.parse().ok()?;
 
         let player = (SERVER_FUNCTIONS.wait().get_player_by_index)(index + 1).as_mut()?;
 
         log::info!("player.traversal_type {}", *player.traversal_type);
 
-        let state: i32 = command.get_args().get(0)?.parse().ok()?;
+        let state: i32 = command.get_arg(0)?.parse().ok()?;
 
         **player.traversal_type = state;
     }
@@ -114,13 +114,13 @@ pub fn disguise_travesal(command: CCommandResult) -> Option<()> {
 #[rrplug::concommand]
 pub fn disguise_edict(command: CCommandResult) -> Option<()> {
     unsafe {
-        let index: usize = command.get_args().get(0)?.parse().ok()?;
+        let index: usize = command.get_arg(0)?.parse().ok()?;
 
         let client = ENGINE_FUNCTIONS.wait().client_array.add(index).as_mut()?;
 
         log::info!("client.edict {}", *client.edict);
 
-        let edict: u16 = command.get_args().get(0)?.parse().ok()?;
+        let edict: u16 = command.get_arg(0)?.parse().ok()?;
 
         **client.edict = edict;
     }
@@ -130,13 +130,13 @@ pub fn disguise_edict(command: CCommandResult) -> Option<()> {
 #[rrplug::concommand]
 pub fn disguise_generation(command: CCommandResult) -> Option<()> {
     unsafe {
-        let index: usize = command.get_args().get(0)?.parse().ok()?;
+        let index: usize = command.get_arg(0)?.parse().ok()?;
 
         let player = (SERVER_FUNCTIONS.wait().get_player_by_index)(index as i32 + 1).as_mut()?;
 
         log::info!("player.generation {}", **player.generation);
 
-        let generation: i32 = command.get_args().get(0)?.parse().ok()?;
+        let generation: i32 = command.get_arg(0)?.parse().ok()?;
 
         **player.generation = generation;
     }

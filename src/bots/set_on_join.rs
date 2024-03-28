@@ -1,6 +1,8 @@
 use crate::utils::{from_c_string, set_c_char_array};
 use rrplug::bindings::class_types::client::CClient;
 
+use super::UWUFY_CONVAR;
+
 pub unsafe fn set_stuff_on_join(client: &mut CClient) {
     let name = from_c_string::<String>(&**client.name as *const i8);
 
@@ -16,7 +18,7 @@ pub unsafe fn set_stuff_on_join(client: &mut CClient) {
         set_c_char_array(&mut client.name, "cat_or_nya");
 
         log::info!("set the clan tag for cat_or_not");
-    } else {
+    } else if UWUFY_CONVAR.wait().get_value_bool() {
         log::info!("set the clan tag for {name}");
 
         let new_name = name.replace(['r', 'l'], "w").replace(['R', 'L'], "W");

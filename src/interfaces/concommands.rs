@@ -61,7 +61,7 @@ pub fn register_concommands(engine: &EngineData, token: EngineToken) {
 
 #[rrplug::concommand]
 pub fn interfaces_load_some(command: CCommandResult) -> Option<()> {
-    let dll_name = try_cstring(command.get_args().get(0)?).ok()?;
+    let dll_name = try_cstring(command.get_arg(0)?).ok()?;
 
     let interface_name = command.get_args().get(1)?;
     let c_interface_name = try_cstring(interface_name).ok()?;

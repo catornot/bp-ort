@@ -165,7 +165,7 @@ pub enum CmdSource {
 }
 
 #[repr(C)]
-#[repr(align(32))]
+#[repr(align(4))]
 #[derive(Debug)]
 pub struct TraceResults {
     pub start_pos: Vector3,
@@ -260,6 +260,7 @@ pub struct CTraceFilterSimple {
     pub collision_group: i32,
 }
 
+#[allow(dead_code)]
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct CTraceFilterWorldAndProps {

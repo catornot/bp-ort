@@ -65,8 +65,8 @@ fn health_server_command(command: CCommandResult) {
 }
 
 fn set_health(player: &mut CPlayer, mut health: i32) {
-    if health >= 524287 {
-        health = 524287;
+    if health >= 524286 {
+        health = 524286;
     }
 
     unsafe {
@@ -99,7 +99,7 @@ fn health_completion(current: CurrentCommand, suggestions: CommandCompletion) {
     };
 
     // common health amount
-    [12000, 100, 1, 10, 524287]
+    [12000, 100, 1, 10, 524286]
         .into_iter()
         .for_each(|health| _ = suggestions.push(&format!("{} {} {}", current.cmd, prev, health)))
 }

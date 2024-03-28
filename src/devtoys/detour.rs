@@ -18,9 +18,10 @@ pub fn hook_server(addr: *const c_void) {
 pub fn some_draw_world_hook(node: *mut c_void, mut unk: u32, unk2: usize) {
     if DRAWWORLD_CONVAR
         .get(unsafe { EngineToken::new_unchecked() })
-        .borrow()
-        .as_ref()
-        .map(|cvar| cvar.get_value_i32() == 0)
+        .try_borrow()
+        .map(|convar| convar.as_ref().map(|cvar| cvar.get_value_i32() == 0)) // for some reason sometimes the borrow is mut?
+        .ok()
+        .flatten()
         .unwrap_or(false)
     {
         unk = 0;

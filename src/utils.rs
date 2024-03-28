@@ -10,7 +10,7 @@ use windows_sys::Win32::System::{
     Threading::GetCurrentProcess,
 };
 
-use crate::{bindings::ENGINE_FUNCTIONS, interfaces::ENGINE_INTERFACES};
+use crate::bindings::ENGINE_FUNCTIONS;
 
 pub struct Pointer<'a, T> {
     pub ptr: *const T,
@@ -95,43 +95,6 @@ pub(crate) fn send_client_print(player: &CPlayer, msg: &str) -> Option<()> {
     unsafe { (engine.cgame_client_printf)(client, msg.as_ptr()) };
 
     None
-}
-
-pub(crate) unsafe fn client_command(edict: u16, command: *const c_char) {
-    const ZERO_STRING: *const c_char = "\0".as_ptr() as *const _;
-
-    let func = ENGINE_INTERFACES
-        .get()
-        .unwrap_unchecked()
-        .engine_server
-        .as_ref()
-        .unwrap()
-        .as_ref()
-        .unwrap()[23];
-    let client_command: unsafe extern "C" fn(
-        *const c_void,
-        *const u16,
-        *const c_char,
-        *const c_char,
-    ) = std::mem::transmute(func);
-
-    client_command(std::ptr::null(), &edict, command, ZERO_STRING);
-}
-
-#[allow(unused)]
-pub(crate) unsafe fn server_command(command: *const c_char) {
-    let func = ENGINE_INTERFACES
-        .get()
-        .unwrap_unchecked()
-        .engine_server
-        .as_ref()
-        .unwrap()
-        .as_ref()
-        .unwrap()[21];
-    let client_command: unsafe extern "C" fn(*const c_void, *const c_char) =
-        std::mem::transmute(func);
-
-    client_command(std::ptr::null(), command);
 }
 
 pub(crate) unsafe fn create_source_interface<T>(

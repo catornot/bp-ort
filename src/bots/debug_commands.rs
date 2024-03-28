@@ -40,7 +40,7 @@ pub fn register_debug_concommands(engine: &EngineData, token: EngineToken) {
 
 #[rrplug::concommand]
 pub fn bot_find(command: CCommandResult) {
-    let name = match command.get_args().get(0) {
+    let name = match command.get_arg(0) {
         Some(n) => n,
         None => return,
     };
@@ -78,7 +78,7 @@ pub fn bot_dump_players() {
 
 #[rrplug::concommand]
 pub fn set_clan_tag(command: CCommandResult) {
-    let index = match command.get_args().get(0) {
+    let index = match command.get_arg(0) {
         Some(index) => match index.parse::<i32>() {
             Ok(index) => index,
             _ => return,
@@ -86,7 +86,7 @@ pub fn set_clan_tag(command: CCommandResult) {
         None => return,
     };
 
-    let tag = match command.get_args().get(0) {
+    let tag = match command.get_arg(0) {
         Some(tag) => tag.bytes(),
         None => return,
     };

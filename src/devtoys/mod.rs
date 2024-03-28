@@ -1,4 +1,7 @@
-use rrplug::{bindings::cvar::convar::FCVAR_CHEAT, prelude::*};
+use rrplug::{
+    bindings::cvar::convar::{FCVAR_CHEAT, FCVAR_CLIENTDLL},
+    prelude::*,
+};
 use std::cell::RefCell;
 
 use crate::bindings::ENGINE_FUNCTIONS;
@@ -13,17 +16,17 @@ pub static PAUSABLE_CONVAR: EngineGlobal<RefCell<Option<ConVarStruct>>> =
     EngineGlobal::new(RefCell::new(None));
 pub static FORCE_BOX_CONVAR: EngineGlobal<RefCell<Option<ConVarStruct>>> =
     EngineGlobal::new(RefCell::new(None)); // move to dev toys
+pub static ALLY_COLOR_CONVAR: EngineGlobal<RefCell<Option<ConVarStruct>>> =
+    EngineGlobal::new(RefCell::new(None)); // move to dev toys
+pub static FREE_CAM_CONVAR: EngineGlobal<RefCell<Option<ConVarStruct>>> =
+    EngineGlobal::new(RefCell::new(None)); // move to dev toys
 
 #[derive(Debug)]
 pub struct DevToys;
 
 impl Plugin for DevToys {
-    const PLUGIN_INFO: PluginInfo = PluginInfo::new(
-        "devtoys\0",
-        "devtoys\0",
-        "devtoys\0",
-        PluginContext::DEDICATED,
-    );
+    const PLUGIN_INFO: PluginInfo =
+        PluginInfo::new(c"devtoys", c"devtoys", c"devtoys", PluginContext::DEDICATED);
     fn new(_: bool) -> Self {
         Self {}
     }
@@ -33,6 +36,19 @@ impl Plugin for DevToys {
             WhichDll::Engine => {
                 detour::hook_engine(dll_ptr.get_dll_ptr());
                 reversing_detour::hook_engine(dll_ptr.get_dll_ptr());
+
+                _ = FREE_CAM_CONVAR.get(token).borrow_mut().replace(
+                    ConVarStruct::try_new(
+                        &ConVarRegister::new(
+                            "free_cam_active",
+                            "0",
+                            FCVAR_CLIENTDLL as i32,
+                            "maybe a working free cam",
+                        ),
+                        token,
+                    )
+                    .expect("convar registration failed for free cam cvar"),
+                );
             }
             WhichDll::Server => {
                 detour::hook_server(dll_ptr.get_dll_ptr());
@@ -42,16 +58,17 @@ impl Plugin for DevToys {
                     .expect("r_drawworld should exist");
                 draw_convar.remove_flags(FCVAR_CHEAT as i32, token);
 
-                _ = DRAWWORLD_CONVAR
-                    .get(token)
-                    .borrow_mut()
-                    .replace(draw_convar);
+                let mut drawworld = DRAWWORLD_CONVAR.get(token).borrow_mut();
+                _ = drawworld.replace(draw_convar);
 
                 _ = PAUSABLE_CONVAR.get(token).borrow_mut().replace(
                     ConVarStruct::find_convar_by_name("sv_pausable", token)
                         .expect("sv_pausable should exist"),
                 );
 
+                // if let Ok(convar) = ConVarStruct::find_convar_by_name("idcolor_ally", token) {
+                //     ALLY_COLOR_CONVAR.get(token).borrow_mut().replace(convar);
+                // }
                 let convar = ConVarStruct::find_convar_by_name("enable_debug_overlays", token)
                     .expect("enable_debug_overlays should exist");
                 convar.set_value_i32(1, token);
@@ -116,11 +133,24 @@ impl Plugin for DevToys {
             Some(_) => {}
         }
 
-        let Ok(convar) = ConVarStruct::find_convar_by_name("idcolor_ally", token) else {
+        // if ALLY_COLOR_CONVAR
+        //     .get(token)
+        //     .borrow()
+        //     .as_ref()
+        //     .map(|convar| convar.get_value_bool())
+        //     .unwrap_or_default()
+        // {
+        //     let client = CLIENT_FUNCTIONS.wait();
+        //     if let Some(local_player) = unsafe { (client.get_local_c_player)().as_mut() } {}
+        // }
+        // todo
+
+        let ally_convar = ALLY_COLOR_CONVAR.get(token).borrow_mut();
+        let Some(ally_convar) = ally_convar.as_ref() else {
             return;
         };
 
-        let Ok(line) = convar.get_value_str() else {
+        let Ok(line) = ally_convar.get_value_str() else {
             return;
         };
 
@@ -132,7 +162,7 @@ impl Plugin for DevToys {
             return;
         };
 
-        convar.set_value_string(
+        ally_convar.set_value_string(
             format!(
                 "{:.*} 0.100 1.000 8",
                 3,

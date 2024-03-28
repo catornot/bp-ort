@@ -9,7 +9,6 @@ use rrplug::{
         cvar::convar::FCVAR_GAMEDLL,
     },
     exports::OnceCell,
-    high::engine::convars::{ConVarRegister, ConVarStruct},
 };
 use std::ops::Not;
 use std::{
@@ -19,6 +18,7 @@ use std::{
 };
 
 use crate::bindings::{EngineFunctions, ServerFunctions};
+use crate::interfaces::ENGINE_INTERFACES;
 use crate::{
     bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
     bots::{
@@ -41,9 +41,10 @@ pub const DEFAULT_SIMULATE_TYPE: i32 = 6;
 
 static CLAN_TAG_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
 pub static SIMULATE_TYPE_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
+pub static UWUFY_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
 
 thread_local! {
-    pub static MAX_PLAYERS: RefCell<u32> = const { RefCell::new(32) };
+    pub static MAX_PLAYERS: RefCell<u32> = const { RefCell::new(64) };
 }
 
 pub(super) static BOT_DATA_MAP: EngineGlobal<RefCell<Lazy<[BotData; 64]>>> =
@@ -75,6 +76,7 @@ pub(super) struct BotData {
     last_bad_path: f32,
     last_target_index: u32,
     target_pos: Vector3,
+    last_shot: f32,
 }
 
 #[derive(Debug)]
@@ -85,7 +87,7 @@ pub struct Bots {
 
 impl Plugin for Bots {
     const PLUGIN_INFO: PluginInfo =
-        PluginInfo::new("Bots\0", "BOTS_____\0", "BOTS\0", PluginContext::all());
+        PluginInfo::new(c"Bots", c"BOTS_____", c"BOTS", PluginContext::all());
 
     fn new(_: bool) -> Self {
         register_sq_functions(bot_set_titan);
@@ -102,24 +104,23 @@ impl Plugin for Bots {
                     "perhaps_bot",
                     "sybotn",
                     "botsimp",
-                    "1-1=-0",
                     "thx_bob",
-                    "Petar_:D",
-                    "HI_HOLO",
+                    "PetarBot",
+                    "hOlOB0t",
                     "ctalover",
                     "Bot3000",
                     "okhuh",
                     "BOT-7274",
                     "Standby_For_BotFall",
-                    "ifthisismodded",
-                    "whenmp_boxgameplay?",
                     "rust<3",
-                    "hi_Fifty",
-                    "yesdogbot",
+                    "FiftyBots",
+                    "yesbot",
                     "bobthebot",
                     "Ihatewarnings",
-                    "Trinity_Bot",
+                    "Triboty",
                     "bornet",
+                    "4botv",
+                    "RoyalBot",
                 ]
                 .into_iter()
                 .map(str::to_string)
@@ -207,6 +208,19 @@ impl Plugin for Bots {
 
         _ = SIMULATE_TYPE_CONVAR.set(simulate_convar);
 
+        _ = UWUFY_CONVAR.set(
+            ConVarStruct::try_new(
+                &ConVarRegister::new(
+                    "bot_uwufy",
+                    "0",
+                    FCVAR_GAMEDLL as i32,
+                    "decides weather connecting player should haev their name uwufyied",
+                ),
+                token,
+            )
+            .expect("failed to register the bot_uwufy convar"),
+        );
+
         _ = engine.register_concommand_with_completion(
             "bot_spawn",
             spawn_fake_player_command,
@@ -229,6 +243,7 @@ fn spawn_fake_player(
     engine_funcs: &EngineFunctions,
     token: EngineToken,
 ) -> Option<i32> {
+    let engine_server = ENGINE_INTERFACES.wait().engine_server;
     let players = unsafe { iterate_c_array_sized::<_, 32>(engine_funcs.client_array.into()) }
         .filter(|c| unsafe { c.signon.get_inner() } >= &SignonState::CONNECTED)
         .count() as u32;
@@ -241,6 +256,8 @@ fn spawn_fake_player(
         );
         return None;
     }
+
+    unsafe { engine_server.LockNetworkStringTables(true) };
 
     let name = try_cstring(&name).unwrap_or_default();
     let bot = unsafe {
@@ -264,6 +281,8 @@ fn spawn_fake_player(
 
     let edict = unsafe { **client.edict };
     unsafe { (server_funcs.client_fully_connected)(std::ptr::null(), edict, true) };
+
+    unsafe { engine_server.LockNetworkStringTables(false) };
 
     log::info!(
         "spawned a bot : {}",
@@ -292,7 +311,7 @@ fn spawn_fake_player_command(command: CCommandResult) {
 
     let name = command
         .get_args()
-        .get(0)
+        .first()
         .unwrap_or_else(|| {
             names
                 .get(rng.gen_range(0..names.len()))
@@ -423,9 +442,15 @@ fn bot_set_titan(bot: Option<&mut CPlayer>, titan: String) -> Option<()> {
 #[rrplug::sqfunction(VM = "Server", ExportName = "BotSetTargetPos")]
 fn bot_set_target_pos(bot: Option<&mut CPlayer>, target: Vector3) -> Option<()> {
     let mut data_maps = BOT_DATA_MAP.get(engine_token).try_borrow_mut().ok()?;
-    let bot_data = data_maps
-        .as_mut()
-        .get_mut(unsafe { bot?.player_index.copy_inner() - 1 } as usize)?;
+    let bot_data = data_maps.as_mut().get_mut(unsafe {
+        ENGINE_FUNCTIONS
+            .wait()
+            .client_array
+            .add((bot?.player_index.copy_inner() - 1) as usize)
+            .as_ref()?
+            .edict
+            .copy_inner() as usize
+    })?;
 
     bot_data.target_pos = target;
 
@@ -435,9 +460,15 @@ fn bot_set_target_pos(bot: Option<&mut CPlayer>, target: Vector3) -> Option<()> 
 #[rrplug::sqfunction(VM = "Server", ExportName = "BotSetSimulationType")]
 fn bot_set_sim_type(bot: Option<&mut CPlayer>, sim_type: i32) -> Option<()> {
     let mut data_maps = BOT_DATA_MAP.get(engine_token).try_borrow_mut().ok()?;
-    let bot_data = data_maps
-        .as_mut()
-        .get_mut(unsafe { bot?.player_index.copy_inner() - 1 } as usize)?;
+    let bot_data = data_maps.as_mut().get_mut(unsafe {
+        ENGINE_FUNCTIONS
+            .wait()
+            .client_array
+            .add((bot?.player_index.copy_inner() - 1) as usize)
+            .as_ref()?
+            .edict
+            .copy_inner() as usize
+    })?;
 
     if sim_type >= 0 {
         bot_data.sim_type = Some(sim_type);

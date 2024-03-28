@@ -17,7 +17,7 @@ pub static ENGINE_INTERFACES: OnceCell<EngineInterfaces> = OnceCell::new();
 
 pub struct EngineInterfaces {
     pub debug_overlay: &'static IVDebugOverlay, // since it's a ptr to class which has a ptr to vtable
-    pub engine_server: *mut *const [*const c_void; 211],
+    pub engine_server: &'static IVEngineServer,
     pub engine_client: *mut *const [*const c_void; 200],
 }
 
@@ -29,9 +29,9 @@ pub struct Interfaces;
 
 impl Plugin for Interfaces {
     const PLUGIN_INFO: PluginInfo = PluginInfo::new(
-        "Interfaces",
-        "Interfaces",
-        "Interfaces",
+        c"Interfaces",
+        c"Interfaces",
+        c"Interfaces",
         PluginContext::all(),
     );
 
@@ -55,9 +55,9 @@ impl Plugin for Interfaces {
                     "VDebugOverlay004",
                 )
                 .unwrap(),
-                engine_server: create_source_interface::<*const [*const c_void; 211]>(
-                    "engine.dll\0".as_ptr().cast(),
-                    "VEngineServer022\0".as_ptr().cast(),
+                engine_server: IVEngineServer::from_dll_ptr(
+                    HMODULE(dll_ptr.get_dll_ptr() as isize),
+                    "VEngineServer022",
                 )
                 .unwrap(),
                 engine_client: create_source_interface::<*const [*const c_void; 200]>(
@@ -115,4 +115,74 @@ create_external_interface! {
         pub(self) fn sub_1800ACC00() -> ();
     }
 
+}
+
+type Edict = u16;
+
+create_external_interface! {
+    pub IVEngineServer + IVEngineServerMod => {
+        pub(crate) fn Changelevel(s1: *const c_char, s2: *const c_char) -> ();
+        pub(self) fn sub_18011B140() -> ();
+        pub(self) fn sub_18011B410() -> ();
+        pub(self) fn sub_18011B6F0() -> ();
+        pub(self) fn sub_18011B3A0() -> ();
+        pub(self) fn sub_18011B3C0() -> ();
+        pub(crate) fn GetLaunchOptions() -> *const c_void;
+
+        pub(crate) fn PrecacheModel(name: *const c_char) -> i32;
+        pub(self) fn sub_18011B440() -> ();
+
+        pub(self) fn sub_18011B520() -> ();
+
+        pub(self) fn sub_18011ACB0() -> ();
+        pub(self) fn sub_18011A9C0() -> ();
+        pub(self) fn sub_18011AA00() -> ();
+        pub(self) fn sub_18011A860() -> ();
+        pub(self) fn sub_18011AD40() -> ();
+        pub(self) fn sub_18011C730() -> ();
+        pub(self) fn sub_18011C790() -> ();
+        pub(self) fn sub_18011C8B0() -> ();
+        pub(self) fn sub_18011A650() -> ();
+        pub(self) fn sub_18011C870() -> ();
+
+        pub(crate) fn FadeClientVolume(pEdict: *const Edict, flFadePercent: f32, flFadeOutSeconds: f32, flHoldTime: f32, flFadeInSeconds: f32) -> ();
+
+        pub(crate) fn ServerCommand(szCommand: *const c_char) -> ();
+        pub(crate) fn ServerExecute() -> ();
+
+        pub(crate) fn ClientCommand(pEdict: *const Edict, szFmt: *const c_char) -> (); // was varidic
+
+        pub(crate) fn LightStyle(nStyle: i32, szVal: *const c_char) -> ();
+
+        pub(crate) fn UserMessageBegin(a2: i64, a3: i32, a4: i64, a5: i32) -> *const c_void;
+        pub(crate) fn UserMessageEnd() -> ();
+
+        pub(crate) fn ClientPrintf(nEdict: Edict, szMsg: *const c_char) -> ();
+
+        pub(crate) fn Con_NPrintf(nPos: i32, szFmt: *const c_char) -> ();// was varidic
+        pub(crate) fn Con_NXPrintf(pInfo: *const c_void, szFmt: *const c_char)-> ();// was varidic
+
+        pub(self) fn sub_18011CDD0() -> ();
+        pub(self) fn sub_18011B190() -> ();
+        pub(self) fn sub_18011CD10() -> ();
+        pub(self) fn sub_18011CCD0() -> ();
+
+        pub(crate) fn CrosshairAngle(nClient: Edict, flPitch: f32, flYaw: f32) -> ();
+
+        pub(crate) fn GrantClientSidePickup(nClient: Edict, a3: i32, a4: i32, a5: *const i32, a6: i32, a7: i32) -> bool;
+
+        pub(crate) fn GetGameDir(szGetGameDir: *mut c_char, nMaxlength: i32) -> ();
+
+        pub(crate) fn CompareFileTime(szFilename1: *const c_char, szFilename2: *const c_char, iCompare: *const i32) -> i32;
+
+        pub(crate) fn LockNetworkStringTables(bLock: bool) -> ();
+
+        pub(self) fn sub_18011AD70() -> ();
+        pub(self) fn sub_18011AD30() -> ();
+        pub(self) fn sub_18011AD80() -> ();
+
+        pub(crate) fn CreateFakeClient(szName: *const c_char, szUnk: *const c_char, szPlaylist: *const c_char, nTeam: i32) -> Edict;
+
+        // not full vtable
+}
 }

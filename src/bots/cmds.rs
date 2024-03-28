@@ -13,7 +13,7 @@ use crate::{
     },
     interfaces::ENGINE_INTERFACES,
     navmesh::{Hull, RECAST_DETOUR},
-    utils::{client_command, iterate_c_array_sized},
+    utils::iterate_c_array_sized,
 };
 
 use super::{BotData, BOT_DATA_MAP, SIMULATE_TYPE_CONVAR};
@@ -170,6 +170,8 @@ pub fn run_bots_cmds(_paused: bool) {
 
             // bots don't trigger triggers for some reason this way
 
+            // m_pPhysicsController may be behind the crashes in titans
+
             let frametime = **globals.frametime;
             let cur_time = **globals.cur_time;
 
@@ -179,8 +181,13 @@ pub fn run_bots_cmds(_paused: bool) {
             // run_null_command(player);
             player_run_command(player, &mut cmd, move_helper());
             *player.latest_command_run.get_inner_mut() = cmd.command_number;
-            // (server_functions.set_last_cmd)((player as *const ()).offset(0x20a0).cast(), &mut cmd);
-            #[allow(invalid_reference_casting)] // tmp
+            // (server_functions.set_last_cmd)(
+            //     (player as *const _ as *const CUserCmd)
+            //         .offset(0x20a0)
+            //         .cast_mut(),
+            //     &mut cmd,
+            // );
+            #[allow(invalid_reference_casting)] // tmp or not XD
             {
                 *((globals.frametime.get_inner() as *const f32).cast_mut()) = frametime;
                 *((globals.cur_time.get_inner() as *const f32).cast_mut()) = cur_time;
@@ -228,13 +235,6 @@ pub(super) fn get_cmd(
             if let Some(query) = local_data.nav_query.as_mut() {
                 query.path_points.clear()
             }
-
-            unsafe {
-                client_command(
-                    local_data.edict,
-                    "CC_RespawnPlayer Pilot\0".as_ptr() as *const i8,
-                )
-            };
 
             CUserCmd::new_empty(&helper)
         }
@@ -387,7 +387,7 @@ pub(super) fn get_cmd(
                         local_data.last_target_index = unsafe { target.player_index.copy_inner() }
                     }
                 }
-                (7, Some((_, false))) => {
+                (7, _) => {
                     _ = path_to_target(
                         &mut cmd,
                         local_data,
@@ -401,12 +401,15 @@ pub(super) fn get_cmd(
             }
 
             if let Some(((target, target_player), should_shoot)) = target {
-                cmd.buttons |= if should_shoot {
+                cmd.buttons |= if should_shoot && is_timedout(local_data.last_shot, &helper, 0.6) {
                     Action::Zoom as u32
                         | (unsafe { helper.globals.frame_count.copy_inner() } / 2 % 4 != 0)
                             .then_some(Action::Attack as u32)
                             .unwrap_or_default()
+                } else if should_shoot {
+                    0
                 } else {
+                    local_data.last_shot = unsafe { helper.globals.cur_time.copy_inner() };
                     0
                 };
 
@@ -437,7 +440,21 @@ pub(super) fn get_cmd(
                 };
 
                 if should_shoot || sim_type == 5 {
-                    cmd.world_view_angles = look_at(origin, target);
+                    let angles = look_at(origin, target);
+
+                    const CLAMP: f32 = 360.;
+
+                    cmd.world_view_angles.x = angles.x;
+                    cmd.world_view_angles.y = angles
+                        .y
+                        .is_finite()
+                        .then(|| {
+                            angles.y.clamp(
+                                cmd.world_view_angles.y - CLAMP,
+                                cmd.world_view_angles.y + CLAMP,
+                            )
+                        })
+                        .unwrap_or(angles.y);
                 }
 
                 let enemy_is_titan = unsafe { (helper.sv_funcs.is_titan)(target_player) };
@@ -668,12 +685,8 @@ fn path_to_target(
     true
 }
 
-fn is_timedout(
-    last_time_node_reached: f32,
-    helper: &CUserCmdHelper<'_>,
-    time_elasped: f32,
-) -> bool {
-    last_time_node_reached + time_elasped <= unsafe { helper.globals.cur_time.copy_inner() }
+fn is_timedout(last_time: f32, helper: &CUserCmdHelper<'_>, time_elasped: f32) -> bool {
+    last_time + time_elasped <= unsafe { helper.globals.cur_time.copy_inner() }
 }
 
 unsafe fn find_player_in_view<'a>(
@@ -740,7 +753,12 @@ fn distance_iterator<'b, 'a: 'b>(
         .filter_map(|i| unsafe { (helper.sv_funcs.get_player_by_index)(i + 1).as_mut() })
         .filter(|player| unsafe { **player.team != *team && **player.team != 0 })
         .filter(|player| unsafe { (helper.sv_funcs.is_alive)(*player) != 0 })
-        .map(|player| (unsafe { *player.get_origin(&mut V) }, player))
+        .map(|player| {
+            (
+                unsafe { *player.get_origin(std::ptr::addr_of_mut!(V)) },
+                player,
+            )
+        })
         .map(|(target, player)| (distance(*pos, target) as i64, player))
 }
 
