@@ -87,6 +87,14 @@ pub struct CUserCmd {
     // pub gap_a0: [c_char; 152], // eh
 }
 
+#[repr(C)]
+#[derive(Debug)]
+pub struct CMoveHelperServer {
+    pub vtable: *const c_void,
+    pub host: *const CPlayer,
+    pub touchlist: *const c_void,
+}
+
 impl CUserCmd {
     pub fn init_default(sv_funcs: &ServerFunctions) -> Self {
         let mut cmd = MaybeUninit::zeroed();
@@ -308,7 +316,7 @@ offset_functions! {
 offset_functions! {
     SERVER_FUNCTIONS + ServerFunctions for WhichDll::Server => {
         base = *const c_void where offset(0x0);
-        move_helper = *mut c_void where offset(0xc389e0);
+        move_helper = *mut CMoveHelperServer where offset(0xc389e0);
         csqvm = *mut CSquirrelVM where offset(0xf39358);
         client_fully_connected = ClientFullyConnected where offset(0x153B70);
         run_null_command = RunNullCommand where offset(0x5A9FD0);
@@ -316,10 +324,10 @@ offset_functions! {
         proccess_user_cmds = ProcessUsercmds where offset(0x159e50);
         add_user_cmd_to_player = unsafe extern "C" fn(this: *const CPlayer, cmds: *const CUserCmd, numcmds: u32, unk: usize, totalcmds: u32, paused: c_char) where offset(0x005a81c0);
         create_null_user_cmd = unsafe extern "C" fn(*mut CUserCmd) -> *mut CUserCmd where offset(0x25f790);
-        player_run_command = unsafe extern "C" fn(*mut CPlayer, *mut CUserCmd,*const c_void) -> () where offset(0x5a7d80);
+        player_run_command = unsafe extern "C" fn(*mut CPlayer, *mut CUserCmd,*const CMoveHelperServer) -> () where offset(0x5a7d80);
         set_base_time = unsafe extern "C" fn(*mut CPlayer, f32) where offset(0x5b3790);
         set_last_cmd = unsafe extern "C" fn(*mut CUserCmd, *mut CUserCmd) -> () where offset(0x25f860);
-        get_move_helper = unsafe extern "C" fn() -> *const c_void where offset(0x1b56f0);
+        get_move_helper = unsafe extern "C" fn() -> *const CMoveHelperServer where offset(0x1b56f0);
         get_player_by_index = PlayerByIndex where offset(0x26AA10);
         util_get_command_client = unsafe extern "C" fn() -> *mut CPlayer where offset(0x15bf40);
         command_client_index = *const i32 where offset(0xbfbd84);

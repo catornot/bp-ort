@@ -172,27 +172,39 @@ pub fn run_bots_cmds(_paused: bool) {
 
             // m_pPhysicsController may be behind the crashes in titans
 
-            let frametime = **globals.frametime;
-            let cur_time = **globals.cur_time;
+            // checks for m_animActive
+            // looks like it still did nothing
+            if !*(player as *const _ as *const bool).offset(0xc88) {
+                let frametime = **globals.frametime;
+                let cur_time = **globals.cur_time;
 
-            *player.cplayer_state_fixangle.get_inner_mut() = 0;
-            set_base_time(player, cur_time);
+                *player.cplayer_state_fixangle.get_inner_mut() = 0;
+                set_base_time(player, cur_time);
 
-            // run_null_command(player);
-            player_run_command(player, &mut cmd, move_helper());
-            *player.latest_command_run.get_inner_mut() = cmd.command_number;
-            // (server_functions.set_last_cmd)(
-            //     (player as *const _ as *const CUserCmd)
-            //         .offset(0x20a0)
-            //         .cast_mut(),
-            //     &mut cmd,
-            // );
-            #[allow(invalid_reference_casting)] // tmp or not XD
-            {
-                *((globals.frametime.get_inner() as *const f32).cast_mut()) = frametime;
-                *((globals.cur_time.get_inner() as *const f32).cast_mut()) = cur_time;
+                // run_null_command(player);
+                let move_helper = move_helper()
+                    .cast_mut()
+                    .as_mut()
+                    .expect("move_helper should not be null");
+
+                move_helper.host = player;
+
+                player_run_command(player, &mut cmd, move_helper);
+                *player.latest_command_run.get_inner_mut() = cmd.command_number;
+                // (server_functions.set_last_cmd)(
+                //     (player as *const _ as *const CUserCmd)
+                //         .offset(0x20a0)
+                //         .cast_mut(),
+                //     &mut cmd,
+                // );
+
+                move_helper.host = std::ptr::null_mut();
+                #[allow(invalid_reference_casting)] // tmp or not XD
+                {
+                    *((globals.frametime.get_inner() as *const f32).cast_mut()) = frametime;
+                    *((globals.cur_time.get_inner() as *const f32).cast_mut()) = cur_time;
+                }
             }
-
             // run_null_command(player);
 
             // *player.angles.get_inner_mut() = cmd.world_view_angles // this is not really great -> bad aim
@@ -355,10 +367,6 @@ pub(super) fn get_cmd(
             let mut cmd = CUserCmd::new_basic_move(Vector3::ZERO, 0, &helper);
 
             match (sim_type, &target) {
-                (5, Some((_, _))) => {
-                    cmd.move_ = Vector3::new(1., 0., 0.);
-                    cmd.buttons |= Action::Forward as u32 | Action::Walk as u32;
-                }
                 (6, Some(((target_pos, target), false))) => {
                     if let Some(pet_titan) =
                         unsafe { (helper.sv_funcs.get_pet_titan)(player).as_ref() }
@@ -373,7 +381,7 @@ pub(super) fn get_cmd(
                                     &mut v,
                                 )
                             },
-                            false,
+                            local_data.should_recaculate_path,
                             &helper,
                         );
                     } else if path_to_target(
@@ -381,27 +389,38 @@ pub(super) fn get_cmd(
                         local_data,
                         origin,
                         *target_pos,
-                        local_data.last_target_index != unsafe { target.player_index.copy_inner() },
+                        local_data.last_target_index != unsafe { target.player_index.copy_inner() }
+                            || local_data.should_recaculate_path,
                         &helper,
                     ) {
                         local_data.last_target_index = unsafe { target.player_index.copy_inner() }
                     }
+
+                    local_data.should_recaculate_path = false;
                 }
-                (7, _) => {
+                (7, vision) if vision.is_none() || matches!(vision, Some((_, false))) => {
                     _ = path_to_target(
                         &mut cmd,
                         local_data,
                         origin,
                         local_data.target_pos,
-                        false,
+                        local_data.should_recaculate_path,
                         &helper,
                     );
+
+                    local_data.should_recaculate_path = false;
+                }
+                (_, Some((_, _))) => {
+                    cmd.move_ = Vector3::new(1., 0., 0.);
+                    cmd.buttons |= Action::Forward as u32 | Action::Walk as u32;
+
+                    local_data.should_recaculate_path = true;
                 }
                 _ => {}
             }
 
             if let Some(((target, target_player), should_shoot)) = target {
-                cmd.buttons |= if should_shoot && is_timedout(local_data.last_shot, &helper, 0.6) {
+                cmd.buttons |= if should_shoot && is_timedout(local_data.last_shot, &helper, 0.8) {
                     Action::Zoom as u32
                         | (unsafe { helper.globals.frame_count.copy_inner() } / 2 % 4 != 0)
                             .then_some(Action::Attack as u32)
@@ -442,7 +461,7 @@ pub(super) fn get_cmd(
                 if should_shoot || sim_type == 5 {
                     let angles = look_at(origin, target);
 
-                    const CLAMP: f32 = 360.;
+                    const CLAMP: f32 = 10.;
 
                     cmd.world_view_angles.x = angles.x;
                     cmd.world_view_angles.y = angles
@@ -518,14 +537,14 @@ pub(super) fn get_cmd(
 
             cmd
         }
-        8 | 9 => 'end: {
+        13 | 14 => 'end: {
             let mut cmd = CUserCmd::new_empty(&helper);
 
             let origin = unsafe { *player.get_origin(&mut v) };
             let team = unsafe { **player.team };
             let mut v = Vector3::ZERO;
 
-            let maybe_target = if sim_type == 7 {
+            let maybe_target = if sim_type == 13 {
                 farthest_player(origin, team, &helper)
             } else {
                 closest_player(origin, team, &helper)
@@ -548,7 +567,7 @@ pub(super) fn get_cmd(
             }
             cmd
         }
-        10 => {
+        15 => {
             let mut cmd = CUserCmd::new_empty(&helper);
             cmd.world_view_angles = helper.angles + Vector3::new(0., 10., 0.);
 
@@ -561,7 +580,7 @@ pub(super) fn get_cmd(
 
             cmd
         }
-        11 => {
+        16 => {
             let mut cmd = CUserCmd::new_basic_move(
                 Vector3::new(1.0, 0., 0.),
                 Action::Forward as u32,

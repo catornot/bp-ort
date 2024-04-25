@@ -2,7 +2,7 @@ use rrplug::{
     bindings::cvar::convar::{FCVAR_CHEAT, FCVAR_CLIENTDLL},
     prelude::*,
 };
-use std::cell::RefCell;
+use std::{cell::RefCell, convert::Infallible};
 
 use crate::bindings::ENGINE_FUNCTIONS;
 
@@ -78,7 +78,7 @@ impl Plugin for DevToys {
             _ => {}
         }
 
-        let Some(_) = engine else { return };
+        let Some(engine) = engine else { return };
 
         let box_convar = ConVarStruct::try_new(
             &ConVarRegister::new(
@@ -92,6 +92,16 @@ impl Plugin for DevToys {
         .unwrap();
 
         _ = FORCE_BOX_CONVAR.get(token).replace(Some(box_convar));
+
+        engine
+            .register_concommand(
+                "remove_max_min",
+                remove_max,
+                "removes the limits on interger convars",
+                0,
+                token,
+            )
+            .unwrap();
     }
 
     fn runframe(&self, token: EngineToken) {
@@ -171,4 +181,23 @@ impl Plugin for DevToys {
             token,
         )
     }
+}
+
+#[rrplug::concommand]
+fn remove_max(cmd: CCommandResult) -> Option<Infallible> {
+    let convar_name = cmd.get_arg(0)?;
+
+    let convar = unsafe {
+        ConVarStruct::find_convar_by_name(convar_name, engine_token)
+            .ok()?
+            .get_raw_convar_ptr()
+    };
+
+    let convar = unsafe { convar.as_mut()? };
+    convar.m_bHasMin = false;
+    convar.m_bHasMax = false;
+    convar.m_fMinVal = f32::MIN;
+    convar.m_fMaxVal = f32::MAX;
+
+    None
 }

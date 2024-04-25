@@ -1,5 +1,5 @@
 use retour::static_detour;
-use rrplug::bindings::class_types::client::CClient;
+use rrplug::bindings::class_types::{client::CClient, cplayer::CPlayer};
 use std::{
     ffi::{c_uchar, c_void},
     mem,
@@ -9,7 +9,7 @@ use super::{
     cmds::{replace_cmd, run_bots_cmds},
     set_on_join::set_stuff_on_join,
 };
-use crate::bindings::CUserCmd;
+use crate::bindings::{CMoveHelperServer, CUserCmd};
 
 static_detour! {
     static Physics_RunThinkFunctions: unsafe extern "C" fn(bool);
@@ -18,6 +18,8 @@ static_detour! {
     static CreateNullUserCmd: unsafe extern "C" fn(*mut CUserCmd) -> *mut CUserCmd;
     static SomeFuncInDisconnectProcedure: unsafe extern "C" fn(*mut CClient, *const c_void,c_uchar);
     static CClient__Disconnect: unsafe extern "C" fn(*mut CClient, c_uchar, *const c_void, *const c_void);
+    static FUN_18069e7a0: unsafe extern "C" fn(*mut c_void, *mut CPlayer, *const c_void);
+    static CMoveHelperServer__PlayerFallingDamage: unsafe extern "C" fn(*mut CMoveHelperServer, *mut c_void, *const c_void, *const c_void);
 }
 
 fn physics_run_think_functions_hook(paused: bool) {
@@ -35,10 +37,65 @@ fn create_null_cmd_hook(cmd: *mut CUserCmd) -> *mut CUserCmd {
         .unwrap_or_else(|| unsafe { CreateNullUserCmd.call(cmd) })
 }
 
+// maybe also check in FUN_1805d52f0 for null player
+
+// for some reason the next 2 functions can randmoly get null pointers when bots are in titans
+fn fun_18069e7a0_hook(unk1: *mut c_void, player: *mut CPlayer, unk2: *const c_void) {
+    unsafe {
+        let player = player
+            .as_mut()
+            .expect("like fr? why is the player null here FUN_69e7a0");
+
+        if player.current_command.is_null() {
+            return;
+        }
+
+        FUN_18069e7a0.call(unk1, player, unk2)
+    }
+}
+
+fn player_falling_damage_hook(
+    this: *mut CMoveHelperServer,
+    unk2: *mut c_void,
+    unk3: *const c_void,
+    unk4: *const c_void,
+) {
+    unsafe {
+        let this = this
+            .as_mut()
+            .expect("like fr? why is the null here FUN_69e7a0");
+
+        if this.host.is_null() {
+            return;
+        }
+
+        CMoveHelperServer__PlayerFallingDamage.call(this, unk2, unk3, unk4)
+    }
+}
+
 pub fn hook_server(addr: *const c_void) {
     log::info!("hooking bot server functions");
 
     unsafe {
+        FUN_18069e7a0
+            .initialize(mem::transmute(addr.offset(0x69e7a0)), fun_18069e7a0_hook)
+            .expect("failed to hook FUN_18069e7a0")
+            .enable()
+            .expect("failure to enable the FUN_18069e7a0");
+
+        log::info!("hooked FUN_18069e7a0");
+
+        CMoveHelperServer__PlayerFallingDamage
+            .initialize(
+                mem::transmute(addr.offset(0x1b5720)),
+                player_falling_damage_hook,
+            )
+            .expect("failed to hook CMoveHelperServer__PlayerFallingDamage")
+            .enable()
+            .expect("failure to enable the CMoveHelperServer__PlayerFallingDamage");
+
+        log::info!("hooked CMoveHelperServer__PlayerFallingDamage");
+
         Physics_RunThinkFunctions
             .initialize(
                 mem::transmute(addr.offset(0x483A50)),

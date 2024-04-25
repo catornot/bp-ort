@@ -8,7 +8,6 @@ use rrplug::{
 };
 
 use self::concommands::register_concommands;
-use crate::utils::create_source_interface;
 
 mod concommands;
 mod hooks;
@@ -18,7 +17,6 @@ pub static ENGINE_INTERFACES: OnceCell<EngineInterfaces> = OnceCell::new();
 pub struct EngineInterfaces {
     pub debug_overlay: &'static IVDebugOverlay, // since it's a ptr to class which has a ptr to vtable
     pub engine_server: &'static IVEngineServer,
-    pub engine_client: *mut *const [*const c_void; 200],
 }
 
 unsafe impl Sync for EngineInterfaces {}
@@ -58,11 +56,6 @@ impl Plugin for Interfaces {
                 engine_server: IVEngineServer::from_dll_ptr(
                     HMODULE(dll_ptr.get_dll_ptr() as isize),
                     "VEngineServer022",
-                )
-                .unwrap(),
-                engine_client: create_source_interface::<*const [*const c_void; 200]>(
-                    ("engine.dll\0").as_ptr().cast(),
-                    ("VEngineClient013\0").as_ptr().cast(),
                 )
                 .unwrap(),
             })

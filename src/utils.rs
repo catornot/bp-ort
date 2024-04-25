@@ -1,13 +1,11 @@
-use rrplug::{bindings::class_types::cplayer::CPlayer, mid::utils::try_cstring, prelude::*};
+use rrplug::{bindings::class_types::cplayer::CPlayer, mid::utils::try_cstring};
 use std::{
     ffi::{c_char, c_void, CStr},
     marker::PhantomData,
 };
 
 use windows_sys::Win32::System::{
-    Diagnostics::Debug::WriteProcessMemory,
-    LibraryLoader::{GetModuleHandleA, GetProcAddress},
-    Threading::GetCurrentProcess,
+    Diagnostics::Debug::WriteProcessMemory, Threading::GetCurrentProcess,
 };
 
 use crate::bindings::ENGINE_FUNCTIONS;
@@ -95,23 +93,4 @@ pub(crate) fn send_client_print(player: &CPlayer, msg: &str) -> Option<()> {
     unsafe { (engine.cgame_client_printf)(client, msg.as_ptr()) };
 
     None
-}
-
-pub(crate) unsafe fn create_source_interface<T>(
-    module: *const c_char,
-    interface: *const c_char,
-) -> Option<&'static mut T> {
-    const CREATEINTERFACE: *const u8 = "CreateInterface\0".as_ptr() as *const _;
-
-    let module = GetModuleHandleA(module as *const _);
-
-    if module == 0 {
-        log::error!("failed to get interface");
-        return None;
-    }
-
-    let create_interface_func: extern "C" fn(*const c_char, *const i32) -> *mut T =
-        std::mem::transmute(GetProcAddress(module, CREATEINTERFACE));
-
-    return create_interface_func(interface, std::ptr::null()).as_mut();
 }

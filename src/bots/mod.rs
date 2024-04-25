@@ -77,6 +77,7 @@ pub(super) struct BotData {
     last_target_index: u32,
     target_pos: Vector3,
     last_shot: f32,
+    should_recaculate_path: bool,
 }
 
 #[derive(Debug)]
@@ -212,7 +213,7 @@ impl Plugin for Bots {
             ConVarStruct::try_new(
                 &ConVarRegister::new(
                     "bot_uwufy",
-                    "0",
+                    "1",
                     FCVAR_GAMEDLL as i32,
                     "decides weather connecting player should haev their name uwufyied",
                 ),
