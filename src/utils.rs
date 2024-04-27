@@ -8,7 +8,7 @@ use windows_sys::Win32::System::{
     Diagnostics::Debug::WriteProcessMemory, Threading::GetCurrentProcess,
 };
 
-use crate::bindings::ENGINE_FUNCTIONS;
+use crate::bindings::{CBaseEntity, ServerFunctions, ENGINE_FUNCTIONS};
 
 pub struct Pointer<'a, T> {
     pub ptr: *const T,
@@ -93,4 +93,48 @@ pub(crate) fn send_client_print(player: &CPlayer, msg: &str) -> Option<()> {
     unsafe { (engine.cgame_client_printf)(client, msg.as_ptr()) };
 
     None
+}
+
+pub(crate) fn lookup_ent(handle: i32, server_funcs: &ServerFunctions) -> Option<&CBaseEntity> {
+    let entry_index = (handle & 0xffff) as usize;
+    let serial_number = handle >> 0x10;
+
+    if handle == -1
+        || entry_index > 0x3fff
+        || unsafe {
+            server_funcs
+                .ent_list
+                .add(entry_index)
+                .as_ref()?
+                .serial_number
+        } != serial_number
+    {
+        return None;
+    }
+
+    unsafe {
+        server_funcs
+            .ent_list
+            .add(entry_index)
+            .as_ref()?
+            .ent
+            .as_ref()
+    }
+}
+
+pub fn get_net_var(
+    player: &CPlayer,
+    netvar: &CStr,
+    index: i32,
+    server_funcs: &ServerFunctions,
+) -> Option<i32> {
+    let mut buf = [0; 4];
+    lookup_ent(
+        unsafe { player.player_script_net_data_global.copy_inner() },
+        server_funcs,
+    )
+    .map(|ent| unsafe {
+        (server_funcs.get_net_var_from_ent)(ent, netvar.as_ptr(), index, buf.as_mut_ptr())
+    })
+    .map(|_| buf[0])
 }

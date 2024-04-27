@@ -1,7 +1,8 @@
 use itertools::Itertools;
 use rrplug::{
     bindings::class_types::{client::SignonState, cplayer::CPlayer},
-    high::vector::Vector3,
+    high::{squirrel::call_sq_function, vector::Vector3, UnsafeHandle},
+    mid::squirrel::{SQFUNCTIONS, SQVM_SERVER},
     prelude::EngineToken,
 };
 use std::mem::MaybeUninit;
@@ -13,7 +14,7 @@ use crate::{
     },
     interfaces::ENGINE_INTERFACES,
     navmesh::{Hull, RECAST_DETOUR},
-    utils::iterate_c_array_sized,
+    utils::{get_net_var, iterate_c_array_sized},
 };
 
 use super::{BotData, BOT_DATA_MAP, SIMULATE_TYPE_CONVAR};
@@ -115,8 +116,8 @@ pub fn run_bots_cmds(_paused: bool) {
     let server_functions = SERVER_FUNCTIONS.wait();
     let engine_functions = ENGINE_FUNCTIONS.wait();
     let player_by_index = server_functions.get_player_by_index;
-    // let run_null_command = server_functions.run_null_command;
-    // let add_user_cmd_to_player = server_functions.add_user_cmd_to_player;
+    let run_null_command = server_functions.run_null_command;
+    // let player_process_usercmds = server_functions.player_process_usercmds ;
     let set_base_time = server_functions.set_base_time;
     let player_run_command = server_functions.player_run_command;
     let move_helper = server_functions.get_move_helper;
@@ -141,17 +142,14 @@ pub fn run_bots_cmds(_paused: bool) {
             .filter(|(_, client)| **client.signon == SignonState::FULL)
             .filter(|(_, client)| **client.fake_player)
             .filter_map(|(i, client)| {
-                Some((
-                    player_by_index((i + 1) as i32).as_mut()?,
-                    **client.edict as usize,
-                ))
-            })
-            .filter_map(|(p, edict)| {
+                let bot_player = player_by_index((i + 1) as i32).as_mut()?;
+                let edict = **client.edict as usize;
+
                 let data = bot_tasks.as_mut().get_mut(edict)?;
                 data.edict = edict as u16;
                 Some((
-                    get_cmd(p, &helper, data.sim_type.unwrap_or(sim_type), data)?,
-                    p,
+                    get_cmd(bot_player, &helper, data.sim_type.unwrap_or(sim_type), data)?,
+                    player_by_index((i + 1) as i32).as_mut()?,
                 ))
             }) // can collect here to stop the globals from complaning about mutability
     } {
@@ -174,14 +172,15 @@ pub fn run_bots_cmds(_paused: bool) {
 
             // checks for m_animActive
             // looks like it still did nothing
-            if !*(player as *const _ as *const bool).offset(0xc88) {
+            if !*(player as *const _ as *const bool).offset(0xc88)
+                || cmd.buttons & Action::WeaponDiscard as u32 == 0
+            {
                 let frametime = **globals.frametime;
                 let cur_time = **globals.cur_time;
 
                 *player.cplayer_state_fixangle.get_inner_mut() = 0;
                 set_base_time(player, cur_time);
 
-                // run_null_command(player);
                 let move_helper = move_helper()
                     .cast_mut()
                     .as_mut()
@@ -204,19 +203,19 @@ pub fn run_bots_cmds(_paused: bool) {
                     *((globals.frametime.get_inner() as *const f32).cast_mut()) = frametime;
                     *((globals.cur_time.get_inner() as *const f32).cast_mut()) = cur_time;
                 }
+
+                (server_functions.simulate_player)(player);
+            } else {
+                run_null_command(player);
             }
-            // run_null_command(player);
-
             // *player.angles.get_inner_mut() = cmd.world_view_angles // this is not really great -> bad aim
-
-            (server_functions.simulate_player)(player);
         }
         unsafe { LAST_CMD = None }
     }
 }
 
 pub(super) fn get_cmd(
-    player: &mut CPlayer,
+    player: &'static mut CPlayer,
     helper: &CUserCmdHelper,
     sim_type: i32,
     local_data: &mut BotData,
@@ -230,6 +229,7 @@ pub(super) fn get_cmd(
             ..CUserCmdHelper::construct_from_global(helper)
         }
     };
+
     {
         let desired_hull = if unsafe { (helper.sv_funcs.is_titan)(player) } {
             Hull::Titan
@@ -242,10 +242,29 @@ pub(super) fn get_cmd(
             }
         }
     }
+
+    let command_number = unsafe {
+        **player.rank += 1; // using this for command number
+        **player.rank as u32
+    };
+
     let mut cmd = Some(match sim_type {
         _ if unsafe { (helper.sv_funcs.is_alive)(player) == 0 } => {
             if let Some(query) = local_data.nav_query.as_mut() {
                 query.path_points.clear()
+            }
+
+            let sqvm = SQVM_SERVER
+                .get(unsafe { EngineToken::new_unchecked() })
+                .borrow();
+            if let Some(sqvm) = sqvm.as_ref() {
+                call_sq_function::<(), _>(
+                    *sqvm,
+                    SQFUNCTIONS.server.wait(),
+                    "CodeCallBack_Test",
+                    unsafe { UnsafeHandle::new(&*player) },
+                )
+                .unwrap_or_default();
             }
 
             CUserCmd::new_empty(&helper)
@@ -259,7 +278,7 @@ pub(super) fn get_cmd(
             } else {
                 CUserCmd::new_basic_move(
                     Vector3::new(0., 0., 0.),
-                    if sim_type == 8 {
+                    if sim_type == 12 {
                         Action::Attack
                     } else {
                         Action::Duck
@@ -359,15 +378,29 @@ pub(super) fn get_cmd(
             let team = unsafe { **player.team };
 
             let target = unsafe {
-                find_player_in_view(origin, team, &helper).map(|(player, should_shoot)| {
-                    ((*player.get_origin(&mut v), player), should_shoot)
+                find_player_in_view(
+                    origin,
+                    Some(*(helper.sv_funcs.view_angles)(player, &mut v)),
+                    team,
+                    &helper,
+                )
+                .map(|(player, should_shoot)| ((*player.get_origin(&mut v), player), should_shoot))
+                .or_else(|| {
+                    distance_iterator(
+                        &origin,
+                        enemy_player_iterator(team, &helper)
+                            .chain(enemy_titan_iterator(&helper, team)),
+                    )
+                    .reduce(|closer, other| if closer.0 < other.0 { other } else { closer })
+                    .map(|(_, player)| player)
+                    .map(|player| ((*player.get_origin(&mut v), player), false))
                 })
             };
 
             let mut cmd = CUserCmd::new_basic_move(Vector3::ZERO, 0, &helper);
 
             match (sim_type, &target) {
-                (6, Some(((target_pos, target), false))) => {
+                (6, target) if target.is_none() || matches!(target, Some((_, false))) => {
                     if let Some(pet_titan) =
                         unsafe { (helper.sv_funcs.get_pet_titan)(player).as_ref() }
                     {
@@ -384,16 +417,20 @@ pub(super) fn get_cmd(
                             local_data.should_recaculate_path,
                             &helper,
                         );
-                    } else if path_to_target(
-                        &mut cmd,
-                        local_data,
-                        origin,
-                        *target_pos,
-                        local_data.last_target_index != unsafe { target.player_index.copy_inner() }
-                            || local_data.should_recaculate_path,
-                        &helper,
-                    ) {
-                        local_data.last_target_index = unsafe { target.player_index.copy_inner() }
+                    } else if let Some(((target_pos, target), _)) = target {
+                        if path_to_target(
+                            &mut cmd,
+                            local_data,
+                            origin,
+                            *target_pos,
+                            local_data.last_target_index
+                                != unsafe { target.player_index.copy_inner() }
+                                || local_data.should_recaculate_path,
+                            &helper,
+                        ) {
+                            local_data.last_target_index =
+                                unsafe { target.player_index.copy_inner() }
+                        }
                     }
 
                     local_data.should_recaculate_path = false;
@@ -446,6 +483,7 @@ pub(super) fn get_cmd(
                     if dis >= 1.0 || ent == titan as *const CBaseEntity {
                         if (origin.x - titan_pos.x).powi(2) * (origin.y - titan_pos.y).powi(2)
                             < 81000.
+                            && (unsafe { helper.globals.frame_count.copy_inner() } / 2 % 4 != 0)
                         {
                             cmd.world_view_angles = look_at(origin, titan_pos);
                             cmd.buttons |= Action::Use as u32;
@@ -483,7 +521,7 @@ pub(super) fn get_cmd(
                     && (origin.x - target.x).powi(2) * (origin.y - target.y).powi(2) < 81000.
                     && (origin.z - target.z).abs() < 50.)
                     || (is_titan
-                        && (origin.x - target.x).powi(2) * (origin.y - target.y).powi(2) < 810000.
+                        && (origin.x - target.x).powi(2) * (origin.y - target.y).powi(2) < 850000.
                         && (origin.z - target.z).abs() < 200.)
                 {
                     cmd.buttons |= Action::Melee as u32;
@@ -516,9 +554,9 @@ pub(super) fn get_cmd(
                         (1, _) => Action::OffHand1 as u32,
                         (2, _) => Action::OffHand2 as u32,
                         (3, _) => Action::OffHand3 as u32,
-                        (4, _) => {
+                        (4, _) if should_shoot => {
                             local_data.counter = 0;
-                            Action::OffHand4 as u32
+                            Action::OffHand4 as u32 // core
                         }
                         _ => {
                             local_data.counter = 0;
@@ -531,6 +569,30 @@ pub(super) fn get_cmd(
                 cmd.buttons = Action::Reload as u32;
 
                 cmd.world_view_angles.x = 0.;
+            }
+
+            if is_timedout(local_data.next_check, &helper, 10f32)
+                && get_net_var(player, c"goalState", 124, helper.sv_funcs) == Some(2)
+            {
+                log::info!("bot calling titan down");
+
+                let sqvm = SQVM_SERVER
+                    .get(unsafe { EngineToken::new_unchecked() })
+                    .borrow();
+                if let Some(sqvm) = sqvm.as_ref() {
+                    call_sq_function::<(), _>(
+                        *sqvm,
+                        SQFUNCTIONS.server.wait(),
+                        "CodeCallback_ClientCommand",
+                        (
+                            unsafe { UnsafeHandle::new(&*player) },
+                            ["ClientCommand_RequestTitan".to_owned()],
+                        ),
+                    )
+                    .unwrap_or_default();
+                }
+
+                local_data.next_check = unsafe { helper.globals.cur_time.copy_inner() }
             }
 
             cmd.camera_angles = cmd.world_view_angles;
@@ -586,18 +648,133 @@ pub(super) fn get_cmd(
                 Action::Forward as u32,
                 &helper,
             );
-            cmd.world_view_angles = Vector3::new(0., 10., 0.);
-            cmd.local_view_angles = helper.angles + Vector3::new(0., 10., 0.);
+            cmd.world_view_angles = helper.angles + Vector3::new(0., 10., 0.);
+
+            cmd
+        }
+        17 => {
+            let origin = unsafe { *player.get_origin(&mut v) };
+            let team = unsafe { **player.team };
+
+            let target = unsafe {
+                find_player_in_view(
+                    origin,
+                    Some(*(helper.sv_funcs.view_angles)(player, &mut v)),
+                    team,
+                    &helper,
+                )
+                .map(|(player, should_shoot)| ((*player.get_origin(&mut v), player), should_shoot))
+            };
+
+            log::info!(
+                "can see target {} at {:?}",
+                target
+                    .as_ref()
+                    .map(|(_, can_see)| *can_see)
+                    .unwrap_or(false),
+                target.map(|((pos, _), _)| pos)
+            );
+
+            CUserCmd::new_empty(&helper)
+        }
+        18 => 'scope: {
+            // battery yoinker
+            let mut cmd =
+                CUserCmd::new_basic_move(Vector3::new(1., 0., 0.), Action::Forward as u32, &helper);
+            let origin = unsafe { *player.get_origin(&mut v) };
+            let team = unsafe { **player.team };
+            local_data.counter = local_data.counter.wrapping_add(1);
+
+            if unsafe { player.titan_soul_being_rodeoed.copy_inner() } != -1 {
+                log::info!(
+                    "{} {}",
+                    local_data.last_shot,
+                    is_timedout(local_data.last_shot, &helper, 20.)
+                );
+
+                if is_timedout(local_data.last_shot, &helper, 10.)
+                    && local_data.counter / 10 % 4 == 0
+                {
+                    cmd.buttons |= Action::Jump as u32 | Action::WeaponDiscard as u32;
+                }
+                break 'scope cmd;
+            } else {
+                local_data.last_shot = unsafe { helper.globals.cur_time.copy_inner() };
+            }
+
+            let is_team = move |player: &CPlayer| -> bool { unsafe { **player.team == team } };
+            let maybe_rodeo_target = get_net_var(player, c"batteryCount", 191, helper.sv_funcs)
+                .and_then(|value| value.eq(&0).then_some(()))
+                .and_then(|_| {
+                    distance_iterator(
+                        &origin,
+                        enemy_player_iterator(team, &helper)
+                            .chain(enemy_titan_iterator(&helper, team))
+                            .filter(|ent| unsafe { (helper.sv_funcs.is_titan)(*ent) }),
+                    )
+                    .reduce(|closer, other| if closer.0 < other.0 { other } else { closer })
+                    .map(|(_, player)| unsafe { *player.get_origin(&mut v) })
+                })
+                .or_else(|| {
+                    distance_iterator(
+                        &origin,
+                        player_iterator(&is_team, &helper)
+                            .chain(titan_iterator(&is_team, &helper))
+                            .filter(|ent| unsafe { (helper.sv_funcs.is_titan)(*ent) }),
+                    )
+                    .reduce(|closer, other| if closer.0 < other.0 { other } else { closer })
+                    .map(|(_, player)| unsafe { *player.get_origin(&mut v) })
+                });
+
+            if let Some(rodeo_target) = maybe_rodeo_target {
+                if distance(origin, rodeo_target) > 100. {
+                    path_to_target(&mut cmd, local_data, origin, rodeo_target, false, &helper);
+                } else if unsafe { (helper.sv_funcs.is_on_ground)(player) } != 0
+                    && local_data.counter / 10 % 4 == 0
+                {
+                    cmd.buttons |= Action::Jump as u32;
+                }
+            } else {
+                cmd.move_ = Vector3::ZERO;
+            }
+
+            cmd
+        }
+        19 => {
+            let mut cmd = CUserCmd::new_empty(&helper);
+            let origin = unsafe { *player.get_origin(&mut v) };
+
+            if let Some(titan_pos) = unsafe { (helper.sv_funcs.get_pet_titan)(player).as_ref() }
+                .map(|titan| unsafe {
+                    *(helper.sv_funcs.get_origin)((titan as *const CBaseEntity).cast(), &mut v)
+                })
+            {
+                path_to_target(
+                    &mut cmd,
+                    local_data,
+                    origin,
+                    titan_pos,
+                    local_data.should_recaculate_path,
+                    &helper,
+                );
+
+                if (origin.x - titan_pos.x).powi(2) * (origin.y - titan_pos.y).powi(2) < 81000.
+                    && (unsafe { helper.globals.frame_count.copy_inner() } / 2 % 4 != 0)
+                {
+                    cmd.world_view_angles = look_at(origin, titan_pos);
+                    cmd.buttons |= Action::Use as u32;
+                }
+            } else {
+                cmd.world_view_angles.x = -90.;
+                cmd.buttons |= Action::Duck as u32;
+            }
 
             cmd
         }
         _ => CUserCmd::new_empty(&helper),
     })?;
 
-    unsafe {
-        **player.rank += 1; // using this for command number
-        cmd.command_number = **player.rank as u32;
-    }
+    cmd.command_number = command_number;
 
     Some(cmd)
 }
@@ -710,35 +887,43 @@ fn is_timedout(last_time: f32, helper: &CUserCmdHelper<'_>, time_elasped: f32) -
 
 unsafe fn find_player_in_view<'a>(
     pos: Vector3,
+    view: Option<Vector3>,
     team: i32,
     helper: &'a CUserCmdHelper,
 ) -> Option<(&'a mut CPlayer, bool)> {
+    const BOT_VIEW: f32 = 270_f32;
+
     let mut v = Vector3::ZERO;
+
     if let Some(target) = unsafe {
-        (0..32)
-            .filter_map(|i| (helper.sv_funcs.get_player_by_index)(i + 1).as_mut())
-            .filter(|player| **player.team != team && **player.team != 0)
-            .filter(|player| (helper.sv_funcs.is_alive)(*player) != 0)
+        let mut possible_targets = enemy_player_iterator(team, helper)
             .map(|player| (*player.get_origin(&mut v), player))
-            .filter(|(target, _)| distance(*target, pos) <= BOT_VISON_RANGE)
-            .find_map(|(target, player)| {
-                view_rate(helper, pos, target, player, false)
-                    .0
-                    .eq(&1.0)
-                    .then(|| {
-                        view_rate(helper, pos, target, player, true)
-                            .0
-                            .eq(&1.0)
-                            .then_some(())
-                    })
-                    .flatten()
-                    .map(|_| player)
+            .filter(|(origin, _)| {
+                view.map(|view| dot(normalize(*origin - pos), view) > BOT_VIEW.to_radians().cos())
+                    .unwrap_or(true)
+            })
+            .map(|(target, player)| (target, player, distance(target, pos)))
+            .filter(|(_, _, dis)| *dis <= BOT_VISON_RANGE)
+            .collect::<Vec<(Vector3, &mut CPlayer, f32)>>();
+        possible_targets.sort_by(|(_, _, dis1), (_, _, dis2)| dis1.total_cmp(dis2));
+
+        possible_targets
+            .into_iter()
+            .find_map(|(target, player, _)| {
+                Some(view_rate(helper, pos, target, player, false)).and_then(|(fraction, ent)| {
+                    (fraction == 1.0 || ent as usize == player as *const CPlayer as usize)
+                        .then(|| view_rate(helper, pos, target, player, true))
+                        .and_then(|(fraction, ent)| {
+                            (fraction == 1.0 || ent as usize == player as *const CPlayer as usize)
+                                .then_some(player)
+                        })
+                })
             })
     } {
         return Some((target, true));
     }
 
-    closest_player(pos, team, helper).map(|player| (player, false))
+    None
 }
 
 fn farthest_player<'a>(
@@ -746,7 +931,7 @@ fn farthest_player<'a>(
     team: i32,
     helper: &'a CUserCmdHelper,
 ) -> Option<&'a mut CPlayer> {
-    distance_iterator(&pos, &team, helper)
+    distance_iterator(&pos, enemy_player_iterator(team, helper))
         .reduce(|closer, other| if closer.0 < other.0 { other } else { closer })
         .map(|(_, player)| player)
 }
@@ -756,22 +941,69 @@ fn closest_player<'a>(
     team: i32,
     helper: &'a CUserCmdHelper,
 ) -> Option<&'a mut CPlayer> {
-    distance_iterator(&pos, &team, helper)
+    distance_iterator(&pos, enemy_player_iterator(team, helper))
         .reduce(|closer, other| if closer.0 < other.0 { other } else { closer })
         .map(|(_, player)| player)
 }
 
-#[inline(always)]
-fn distance_iterator<'b, 'a: 'b>(
-    pos: &'b Vector3,
-    team: &'b i32,
+fn enemy_player_iterator<'b, 'a: 'b>(
+    team: i32,
     helper: &'a CUserCmdHelper,
-) -> impl Iterator<Item = (i64, &'a mut CPlayer)> + 'b {
-    static mut V: Vector3 = Vector3::ZERO;
+) -> impl Iterator<Item = &'a mut CPlayer> + 'b {
     (0..32)
         .filter_map(|i| unsafe { (helper.sv_funcs.get_player_by_index)(i + 1).as_mut() })
-        .filter(|player| unsafe { **player.team != *team && **player.team != 0 })
+        .filter(move |player| unsafe { **player.team != team && **player.team != 0 })
         .filter(|player| unsafe { (helper.sv_funcs.is_alive)(*player) != 0 })
+}
+
+fn enemy_titan_iterator<'b, 'a: 'b>(
+    helper: &'b CUserCmdHelper<'_>,
+    team: i32,
+) -> impl Iterator<Item = &'a mut CPlayer> + 'b {
+    (0..32)
+        .filter_map(|i| unsafe { (helper.sv_funcs.get_player_by_index)(i + 1).as_mut() })
+        .filter(move |player| unsafe { **player.team != team && **player.team != 0 })
+        .filter_map(|player| {
+            unsafe {
+                (helper.sv_funcs.get_pet_titan)(player)
+                    .cast::<CPlayer>()
+                    .cast_mut()
+                    .as_mut()
+                    .and_then(|titan| (helper.sv_funcs.is_alive)(titan).eq(&1).then_some(titan))
+            } // probably safe since the functions should be the same in the vtale, right?
+        })
+}
+
+fn player_iterator<'b, 'a: 'b>(
+    predicate: &'b impl Fn(&CPlayer) -> bool,
+    helper: &'a CUserCmdHelper,
+) -> impl Iterator<Item = &'a mut CPlayer> + 'b {
+    (0..32)
+        .filter_map(|i| unsafe { (helper.sv_funcs.get_player_by_index)(i + 1).as_mut() })
+        .filter(|player| predicate(player))
+        .filter(|player| unsafe { (helper.sv_funcs.is_alive)(*player) != 0 })
+}
+
+fn titan_iterator<'b, 'a: 'b>(
+    predicate: &'b impl Fn(&CPlayer) -> bool,
+    helper: &'a CUserCmdHelper,
+) -> impl Iterator<Item = &'a mut CPlayer> + 'b {
+    player_iterator(predicate, helper).filter_map(|player| {
+        unsafe {
+            (helper.sv_funcs.get_pet_titan)(player)
+                .cast::<CPlayer>()
+                .cast_mut()
+                .as_mut()
+        } // probably safe since the functions should be the same in the vtale, right?
+    })
+}
+
+fn distance_iterator<'b, 'a: 'b>(
+    pos: &'b Vector3,
+    players: impl Iterator<Item = &'a mut CPlayer> + 'b,
+) -> impl Iterator<Item = (i64, &'a mut CPlayer)> + 'b {
+    static mut V: Vector3 = Vector3::ZERO;
+    players
         .map(|player| {
             (
                 unsafe { *player.get_origin(std::ptr::addr_of_mut!(V)) },
@@ -869,4 +1101,17 @@ fn try_avoid_obstacle(cmd: &mut CUserCmd, helper: &CUserCmdHelper) {
 
 fn distance(pos: Vector3, target: Vector3) -> f32 {
     ((pos.x - target.x).powi(2) + (pos.y - target.y).powi(2)).sqrt()
+}
+
+fn dot(vec: Vector3, other_vec: Vector3) -> f32 {
+    (vec.x * other_vec.x) + (vec.y * other_vec.y) + (vec.z * other_vec.z)
+}
+
+fn normalize(vec: Vector3) -> Vector3 {
+    let length_recip = dot(vec, vec).sqrt().recip();
+    Vector3::new(
+        vec.x * length_recip,
+        vec.y * length_recip,
+        vec.z * length_recip,
+    )
 }

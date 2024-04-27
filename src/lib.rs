@@ -39,7 +39,7 @@ pub struct HooksPlugin {
 
 impl Plugin for HooksPlugin {
     const PLUGIN_INFO: PluginInfo =
-        PluginInfo::new(c"whoks", c"WHOKS0000", c"WHOKS", PluginContext::all());
+        PluginInfo::new(c"bp-ort", c"BP-ORT000", c"BP_ORT", PluginContext::all());
 
     fn new(reloaded: bool) -> Self {
         if reloaded {

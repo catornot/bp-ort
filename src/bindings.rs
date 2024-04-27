@@ -1,4 +1,3 @@
-// use recastnavigation_sys::dtNavMesh;
 use rrplug::{
     bindings::{
         class_types::{c_player::C_Player, client::CClient, cplayer::CPlayer},
@@ -10,7 +9,6 @@ use rrplug::{
     },
     high::vector::Vector3,
     offset_functions, offset_struct,
-    prelude::HSquirrelVM,
 };
 use std::{
     ffi::{c_char, c_int, c_short, c_uchar, c_void},
@@ -276,6 +274,15 @@ pub struct CTraceFilterWorldAndProps {
     pub pass_ent: *const (),
 }
 
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct CEntInfo {
+    pub vtable_maybe: *const fn(),
+    pub ent: *const CBaseEntity,
+    pub serial_number: i32,
+    gap: [c_char; 28],
+}
+
 // struct IServerGameEnts {}
 
 // a really interesting function : FUN_00101370
@@ -322,9 +329,10 @@ offset_functions! {
         run_null_command = RunNullCommand where offset(0x5A9FD0);
         simulate_player = unsafe extern "C" fn(*const CPlayer) where offset(0x0492580);
         proccess_user_cmds = ProcessUsercmds where offset(0x159e50);
-        add_user_cmd_to_player = unsafe extern "C" fn(this: *const CPlayer, cmds: *const CUserCmd, numcmds: u32, unk: usize, totalcmds: u32, paused: c_char) where offset(0x005a81c0);
+        player_process_usercmds = unsafe extern "C" fn(this: *const CPlayer, cmds: *const CUserCmd, numcmds: u32, unk: usize, totalcmds: u32, paused: c_char) where offset(0x5a81c0);
         create_null_user_cmd = unsafe extern "C" fn(*mut CUserCmd) -> *mut CUserCmd where offset(0x25f790);
         player_run_command = unsafe extern "C" fn(*mut CPlayer, *mut CUserCmd,*const CMoveHelperServer) -> () where offset(0x5a7d80);
+        fun_1805dd440 = unsafe extern "C" fn(*mut CPlayer) -> () where offset(0x5dd440);
         set_base_time = unsafe extern "C" fn(*mut CPlayer, f32) where offset(0x5b3790);
         set_last_cmd = unsafe extern "C" fn(*mut CUserCmd, *mut CUserCmd) -> () where offset(0x25f860);
         get_move_helper = unsafe extern "C" fn() -> *const CMoveHelperServer where offset(0x1b56f0);
@@ -338,12 +346,18 @@ offset_functions! {
         get_angles = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x0043c030);
         get_origin_varient = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x00443e80);
         get_origin = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x004198d0);
-        eye_angles = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *const Vector3 where offset(0x004455f0); // this acceses the vtable
+        eye_angles = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *const Vector3 where offset(0x4455f0); // this acceses the vtable
+        view_angles = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *const Vector3 where offset(0x5d3960); // this acceses the vtable
+
         is_on_ground = unsafe extern "C" fn(*const CPlayer) -> usize where offset(0x441c60);
         is_alive = unsafe extern "C" fn(*const CPlayer) -> usize where offset(0x4461e0);
         is_titan = unsafe extern "C" fn(*const CPlayer) -> bool where offset(0x406a70);
         set_health = unsafe extern "C" fn(*mut CPlayer, i32, usize, usize) -> () where offset(0x42d7f0);
-        create_script_instance = unsafe extern "C" fn(*mut CBaseEntity, *mut HSquirrelVM, usize, usize) -> *const SQObject where offset(0x43f2f0);
+        create_script_instance = unsafe extern "C" fn(*mut CBaseEntity) -> *const SQObject where offset(0x43f2f0);
+        get_player_net_int = unsafe extern "C" fn(*const CPlayer, *const c_char) -> i32 where offset(0x5ddc30);
+        get_net_var_from_ent = unsafe extern "C" fn(*const CBaseEntity, *const c_char, i32, *mut i32) -> i32 where offset(0x1fa9c0);
+        get_entity_name = unsafe extern "C" fn(*const CPlayer) -> *const c_char where offset(0x4179b0);
+        ent_list = *const CEntInfo where offset(0x112D770);
 
         get_offhand_weapon = unsafe extern "C" fn(*const CPlayer,u32 ) -> bool where offset(0xe1ec0); // not done
         set_weapon_by_slot = unsafe extern "C" fn(*const c_void, *const c_char) where offset(0xe4ba0);

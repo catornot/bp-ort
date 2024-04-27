@@ -35,6 +35,7 @@ mod cmds;
 mod convars;
 mod debug_commands;
 mod detour;
+mod netvars;
 mod set_on_join;
 
 pub const DEFAULT_SIMULATE_TYPE: i32 = 6;
@@ -78,6 +79,7 @@ pub(super) struct BotData {
     target_pos: Vector3,
     last_shot: f32,
     should_recaculate_path: bool,
+    next_check: f32,
 }
 
 #[derive(Debug)]
@@ -122,6 +124,7 @@ impl Plugin for Bots {
                     "bornet",
                     "4botv",
                     "RoyalBot",
+                    "Bobby_McBotFace",
                 ]
                 .into_iter()
                 .map(str::to_string)

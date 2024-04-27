@@ -5,7 +5,7 @@ the main feature of this plugin is ofc the bots which I have a lot on and yet th
 The bots are good enough tho, They work most of the time and in most situations.
 Crashes can still happen but are much rarer now which is good :)
 
-most concommands in this plugin
+most concommands in this plugin have completions to make it easier to use them
 
 Other features that this plugin offers
 - auto mp_box loading
@@ -57,3 +57,5 @@ all the ai indices
 - 14 => follows closest player (requires navmesh)  
 - 15 => smth silly idk #1 
 - 16 => smth silly idk #2 
+- 17 => view debugger
+- 18 => battery yoinker

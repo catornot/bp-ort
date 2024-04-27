@@ -1,5 +1,5 @@
 [package]
-name = "bots-plugin"
+name = "bp-ort"
 version = "0.1.0"
 edition = "2021"
 

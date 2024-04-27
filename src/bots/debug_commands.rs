@@ -1,7 +1,8 @@
-use rrplug::bindings::cvar::convar::FCVAR_GAMEDLL;
 use rrplug::prelude::*;
+use rrplug::{bindings::cvar::convar::FCVAR_GAMEDLL, mid::utils::try_cstring};
 use std::ffi::CStr;
 
+use crate::utils::lookup_ent;
 use crate::{
     bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
     // bots::navmesh::get_path,
@@ -34,8 +35,14 @@ pub fn register_debug_concommands(engine: &EngineData, token: EngineToken) {
         .expect("couldn't register concommand set_clan_tag");
 
     engine
-        .register_concommand("test_nav", test_nav, "", FCVAR_GAMEDLL as i32, token)
-        .expect("couldn't register concommand test_nav");
+        .register_concommand(
+            "test_net_int",
+            test_net_int,
+            "test_net_int",
+            FCVAR_GAMEDLL as i32,
+            token,
+        )
+        .expect("couldn't register concommand test_net_int");
 }
 
 #[rrplug::concommand]
@@ -86,7 +93,7 @@ pub fn set_clan_tag(command: CCommandResult) {
         None => return,
     };
 
-    let tag = match command.get_arg(0) {
+    let tag = match command.get_arg(1) {
         Some(tag) => tag.bytes(),
         None => return,
     };
@@ -106,8 +113,36 @@ pub fn set_clan_tag(command: CCommandResult) {
 }
 
 #[rrplug::concommand]
-pub fn test_nav() {
-    // unsafe {
-    //     get_path(Vector3::new(0., 10., 0.), Vector3::new(100., 10., 0.));
-    // }
+pub fn test_net_int(command: CCommandResult) -> Option<()> {
+    let index = command.get_arg(0)?.parse::<i32>().ok()?;
+
+    let net_var = command.get_arg(1)?;
+
+    let server_funcs = SERVER_FUNCTIONS.wait();
+
+    log::info!("{net_var}: {}", unsafe {
+        (server_funcs.get_player_by_index)(index + 1)
+            .as_mut()
+            .and_then(|player| {
+                log::info!(
+                    "pet_titan: {:?}",
+                    // str_from_char_ptr((server_funcs.get_entity_name)(lookup_ent(
+                    //     player.pet_titan.copy_inner(),
+                    //     server_funcs
+                    // )?
+                    //     as *const _
+                    //     as *const CPlayer))
+                    dbg!(
+                        lookup_ent(player.pet_titan.copy_inner(), server_funcs,)? as *const _
+                            as usize
+                    ) == (server_funcs.get_pet_titan)(player) as usize
+                );
+                Some((server_funcs.get_player_net_int)(
+                    player,
+                    try_cstring(net_var).ok()?.as_ptr(),
+                ))
+            })
+    }?);
+
+    None
 }
