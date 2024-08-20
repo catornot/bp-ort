@@ -125,6 +125,7 @@ impl Plugin for Bots {
                     "4botv",
                     "RoyalBot",
                     "Bobby_McBotFace",
+                    "sb0tdge",
                 ]
                 .into_iter()
                 .map(str::to_string)

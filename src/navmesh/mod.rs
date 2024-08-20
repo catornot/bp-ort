@@ -1,23 +1,46 @@
 #![allow(non_snake_case)]
 
-use rrplug::{offset_functions, prelude::Vector3};
+use rrplug::{
+    high::squirrel_traits::{GetFromSquirrelVm, SQVMName},
+    offset_functions,
+    prelude::*,
+};
 
 pub mod bindings;
 pub mod navigation;
+pub mod sqapi;
 
 use bindings::*;
 
+#[derive(Debug)]
+pub struct NavigationPlugin;
+
+impl Plugin for NavigationPlugin {
+    const PLUGIN_INFO: PluginInfo = PluginInfo::new(
+        c"Navigation",
+        c"NAVIGATION",
+        c"Navigation",
+        PluginContext::all(),
+    );
+
+    fn new(_: bool) -> Self {
+        sqapi::navigation_register_sq_functions();
+
+        Self
+    }
+}
+
 #[repr(i32)]
 #[allow(unused)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, GetFromSquirrelVm, SQVMName)]
 pub enum Hull {
-    #[default]
-    Human = 0,
-    Medium = 1,
-    FlyingVehicle = 2,
-    Small = 3,
-    Titan = 4,
+    Human,
+    Medium,
+    FlyingVehicle,
+    Small,
+    Titan,
 }
+
 offset_functions! {
     RECAST_DETOUR + RecastDetour for WhichDll::Server => {
         nav_mesh = *mut *mut dtNavMesh where offset(0x105F5D0);

@@ -13,8 +13,10 @@ use crate::{
     devtoys::DevToys,
     disguise::Disguise,
     interfaces::Interfaces,
+    navmesh::NavigationPlugin,
     navmesh::{RecastDetour, RECAST_DETOUR},
     screen_detour::hook_materialsystem,
+    scripts::Scripts,
 };
 
 mod admin_abuse;
@@ -25,6 +27,7 @@ mod disguise;
 mod interfaces;
 mod navmesh;
 mod screen_detour;
+mod scripts;
 mod utils;
 
 #[derive(Debug)]
@@ -34,6 +37,8 @@ pub struct HooksPlugin {
     pub interfaces: Interfaces,
     pub admin_abuse: AdminAbuse,
     pub devtoys: DevToys,
+    pub scripts: Scripts,
+    pub navigation: NavigationPlugin,
     is_dedicated_server: bool,
 }
 
@@ -52,6 +57,8 @@ impl Plugin for HooksPlugin {
             interfaces: Interfaces::new(reloaded),
             admin_abuse: AdminAbuse::new(reloaded),
             devtoys: DevToys::new(reloaded),
+            scripts: Scripts::new(reloaded),
+            navigation: NavigationPlugin::new(reloaded),
             is_dedicated_server: std::env::args().any(|cmd| cmd.starts_with("-dedicated")),
         }
     }

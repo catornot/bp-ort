@@ -5,7 +5,8 @@ use rrplug::{
             command::{CCommand, ConCommand, FnCommandCallback_t},
             convar::Color,
         },
-        squirreldatatypes::{CSquirrelVM, SQObject},
+        squirrelclasstypes::SQRESULT,
+        squirreldatatypes::{CSquirrelVM, HSquirrelVM, SQObject},
     },
     high::vector::Vector3,
     offset_functions, offset_struct,
@@ -348,6 +349,8 @@ offset_functions! {
         get_origin = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x004198d0);
         eye_angles = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *const Vector3 where offset(0x4455f0); // this acceses the vtable
         view_angles = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *const Vector3 where offset(0x5d3960); // this acceses the vtable
+        calc_absolute_velocity = unsafe extern "C" fn(*const CPlayer, *const *const CPlayer, usize, usize) -> () where offset(0x40a1e0);
+        get_smoothed_velocity = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x58dfc0);
 
         is_on_ground = unsafe extern "C" fn(*const CPlayer) -> usize where offset(0x441c60);
         is_alive = unsafe extern "C" fn(*const CPlayer) -> usize where offset(0x4461e0);
@@ -375,6 +378,13 @@ offset_functions! {
         register_con_command = unsafe extern "C" fn(concommand: *mut ConCommand,name: *const c_char, callback: FnCommandCallback_t, helpString: *const c_char,flags: i32, completion: unsafe extern "C-unwind" fn(arg1: *const ::std::os::raw::c_char, arg2: *mut [::std::os::raw::c_char; 128usize]) -> ::std::os::raw::c_int) -> *mut ConCommand where offset(0x723fa0);
 
         get_pet_titan = unsafe extern "C" fn(*const CPlayer) -> *const CBaseEntity where offset(0x5dd940);
+
+        sq_threadwakeup = unsafe extern "C" fn(sqvm: *const HSquirrelVM, i32, *const c_void, *const HSquirrelVM) -> SQRESULT where offset(0x8780);
+        sq_suspendthread = unsafe extern "C" fn(sqvm: *const HSquirrelVM, *const *mut c_void, usize, *const HSquirrelVM) -> SQRESULT where offset(0x434f0);
+
+        some_global_for_threads = *mut c_void where offset(0x23683c8);
+        fun_180042560 = unsafe extern "C" fn(*const *mut (), f32) -> *const HSquirrelVM where offset(0x42560);
+        somehow_suspend_thread = unsafe extern "C" fn(*const HSquirrelVM) where offset(0x44660);
     }
 }
 // very intersting call at server.dll + 0x151782

@@ -7,7 +7,7 @@ use rrplug::{
 };
 
 const FUNNY_CLAN_TAGS: &[&str] = &[
-    ">~<", "owo", "uwu", ":o", ":D", "ADV", "CLAN", "HI!", "PETAR",
+    ">~<", "owo", "uwu", ":o", ":D", "ADV", "CLAN", "HI!", "PETAR", "<3", "BOB", "OV",
 ];
 
 use super::UWUFY_CONVAR;
@@ -64,6 +64,7 @@ pub unsafe fn set_stuff_on_join(client: &mut CClient) {
         )
         .map_err(|err| err.log())
         .ok()
+        .and_then(|tag| if tag.len() < 12 { Some(tag) } else { None })
     }) {
         set_c_char_array(&mut client.clan_tag, new_tag.as_str());
     }

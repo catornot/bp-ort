@@ -24,7 +24,7 @@ static_detour! {
     static FUN_18069e7a0: unsafe extern "C" fn(*mut c_void, *mut CPlayer, *const c_void);
     static CMoveHelperServer__PlayerFallingDamage: unsafe extern "C" fn(*mut CMoveHelperServer, *mut c_void, *const c_void, *const c_void);
     static GetPlayerNetInt: unsafe extern "C" fn(*mut CPlayer, *const c_char)-> i32 ;
-    static GetNetVarFromEnt: unsafe extern "C" fn(*mut CPlayer, *const c_char, i32, *const i32)-> usize ;
+    static GetNetVarFromEnt: unsafe extern "C" fn(*mut CPlayer, *const c_char, i32, *const i32) -> usize ;
 }
 
 fn physics_run_think_functions_hook(paused: bool) {

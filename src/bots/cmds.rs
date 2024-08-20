@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use rand::{thread_rng, Rng};
 use rrplug::{
     bindings::class_types::{client::SignonState, cplayer::CPlayer},
     high::{squirrel::call_sq_function, vector::Vector3, UnsafeHandle},
@@ -180,6 +181,9 @@ pub fn run_bots_cmds(_paused: bool) {
 
                 *player.cplayer_state_fixangle.get_inner_mut() = 0;
                 set_base_time(player, cur_time);
+
+                *(player.current_command.get_inner_mut() as *mut *const _
+                    as *mut *const CUserCmd) = &cmd;
 
                 let move_helper = move_helper()
                     .cast_mut()
@@ -498,6 +502,26 @@ pub(super) fn get_cmd(
 
                 if should_shoot || sim_type == 5 {
                     let angles = look_at(origin, target);
+
+                    let angles = {
+                        let velocity = unsafe {
+                            *(helper.sv_funcs.get_smoothed_velocity)(target_player, &mut v)
+                        };
+                        let length = (velocity.x.powi(2) + velocity.y.powi(2)).sqrt();
+
+                        if length > 200. {
+                            let mut rng = thread_rng();
+                            let error_amount = length.sqrt() / 20f32;
+
+                            Vector3 {
+                                x: angles.x + error_amount * rng.gen_range(-2..=2) as f32,
+                                y: angles.y + error_amount * rng.gen_range(-2..=2) as f32,
+                                z: 0.,
+                            }
+                        } else {
+                            angles
+                        }
+                    };
 
                     const CLAMP: f32 = 10.;
 
@@ -897,6 +921,7 @@ unsafe fn find_player_in_view<'a>(
 
     if let Some(target) = unsafe {
         let mut possible_targets = enemy_player_iterator(team, helper)
+            .chain(enemy_titan_iterator(helper, team))
             .map(|player| (*player.get_origin(&mut v), player))
             .filter(|(origin, _)| {
                 view.map(|view| dot(normalize(*origin - pos), view) > BOT_VIEW.to_radians().cos())
