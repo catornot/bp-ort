@@ -511,7 +511,7 @@ pub(super) fn get_cmd(
 
                         if length > 200. {
                             let mut rng = thread_rng();
-                            let error_amount = length.sqrt() / 20f32;
+                            let error_amount = length.sqrt() / 10f32;
 
                             Vector3 {
                                 x: angles.x + error_amount * rng.gen_range(-2..=2) as f32,
