@@ -41,6 +41,22 @@ pub enum Hull {
     Titan,
 }
 
+type FindStraightPath = unsafe extern "C" fn(
+    this: *const dtNavMeshQuery,
+    startPos: *const Vector3,
+    endPos: *const Vector3,
+    path: *const dtPolyRef,
+    jumpTypes: *const u8,
+    pathSize: i32,
+    straightPath: *mut Vector3,
+    straightPathFlags: *mut u8,
+    straightPathRefs: *mut dtPolyRef,
+    straightPathJumps: *mut u8,
+    straightPathCount: *mut i32,
+    maxStraightPath: i32,
+    options: i32,
+) -> dtStatus;
+
 offset_functions! {
     RECAST_DETOUR + RecastDetour for WhichDll::Server => {
         nav_mesh = *mut *mut dtNavMesh where offset(0x105F5D0);
@@ -51,7 +67,7 @@ offset_functions! {
         dtNavMesh__getMaxTiles = unsafe extern "C" fn() where offset(0x3e7840);
         dtNavMesh__getParams = unsafe extern "C" fn() where offset(0x3e7b20);
         dtNavMesh__isValidPolyRef = unsafe extern "C" fn() where offset(0x3e7c00);
-        dtNavMesh__getTileAndPolyByRef = unsafe extern "C" fn() where offset(0x3e7ea0);
+        dtNavMesh__getTileAndPolyByRef = unsafe extern "C" fn(this: *mut dtNavMesh, polyref: dtPolyRef, tile: *mut *mut dtMeshTile, poly: *mut *mut dtPoly) where offset(0x3e7ea0);
         dtNavMesh__getTileAndPolyByRefUnsafe = unsafe extern "C" fn() where offset(0x3e7f90);
         dtNavMesh__getTileAt = unsafe extern "C" fn() where offset(0x3e83a0);
         dtNavMesh__isValidPolyRef2 = unsafe extern "C" fn() where offset(0x3e8b00);
@@ -59,7 +75,7 @@ offset_functions! {
         navmesh_maybe_init_filter = unsafe extern "C" fn(*mut dtQueryFilter) -> *mut dtQueryFilter where offset(0x3e95a0);
         dtNavMeshQuery__closestPointOnPolyBoundary__variant = unsafe extern "C" fn(this: *const dtNavMeshQuery, _ref: dtPolyRef, pos: *const Vector3, closest: *mut Vector3, filter: *const dtQueryFilter) where offset(0x3ea750);
         dtNavMeshQuery__findPath = unsafe extern "C" fn(this: *mut dtNavMeshQuery,startRef: dtPolyRef,endRef: dtPolyRef, startPos: *const Vector3, endPos: *const Vector3, filter: *const dtQueryFilter, path: *mut dtPolyRef,unk: *const undefined, pathCount: *mut u32,maxPath: i32) -> dtStatus where offset(0x3ec310);
-        dtNavMeshQuery__findStraightPath = unsafe extern "C" fn() where offset(0x3ee980);
+        dtNavMeshQuery__findStraightPath = FindStraightPath where offset(0x3ee980);
         dtNavMeshQuery__SmthPathPortal = unsafe extern "C" fn() where offset(0x3ef820);
         dtNavMeshQuery__getPolyWallSegments = unsafe extern "C" fn() where offset(0x3efe30);
         dtNavMeshQuery__getEdgeMidPoint = unsafe extern "C" fn() where offset(0x3f0690);
