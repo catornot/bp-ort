@@ -1,7 +1,7 @@
 #![feature(c_variadic, iter_array_chunks, iter_collect_into)]
 #![allow(clippy::missing_transmute_annotations)] // too lazy to fix rn
 
-use rrplug::prelude::*;
+use rrplug::{bindings::plugin_abi::PluginColor, prelude::*};
 
 use crate::{
     admin_abuse::AdminAbuse,
@@ -43,8 +43,17 @@ pub struct HooksPlugin {
 }
 
 impl Plugin for HooksPlugin {
-    const PLUGIN_INFO: PluginInfo =
-        PluginInfo::new(c"bp-ort", c"BP-ORT000", c"BP_ORT", PluginContext::all());
+    const PLUGIN_INFO: PluginInfo = PluginInfo::new_with_color(
+        c"bp-ort",
+        c"BP-ORT000",
+        c"BP_ORT",
+        PluginContext::all(),
+        PluginColor {
+            red: 183,
+            green: 65,
+            blue: 14,
+        },
+    );
 
     fn new(reloaded: bool) -> Self {
         if reloaded {

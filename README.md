@@ -16,11 +16,16 @@ Other features that this plugin offers
 - "other testing functionality"
 - admin abuse
 
+### extras
+- if you have any suggestions pls do tell me
+- if you want to add new bots ai pls contact me since it's not documented well
+- this will be a pre-release for now since I am simply tired of working on this for ~1.5 years
+
 # bots
 they are mostly implemented in the plugin exepected fetching the titan class which requries guidence from scripts.
 To add new functionallity a simple api could be used to change the behavior of the bots at runtime from scripts or with cvar.
 
-## current api
+## current sq api
 uh just look at the source code or ask me (@catornot)
 
 ## bot names
@@ -32,11 +37,18 @@ bot names can also be provided when spawning
 
 ## bot ai
 
-the two most useful ones would be simply standing still (for testing stuff) or the combat ai
+the two most useful ones would be simply standing still (0) (for testing stuff) or the combat ai (6)
 
 the combat ai is currently very not very smart since it just chases the closest enemy and tries to kill them
 
-all the ai indices
+### cmds
+
+- `bot_spawn <name:int> <team:int> <ai:int>`
+
+other ones are found under `bot_` namespace
+
+
+### all the ai indices
 - 0 => stand still
 - 1 => crouch rapidly
 - 2 => walk around mp_box
@@ -59,3 +71,11 @@ all the ai indices
 - 16 => smth silly idk #2 
 - 17 => view debugger
 - 18 => battery yoinker
+
+# other features
+
+## admin abuse (incomplete) with auto completion!!!
+some of the commands from script admin abuse are included
+
+## name renaming
+contact cat_or_not for this

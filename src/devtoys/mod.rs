@@ -73,7 +73,24 @@ impl Plugin for DevToys {
                     .expect("enable_debug_overlays should exist");
                 convar.set_value_i32(1, token);
             }
-            WhichDll::Client => random_detour::hook_client(dll_ptr.get_dll_ptr()),
+            WhichDll::Client => {
+                random_detour::hook_client(dll_ptr.get_dll_ptr());
+
+                let mut fov_scale_convar = ConVarStruct::find_convar_by_name("cl_fovScale", token)
+                    .expect("cl_fovscale should exist");
+                let fov_ptr = unsafe { fov_scale_convar.get_raw_convar_ptr().as_mut() }
+                    .expect("cl_fovscale should exist");
+
+                fov_ptr.m_bHasMax = false;
+                fov_ptr.m_bHasMin = false;
+                fov_ptr.m_fMaxVal = f32::MIN;
+                fov_ptr.m_fMaxVal = f32::MAX;
+
+                fov_scale_convar.set_value_i32(20, token);
+            }
+            WhichDll::Other("materialsystem_dx11.dll") => {
+                random_detour::hook_materialsystem(dll_ptr.get_dll_ptr());
+            }
 
             _ => {}
         }
