@@ -823,6 +823,7 @@ fn path_to_target(
     helper: &CUserCmdHelper,
 ) -> bool {
     let dt_funcs = RECAST_DETOUR.wait();
+    #[cfg(not(feature = "release"))]
     let debug = ENGINE_INTERFACES.wait().debug_overlay;
     let Some(nav) = local_data.nav_query.as_mut() else {
         log::warn!("null nav");
@@ -833,19 +834,22 @@ fn path_to_target(
         return false;
     }
 
-    _ = nav
-        .path_points
-        .last()
-        .map(|point| unsafe { debug.AddLineOverlay(&origin, point, 0, 255, 0, true, 0.1) });
-    nav.path_points
-        .iter()
-        .cloned()
-        .tuple_windows()
-        .for_each(|(p1, p2)| unsafe { debug.AddLineOverlay(&p1, &p2, 0, 255, 0, true, 0.5) });
-    _ = nav
-        .path_points
-        .last()
-        .map(|point| unsafe { debug.AddLineOverlay(point, &target_pos, 0, 255, 0, true, 0.1) });
+    #[cfg(not(feature = "release"))]
+    {
+        _ = nav
+            .path_points
+            .last()
+            .map(|point| unsafe { debug.AddLineOverlay(&origin, point, 0, 255, 0, true, 0.1) });
+        nav.path_points
+            .iter()
+            .cloned()
+            .tuple_windows()
+            .for_each(|(p1, p2)| unsafe { debug.AddLineOverlay(&p1, &p2, 0, 255, 0, true, 0.5) });
+        _ = nav
+            .path_points
+            .last()
+            .map(|point| unsafe { debug.AddLineOverlay(point, &target_pos, 0, 255, 0, true, 0.1) });
+    }
 
     if nav
         .path_points

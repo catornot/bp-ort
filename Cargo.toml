@@ -19,3 +19,6 @@ itertools = "0.12.1"
 
 [lib]
 crate-type = ["cdylib"]
+
+[features]
+release = []

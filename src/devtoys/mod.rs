@@ -71,7 +71,7 @@ impl Plugin for DevToys {
                 // }
                 let convar = ConVarStruct::find_convar_by_name("enable_debug_overlays", token)
                     .expect("enable_debug_overlays should exist");
-                convar.set_value_i32(1, token);
+                convar.set_value_i32(cfg!(not(feature = "release")) as i32, token);
             }
             WhichDll::Client => {
                 random_detour::hook_client(dll_ptr.get_dll_ptr());

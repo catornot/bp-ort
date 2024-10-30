@@ -10,7 +10,7 @@ most concommands in this plugin have completions to make it easier to use them
 Other features that this plugin offers
 - auto mp_box loading
 - disabling the limit on players in sp maybe?
-- bringing back a less extensive version of r_drawworld (TODO: improve it)
+- bringing back a less extensive version of r_drawworld
 - name uwufication (by default)
 - name changing (maybe sq api at some point)
 - "other testing functionality"
@@ -25,17 +25,17 @@ Other features that this plugin offers
 they are mostly implemented in the plugin exepected fetching the titan class which requries guidence from scripts.
 To add new functionallity a simple api could be used to change the behavior of the bots at runtime from scripts or with cvar.
 
-## current sq api
+### current sq api
 uh just look at the source code or ask me (@catornot)
 
-## bot names
+### bot names
 so bots have "unique" names either derived from contributors to n* to make bot puns or from rust
 
 if you have a good name idea you can make a pull request
 
 bot names can also be provided when spawning
 
-## bot ai
+### bot ai
 
 the two most useful ones would be simply standing still (0) (for testing stuff) or the combat ai (6)
 
@@ -44,6 +44,7 @@ the combat ai is currently very not very smart since it just chases the closest 
 ### cmds
 
 - `bot_spawn <name:int> <team:int> <ai:int>`
+spawns a bot with a given name team or ai index
 
 other ones are found under `bot_` namespace
 
