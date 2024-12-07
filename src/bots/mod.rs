@@ -1,3 +1,4 @@
+use chrono::Datelike;
 use once_cell::sync::Lazy;
 use rand::Rng;
 use rrplug::bindings::class_types::cplayer::CPlayer;
@@ -98,39 +99,64 @@ impl Plugin for Bots {
         register_sq_functions(bot_set_sim_type);
         register_sq_functions(bot_spawn);
 
+        let mut bot_names = [
+            "bot",
+            "botornot",
+            "perhaps_bot",
+            "sybotn",
+            "botsimp",
+            "thx_bob",
+            "PetarBot",
+            "hOlOB0t",
+            "ctalover",
+            "Bot3000",
+            "okhuh",
+            "BOT-7274",
+            "Standby_For_BotFall",
+            "rust<3",
+            "FiftyBots",
+            "yesbot",
+            "bobthebot",
+            "Ihatewarnings",
+            "Triboty",
+            "bornet",
+            "4botv",
+            "RoyalBot",
+            "Bobby_McBotFace",
+            "sb0tdge",
+        ]
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+
+        let time = chrono::Utc::now();
+
+        if time.month() == 12 && time.day() > 15 {
+            bot_names = [
+                "santa",
+                "дед мороз",
+                "чародеи",
+                "5minutes",
+                "christmas_in_a_week",
+                "overworked_elf",
+                "santa_missile",
+                "sled",
+                "skates",
+                "christmas_tree",
+                "",
+            ]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<String>>();
+
+            bot_names.push(format!("waiting_for_{}", time.year() + 1));
+        } else if time.month() == 1 && time.day() < 5 {
+            bot_names.push(format!("it's {} my dudes", time.year()));
+        }
+
         Self {
             clang_tag: Mutex::new("BOT".into()),
-            generic_bot_names: Mutex::new(
-                [
-                    "bot",
-                    "botornot",
-                    "perhaps_bot",
-                    "sybotn",
-                    "botsimp",
-                    "thx_bob",
-                    "PetarBot",
-                    "hOlOB0t",
-                    "ctalover",
-                    "Bot3000",
-                    "okhuh",
-                    "BOT-7274",
-                    "Standby_For_BotFall",
-                    "rust<3",
-                    "FiftyBots",
-                    "yesbot",
-                    "bobthebot",
-                    "Ihatewarnings",
-                    "Triboty",
-                    "bornet",
-                    "4botv",
-                    "RoyalBot",
-                    "Bobby_McBotFace",
-                    "sb0tdge",
-                ]
-                .into_iter()
-                .map(str::to_string)
-                .collect(),
-            ),
+            generic_bot_names: Mutex::new(bot_names),
         }
     }
 
