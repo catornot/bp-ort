@@ -9,7 +9,7 @@ use std::{
 };
 
 use super::{
-    cmds::{replace_cmd, run_bots_cmds},
+    cmds_exec::{replace_cmd, run_bots_cmds},
     set_on_join::set_stuff_on_join,
 };
 use crate::bindings::{CMoveHelperServer, CUserCmd, SERVER_FUNCTIONS};

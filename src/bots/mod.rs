@@ -33,6 +33,9 @@ use crate::{
 };
 
 mod cmds;
+mod cmds_exec;
+mod cmds_helper;
+mod cmds_utils;
 mod convars;
 mod debug_commands;
 mod detour;
@@ -151,7 +154,7 @@ impl Plugin for Bots {
 
             bot_names.push(format!("waiting_for_{}", time.year() + 1));
         } else if time.month() == 1 && time.day() < 5 {
-            bot_names.push(format!("it's {} my dudes", time.year()));
+            bot_names.push(format!("it_s_{}_my_dudes", time.year()));
         }
 
         Self {
