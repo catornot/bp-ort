@@ -1,31 +1,18 @@
-use itertools::Itertools;
 use rand::{thread_rng, Rng};
 use rrplug::{
-    bindings::class_types::{client::SignonState, cplayer::CPlayer},
+    bindings::class_types::cplayer::CPlayer,
     high::{squirrel::call_sq_function, vector::Vector3, UnsafeHandle},
     mid::squirrel::{SQFUNCTIONS, SQVM_SERVER},
     prelude::EngineToken,
 };
-use std::mem::MaybeUninit;
 
 use crate::{
-    bindings::{
-        Action, CBaseEntity, CGlobalVars, CTraceFilterSimple, CUserCmd, EngineFunctions, Ray,
-        ServerFunctions, TraceResults, VectorAligned, ENGINE_FUNCTIONS, SERVER_FUNCTIONS,
-    },
-    interfaces::ENGINE_INTERFACES,
-    navmesh::{Hull, RECAST_DETOUR},
-    utils::{get_net_var, iterate_c_array_sized},
+    bindings::{Action, CBaseEntity, CUserCmd},
+    navmesh::Hull,
+    utils::get_net_var,
 };
 
-use super::{
-    cmds_helper::CUserCmdHelper, cmds_utils::*, BotData, BOT_DATA_MAP, SIMULATE_TYPE_CONVAR,
-};
-
-const GROUND_OFFSET: Vector3 = Vector3::new(0., 0., 20.);
-const BOT_VISON_RANGE: f32 = 3000.;
-const BOT_PATH_NODE_RANGE: f32 = 50.;
-const BOT_PATH_RECAL_RANGE: f32 = 600.;
+use super::{cmds_helper::CUserCmdHelper, cmds_utils::*, BotData};
 
 pub(super) fn get_cmd(
     player: &'static mut CPlayer,

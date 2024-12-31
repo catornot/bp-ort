@@ -1,24 +1,6 @@
-use itertools::Itertools;
-use rand::{thread_rng, Rng};
-use rrplug::{
-    bindings::class_types::{client::SignonState, cplayer::CPlayer},
-    high::{squirrel::call_sq_function, vector::Vector3, UnsafeHandle},
-    mid::squirrel::{SQFUNCTIONS, SQVM_SERVER},
-    prelude::EngineToken,
-};
-use std::mem::MaybeUninit;
+use rrplug::prelude::*;
 
-use crate::{
-    bindings::{
-        Action, CBaseEntity, CGlobalVars, CTraceFilterSimple, CUserCmd, EngineFunctions, Ray,
-        ServerFunctions, TraceResults, VectorAligned, ENGINE_FUNCTIONS, SERVER_FUNCTIONS,
-    },
-    interfaces::ENGINE_INTERFACES,
-    navmesh::{Hull, RECAST_DETOUR},
-    utils::{get_net_var, iterate_c_array_sized},
-};
-
-use super::{cmds_utils::*, BotData, BOT_DATA_MAP, SIMULATE_TYPE_CONVAR};
+use crate::bindings::{CGlobalVars, CUserCmd, EngineFunctions, ServerFunctions};
 
 #[derive(Clone)]
 pub struct CUserCmdHelper<'a> {
