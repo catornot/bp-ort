@@ -133,9 +133,7 @@ pub(crate) fn basic_combat(
             let angles = look_at(origin, target);
 
             let angles = {
-                let velocity =
-                    unsafe { *(helper.sv_funcs.get_smoothed_velocity)(target_player, v) };
-                let length = (velocity.x.powi(2) + velocity.y.powi(2)).sqrt();
+                let length = { get_velocity_length(helper, target_player, v) };
 
                 if length > 200. {
                     let mut rng = thread_rng();

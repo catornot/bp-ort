@@ -14,6 +14,7 @@ use super::{cmds_helper::CUserCmdHelper, cmds_utils::*, BotData};
 
 mod basic_combat;
 mod battery_yoinker;
+mod slide_hopper;
 
 pub(super) fn get_cmd(
     player: &'static mut CPlayer,
@@ -286,6 +287,7 @@ pub(super) fn get_cmd(
 
             cmd
         }
+        20 => slide_hopper::slide_hopper(&helper, player, local_data),
         _ => CUserCmd::new_empty(&helper),
     })?;
 

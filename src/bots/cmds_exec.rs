@@ -2,6 +2,7 @@ use crate::{
     bindings::{Action, CUserCmd, ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
     utils::iterate_c_array_sized,
 };
+use itertools::Itertools;
 use rrplug::{
     bindings::class_types::client::SignonState, high::vector::Vector3, prelude::EngineToken,
 };
@@ -59,7 +60,9 @@ pub fn run_bots_cmds(_paused: bool) {
                     )?,
                     player_by_index((i + 1) as i32).as_mut()?,
                 ))
-            }) // can collect here to stop the globals from complaning about mutability
+            })
+            .collect_vec()
+            .into_iter() // can collect here to stop the globals from complaning about mutability
     } {
         cmd.frame_time = unsafe { globals.tick_interval.copy_inner() };
         unsafe {
@@ -109,13 +112,12 @@ pub fn run_bots_cmds(_paused: bool) {
                 // );
 
                 move_helper.host = std::ptr::null_mut();
-                #[allow(invalid_reference_casting)] // tmp or not XD
-                {
-                    *((globals.frametime.get_inner() as *const f32).cast_mut()) = frametime;
-                    *((globals.cur_time.get_inner() as *const f32).cast_mut()) = cur_time;
-                }
+                *globals.frametime.get_inner_mut() = frametime;
+                *globals.cur_time.get_inner_mut() = cur_time;
 
-                (server_functions.simulate_player)(player);
+                // is this needed?
+                // looks like it's not
+                // (server_functions.simulate_player)(player);
             } else {
                 run_null_command(player);
             }

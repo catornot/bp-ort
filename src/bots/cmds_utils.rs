@@ -358,3 +358,16 @@ pub fn normalize(vec: Vector3) -> Vector3 {
         vec.z * length_recip,
     )
 }
+
+pub fn get_velocity_length(helper: &CUserCmdHelper, player: &mut CPlayer, v: &mut Vector3) -> f32 {
+    let velocity = get_velocity_vector(helper, player, v);
+    (velocity.x.powi(2) + velocity.y.powi(2)).sqrt()
+}
+
+pub fn get_velocity_vector(
+    helper: &CUserCmdHelper,
+    player: &mut CPlayer,
+    v: &mut Vector3,
+) -> Vector3 {
+    unsafe { *(helper.sv_funcs.get_smoothed_velocity)(player, v) }
+}

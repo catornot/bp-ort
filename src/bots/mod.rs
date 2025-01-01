@@ -84,6 +84,7 @@ pub(super) struct BotData {
     last_shot: f32,
     should_recaculate_path: bool,
     next_check: f32,
+    has_started_to_slide_hop: bool,
 }
 
 #[derive(Debug)]
