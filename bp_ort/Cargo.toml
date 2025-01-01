@@ -1,15 +1,13 @@
 [package]
-name = "bp-ort"
+name = "bp_ort"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 once_cell = "1.16.0"
 log = "*"
 retour = { version = "0.3.1", features = ["static-detour"] }
-rrplug = { path = "../rrplug" }
+rrplug = { path = "../../rrplug" }
 rand  = "0.8.5"
 windows-sys = { version = "0.48.0", features = ["Win32_System_LibraryLoader", "Win32_Foundation", "Win32_System_Console", "Win32_System_Diagnostics_Debug", "Win32_System_Threading"] }
 libc = "0.2.148"

@@ -1,0 +1,11 @@
+[workspace]
+resolver = "2"
+
+members = [
+    "bp_ort",
+]
+
+# for crates that deal with ub a lot 
+[profile.release-ub]
+inherits = "release"
+opt-level = 1
