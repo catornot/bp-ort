@@ -1,3 +1,4 @@
+use mid::utils::from_char_ptr;
 use rrplug::prelude::*;
 use rrplug::{bindings::cvar::convar::FCVAR_GAMEDLL, mid::utils::try_cstring};
 use std::ffi::CStr;
@@ -28,7 +29,7 @@ pub fn register_debug_concommands(engine: &EngineData, token: EngineToken) {
         .register_concommand(
             "set_clan_tag",
             set_clan_tag,
-            "",
+            "sets clan tag: set_clang_tag <player:0 to 32>",
             FCVAR_GAMEDLL as i32,
             token,
         )
@@ -43,6 +44,16 @@ pub fn register_debug_concommands(engine: &EngineData, token: EngineToken) {
             token,
         )
         .expect("couldn't register concommand test_net_int");
+
+    engine
+        .register_concommand(
+            "bot_list_player_indicies",
+            bot_list_player_indicies,
+            "lists all the players and their index",
+            FCVAR_GAMEDLL as i32,
+            token,
+        )
+        .expect("couldn't register concommand bot_list_player_indicies");
 }
 
 #[rrplug::concommand]
@@ -145,4 +156,21 @@ pub fn test_net_int(command: CCommandResult) -> Option<()> {
     }?);
 
     None
+}
+
+#[rrplug::concommand]
+pub fn bot_list_player_indicies() {
+    let engine_funcs = ENGINE_FUNCTIONS.wait();
+    for (index, player) in (0..32).filter_map(|index| {
+        Some((index, unsafe {
+            from_char_ptr(
+                (engine_funcs.client_array.add(index))
+                    .as_ref()?
+                    .name
+                    .as_ptr(),
+            )
+        }))
+    }) {
+        log::info!("{index}: {player}");
+    }
 }
