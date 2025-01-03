@@ -2,8 +2,12 @@
 resolver = "2"
 
 members = [
-    "bp_ort",
+    "bp_ort", "ranim",
 ]
+
+[workspace.dependencies]
+rrplug = { path = "../rrplug" }
+# rrplug = { git = "https://github.com/catornot/rrplug.git" }
 
 # for crates that deal with ub a lot 
 [profile.release-ub]
