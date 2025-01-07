@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use super::{
     bindings::{dtNavMeshQuery, dtPolyRef, dtQueryFilter},
-    Hull, RecastDetour, RECAST_DETOUR,
+    Hull, JumpTypes, RecastDetour, RECAST_DETOUR,
 };
 
 const HUMAN_EXTENTS: Vector3 = Vector3::new(100.0, 100.0, 136.0);
@@ -44,16 +44,31 @@ impl Navigation {
             hull,
             filter: dtQueryFilter {
                 m_areaCost: if hull == Hull::Human {
-                    [
-                        1621.6901, 1274.1852, 1698.9136, 1158.3501, 1814.7485, 2123.6418, 0.0, 0.0,
-                        3243.3801, 2123.6418, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                        2123.6418, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                    ]
+                    // [
+                    //     1621.6901, 1274.1852, 1698.9136, 1158.3501, 1814.7485, 2123.6418, 0.0, 0.0,
+                    //     3243.3801, 2123.6418, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                    //     2123.6418, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                    // ]
+                    [0.0; 32]
                 } else {
                     Default::default()
                 },
                 m_includeFlags: u16::MAX,
                 m_excludeFlags: 0,
+                m_traverseFlags: JumpTypes::SmallObjectsCrossing.into_u32()
+                    | JumpTypes::CratesTraversal.into_u32()
+                    | JumpTypes::MediumGapCrossing.into_u32()
+                    | JumpTypes::WindowJumpDownUnused.into_u32()
+                    // | JumpTypes::HugeGapCrossing.into_u32()
+                    | JumpTypes::ShortWallTraversal.into_u32()
+                    // | JumpTypes::TallWallTraversal.into_u32()
+                    // | JumpTypes::BuildingTraversal.into_u32()
+                    | JumpTypes::MediumJumpsAcrossSameLevel.into_u32()
+                    | JumpTypes::MediumTraversalIntoAdjacentLevels.into_u32()
+                    // | JumpTypes::LargeTraversalIntoAdjacentLevels.into_u32()
+                    | JumpTypes::ShortJumpsAcrossSameLevel.into_u32()
+                    | JumpTypes::DiagonalMediumTraversal.into_u32(), // | JumpTypes::TallWallTraversalClimb.into_u32()
+                                                                     // | JumpTypes::BuildingTraversalClimb.into_u32()
             },
             path: Vec::with_capacity(PATH_CAPACITY),
             path_points: Vec::with_capacity(PATH_CAPACITY),
@@ -149,21 +164,22 @@ impl Navigation {
 
         let mut straight_size = 0;
         unsafe {
-            _ = (dt_funcs.dtNavMeshQuery__findStraightPath)(
+            dbg!((dt_funcs.dtNavMeshQuery__findStraightPath)(
                 &mut self.query,
                 &start,
                 &end,
                 self.path.as_ptr(),
                 self.jump_types.as_ptr(),
-                self.path.len() as i32,
+                path_size as i32,
                 self.straigth_path_points.as_mut_ptr(),
                 self.straigth_path_flags.as_mut_ptr(),
                 self.straigth_path.as_mut_ptr(),
                 self.straigth_path_jumps.as_mut_ptr(),
                 &mut straight_size,
                 PATH_CAPACITY as i32,
-                0,
-            );
+                PATH_CAPACITY as i32,
+                0
+            ));
         }
 
         if straight_size != 0 {
@@ -173,18 +189,16 @@ impl Navigation {
                 self.straigth_path_flags.set_len(straight_size as usize);
                 self.straigth_path_points.set_len(straight_size as usize);
                 self.straigth_path.set_len(straight_size as usize);
-                // self.straigth_path_points.clone_into(&mut self.path_points);
+                self.straigth_path_points.clone_into(&mut self.path_points);
+                self.straigth_path.clone_into(&mut self.path);
             }
 
-            // log::info!("jumps {:?}", self.straigth_path_jumps);
-            // log::info!("jumps types {:?}", self.jump_types);
-            // log::info!("flags {:?}", self.straigth_path_flags);
-            // log::info!("path {:?}", self.straigth_path);
-        } else {
-            log::error!("why broke")
-        }
-
-        if path_size == 1 {
+            log::info!("jumps {:?}", self.straigth_path_jumps);
+            log::info!("jumps types {:?}", self.jump_types);
+            log::info!("flags {:?}", self.straigth_path_flags);
+            log::info!("path {:?}", self.straigth_path);
+            log::info!("points {:?}", self.straigth_path_points);
+        } else if path_size == 1 {
             self.path_points.push(start_point);
             self.path_points.push(end_point);
         } else {
@@ -201,8 +215,13 @@ impl Navigation {
                             &prev_point,
                             &mut next_point,
                             &self.filter,
-                        )
-                    };
+                        );
+                        // let mut tile = std::ptr::null_mut();
+                        // let mut poly = std::ptr::null_mut();
+                        // (dt_funcs.dtNavMesh__)(self.query.nav, next_ref, &mut tile, &mut poly);
+
+                        // let poly = poly.as_mut().unwrap();
+                    }
                     prev_point = next_point;
                     next_point
                 })

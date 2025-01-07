@@ -41,6 +41,45 @@ pub enum Hull {
     Titan,
 }
 
+#[repr(u32)]
+#[allow(unused)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, GetFromSquirrelVm, SQVMName)]
+pub enum JumpTypes {
+    TinyGapsCrossingUnused,
+    SmallObjectsCrossing,
+    CratesTraversal,
+    MediumGapCrossing,
+    ShortFallDownOnlyUnused,
+    MediumFallDownOnlyUnused,
+    WindowJumpDownUnused,
+    HugeGapCrossing,
+    ShortWallTraversal,
+    TallWallTraversal,
+    BuildingTraversal,
+    MediumJumpsAcrossSameLevel,
+    MediumTraversalIntoAdjacentLevels,
+    LargeTraversalIntoAdjacentLevels,
+    ShortWindowTraversalUnused,
+    LongWindowTraversalUnused,
+    ShortJumpsAcrossSameLevel,
+    DiagonalMediumTraversal,
+    DoorTraversalUnused,
+    TallWallTraversalClimb,
+    BuildingTraversalClimb,
+}
+
+impl From<JumpTypes> for u32 {
+    fn from(val: JumpTypes) -> Self {
+        1 << val as u32
+    }
+}
+
+impl JumpTypes {
+    fn into_u32(self) -> u32 {
+        self.into()
+    }
+}
+
 type FindStraightPath = unsafe extern "C" fn(
     this: *const dtNavMeshQuery,
     startPos: *const Vector3,
@@ -55,6 +94,7 @@ type FindStraightPath = unsafe extern "C" fn(
     straightPathCount: *mut i32,
     maxStraightPath: i32,
     options: i32,
+    unk: u8,
 ) -> dtStatus;
 
 offset_functions! {

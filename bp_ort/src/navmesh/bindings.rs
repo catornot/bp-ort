@@ -373,9 +373,14 @@ pub type PdtQueryFilter = *mut dtQueryFilter;
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct dtQueryFilter {
+    /// Cost per traverse type. (Used by default implementation.)
     pub m_areaCost: [f32; 32usize],
+    /// Flags for polygons that can be visited. (Used by default implementation.)
     pub m_includeFlags: ushort,
+    /// Flags for polygons that should not be visited. (Used by default implementation.)
     pub m_excludeFlags: ushort,
+    /// Flags for links dictating which traverse types are allowed to be used. (See [r5apex_ds + CA6FE9.])
+    pub m_traverseFlags: u32,
 }
 pub type dtStatus = uint;
 pub type dtStatus64 = i64;
