@@ -1,0 +1,18 @@
+[build]
+# target = "x86_64-pc-windows-gnullvm"
+target = "x86_64-pc-windows-gnu"
+# target = "x86_64-pc-windows-msvc"
+
+[target.x86_64-pc-windows-gnu]
+# linker = "x86_64-w64-mingw32-clang"
+# linker = "x86_64-w64-mingw32-gcc"
+# linker = "rust-lld"
+# linker = "mold"
+# linker = "lld"
+
+[target.x86_64-pc-windows-gnullvm]
+# linker = "x86_64-w64-mingw32-clang"
+# linker = "x86_64-w64-mingw32-gcc"
+# linker = "rust-lld"
+# linker = "mold"
+linker = "clang"
