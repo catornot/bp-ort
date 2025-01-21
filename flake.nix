@@ -21,7 +21,7 @@
         devShell = pkgs.mkShell rec {
           nativeBuildInputs = with pkgs; [ 
             pkg-config
-        ];
+          ];
 
 
           buildInputs = with pkgs; [ 
