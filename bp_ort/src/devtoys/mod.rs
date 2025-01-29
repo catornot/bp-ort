@@ -146,7 +146,7 @@ impl Plugin for DevToys {
                     unsafe {
                         (engine.cbuf_add_text)(
                             (engine.cbuf_get_current_player)(),
-                            "map mp_box\0".as_ptr().cast(),
+                            c"map mp_box".as_ptr().cast(),
                             crate::bindings::CmdSource::Code,
                         )
                     };

@@ -26,13 +26,13 @@ pub fn register_teleport_command(engine_data: &EngineData, token: EngineToken) {
     //     token,
     // );
 
-    // _ = engine_data.register_concommand(
-    //     "tp_server",
-    //     teleport_server_command,
-    //     "",
-    //     FCVAR_GAMEDLL_FOR_REMOTE_CLIENTS as i32 | FCVAR_GAMEDLL as i32,
-    //     token,
-    // );
+    _ = engine_data.register_concommand(
+        "tp_server",
+        teleport_server_command,
+        "",
+        FCVAR_GAMEDLL_FOR_REMOTE_CLIENTS as i32 | FCVAR_GAMEDLL as i32,
+        token,
+    );
 
     _ = engine_data.register_concommand(
         "pos",
@@ -86,11 +86,14 @@ fn teleport_server_command(command: CCommandResult) -> Option<()> {
                 .then_some(unsafe { *player.get_origin(&mut v) })
         })?;
 
-    // teleporting this way doesn't always work :\
+    // if unsafe { !(funcs.check_position)(&tp_location).is_null() } {
+    //     log::warn!("out of bounds {tp_location}");
+    //     return None;
+    // }
 
     execute_for_matches(
         command.get_arg(0),
-        |player| unsafe { *player.local_origin.get_inner_mut() = tp_location },
+        |player| unsafe { (funcs.set_origin)(player, &tp_location) },
         false,
         funcs,
         engine,

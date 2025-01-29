@@ -49,6 +49,7 @@ pub fn run_bots_cmds(_paused: bool) {
                 let bot_player = player_by_index((i + 1) as i32).as_mut()?;
                 let edict = **client.edict as usize;
 
+                (server_functions.calc_origin)(bot_player, &std::ptr::from_ref(bot_player), 0, 0);
                 let data = bot_tasks.as_mut().get_mut(edict)?;
                 data.edict = edict as u16;
                 Some((
@@ -122,6 +123,21 @@ pub fn run_bots_cmds(_paused: bool) {
                 run_null_command(player);
             }
             // *player.angles.get_inner_mut() = cmd.world_view_angles // this is not really great -> bad aim
+
+            // this is still a bit jitary :(
+            if globals.frame_count.copy_inner() % 10 == 0 {
+                // HACK: so setting origin forces the game to check touching so kind of fixes that but doesn't work for exiting triggers maybe?
+                (server_functions.calc_origin)(player, &std::ptr::from_ref(player), 0, 0);
+                (server_functions.set_origin_hack_do_not_use)(
+                    player,
+                    player.vec_abs_origin.get_inner(),
+                );
+            }
+
+            // *std::ptr::from_mut(player).byte_offset(0x618).cast::<u32>() = 0; // m_collectedInvalidateFlags
+            // *std::ptr::from_mut(player).byte_offset(0x61c).cast::<bool>() = false; // m_collectingInvalidateFlags
+            // (server_functions.perform_collision_check)(player, 1);
+            // (server_functions.another_perform_collision_check)(player, std::ptr::null());
         }
         unsafe { LAST_CMD = None }
     }

@@ -29,11 +29,12 @@ pub struct Navigation {
     pub filter: dtQueryFilter,
     path: Vec<dtPolyRef>,
     pub path_points: Vec<Vector3>,
-    pub jump_types: Vec<u8>,
-    pub straigth_path_points: Vec<Vector3>,
-    pub straigth_path: Vec<dtPolyRef>,
-    pub straigth_path_flags: Vec<u8>,
-    pub straigth_path_jumps: Vec<u8>,
+    pub end_point: Option<Vector3>,
+    jump_types: Vec<u8>,
+    straigth_path_points: Vec<Vector3>,
+    straigth_path: Vec<dtPolyRef>,
+    straigth_path_flags: Vec<u8>,
+    straigth_path_jumps: Vec<u8>,
 }
 
 impl Navigation {
@@ -55,24 +56,21 @@ impl Navigation {
                 },
                 m_includeFlags: u16::MAX,
                 m_excludeFlags: 0,
-                m_traverseFlags: JumpTypes::SmallObjectsCrossing.into_u32()
+                m_traverseFlags: (JumpTypes::SmallObjectsCrossing.into_u32()
                     | JumpTypes::CratesTraversal.into_u32()
                     | JumpTypes::MediumGapCrossing.into_u32()
                     | JumpTypes::WindowJumpDownUnused.into_u32()
-                    // | JumpTypes::HugeGapCrossing.into_u32()
                     | JumpTypes::ShortWallTraversal.into_u32()
-                    // | JumpTypes::TallWallTraversal.into_u32()
-                    // | JumpTypes::BuildingTraversal.into_u32()
                     | JumpTypes::MediumJumpsAcrossSameLevel.into_u32()
                     | JumpTypes::MediumTraversalIntoAdjacentLevels.into_u32()
-                    // | JumpTypes::LargeTraversalIntoAdjacentLevels.into_u32()
                     | JumpTypes::ShortJumpsAcrossSameLevel.into_u32()
-                    | JumpTypes::DiagonalMediumTraversal.into_u32(), // | JumpTypes::TallWallTraversalClimb.into_u32()
-                                                                     // | JumpTypes::BuildingTraversalClimb.into_u32()
+                    | JumpTypes::DiagonalMediumTraversal.into_u32())
+                    * (hull == Hull::Human) as u32,
             },
             path: Vec::with_capacity(PATH_CAPACITY),
             path_points: Vec::with_capacity(PATH_CAPACITY),
-            jump_types: vec![0; PATH_CAPACITY],
+            end_point: None,
+            jump_types: vec![u8::MAX; PATH_CAPACITY],
             straigth_path: Vec::with_capacity(PATH_CAPACITY),
             straigth_path_points: Vec::with_capacity(PATH_CAPACITY),
             straigth_path_flags: Vec::with_capacity(PATH_CAPACITY),
@@ -101,6 +99,8 @@ impl Navigation {
         let mut start = Vector3::ZERO;
         let mut ref_end = 0;
         let mut end = Vector3::ZERO;
+
+        self.end_point = None;
 
         let status = unsafe {
             (dt_funcs.dtNavMeshQuery__findNearestPoly)(
@@ -162,6 +162,8 @@ impl Navigation {
             return Err(NavigationError::PathNotFound(start, end));
         }
 
+        self.end_point = Some(end_point);
+
         let mut straight_size = 0;
         unsafe {
             dbg!((dt_funcs.dtNavMeshQuery__findStraightPath)(
@@ -177,7 +179,7 @@ impl Navigation {
                 self.straigth_path_jumps.as_mut_ptr(),
                 &mut straight_size,
                 PATH_CAPACITY as i32,
-                PATH_CAPACITY as i32,
+                0,
                 0
             ));
         }
@@ -186,18 +188,13 @@ impl Navigation {
             unsafe {
                 self.jump_types.set_len(straight_size as usize);
                 self.straigth_path_jumps.set_len(straight_size as usize);
-                self.straigth_path_flags.set_len(straight_size as usize);
                 self.straigth_path_points.set_len(straight_size as usize);
                 self.straigth_path.set_len(straight_size as usize);
                 self.straigth_path_points.clone_into(&mut self.path_points);
+                self.path_points.push(end_point);
+                self.path_points.reverse();
                 self.straigth_path.clone_into(&mut self.path);
             }
-
-            log::info!("jumps {:?}", self.straigth_path_jumps);
-            log::info!("jumps types {:?}", self.jump_types);
-            log::info!("flags {:?}", self.straigth_path_flags);
-            log::info!("path {:?}", self.straigth_path);
-            log::info!("points {:?}", self.straigth_path_points);
         } else if path_size == 1 {
             self.path_points.push(start_point);
             self.path_points.push(end_point);

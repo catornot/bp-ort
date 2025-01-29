@@ -92,9 +92,9 @@ type FindStraightPath = unsafe extern "C" fn(
     straightPathRefs: *mut dtPolyRef,
     straightPathJumps: *mut u8,
     straightPathCount: *mut i32,
-    maxStraightPath: i32,
-    options: i32,
-    unk: u8,
+    unk12: i32,
+    unk13: i32,
+    options: u8,
 ) -> dtStatus;
 
 offset_functions! {

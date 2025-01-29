@@ -90,7 +90,7 @@ pub(super) fn get_cmd(
             }
         }
         2 => {
-            let origin = unsafe { *player.get_origin(&mut v) };
+            let origin = unsafe { player.vec_abs_origin.copy_inner() };
 
             let target = match local_data.counter {
                 0 => Vector3::new(-528., 13., 2.),
@@ -176,7 +176,7 @@ pub(super) fn get_cmd(
             cmd
         },
         4..=7 => basic_combat::basic_combat(player, &helper, sim_type, local_data),
-        13 | 14 => 'end: {
+        13..=15 => 'end: {
             let mut cmd = CUserCmd::new_empty(&helper);
 
             let origin = unsafe { *player.get_origin(&mut v) };
@@ -184,39 +184,31 @@ pub(super) fn get_cmd(
             let mut v = Vector3::ZERO;
 
             let maybe_target = if sim_type == 13 {
-                farthest_player(origin, team, &helper)
+                farthest_player(origin, team, &helper).map(|target| unsafe {
+                    (*target.get_origin(&mut v), target.player_index.copy_inner())
+                })
+            } else if sim_type == 14 {
+                closest_player(origin, team, &helper).map(|target| unsafe {
+                    (*target.get_origin(&mut v), target.player_index.copy_inner())
+                })
             } else {
-                closest_player(origin, team, &helper)
+                Some((local_data.target_pos, local_data.target_pos.x as u32))
             };
 
-            let Some(target) = maybe_target else {
+            let Some((target, last_index)) = maybe_target else {
                 break 'end cmd;
             };
-            let target_pos = unsafe { *target.get_origin(&mut v) };
 
             if path_to_target(
                 &mut cmd,
                 local_data,
                 origin,
-                target_pos,
-                local_data.last_target_index != unsafe { target.player_index.copy_inner() },
+                target,
+                local_data.last_target_index != last_index,
                 &helper,
             ) {
-                local_data.last_target_index = unsafe { target.player_index.copy_inner() }
+                local_data.last_target_index = last_index
             }
-            cmd
-        }
-        15 => {
-            let mut cmd = CUserCmd::new_empty(&helper);
-            cmd.world_view_angles = helper.angles + Vector3::new(0., 10., 0.);
-
-            local_data.counter += 1;
-            if local_data.counter % 4 == 0 {
-                cmd.buttons |= Action::Duck as u32;
-            }
-
-            cmd.weaponselect = 2;
-
             cmd
         }
         16 => {
@@ -230,7 +222,7 @@ pub(super) fn get_cmd(
             cmd
         }
         17 => {
-            let origin = unsafe { *player.get_origin(&mut v) };
+            let origin = unsafe { player.vec_abs_origin.copy_inner() };
             let team = unsafe { **player.team };
 
             let target = unsafe {

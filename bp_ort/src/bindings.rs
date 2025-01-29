@@ -351,6 +351,13 @@ offset_functions! {
         view_angles = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *const Vector3 where offset(0x5d3960); // this acceses the vtable
         calc_absolute_velocity = unsafe extern "C" fn(*const CPlayer, *const *const CPlayer, usize, usize) -> () where offset(0x40a1e0);
         get_smoothed_velocity = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x58dfc0);
+        calc_origin = unsafe extern "C" fn(*const CPlayer, *const *const CPlayer, usize, usize) -> () where offset(0x409ae0);
+
+        set_origin = unsafe extern "C" fn(*const CPlayer, *const Vector3) where offset(0x433a80);
+        set_origin_hack_do_not_use = unsafe extern "C" fn(*const CPlayer, *const Vector3) where offset(0x42dd30);
+        check_position = unsafe extern "C" fn(*const Vector3) -> *const u8 where offset(0x438a90);
+        perform_collision_check = unsafe extern "C" fn(*const CPlayer, u32) where offset(0x441480);
+        another_perform_collision_check = unsafe extern "C" fn(*const CPlayer, *const CPlayer) where offset(0x443bd0);
 
         is_on_ground = unsafe extern "C" fn(*const CPlayer) -> usize where offset(0x441c60);
         is_alive = unsafe extern "C" fn(*const CPlayer) -> usize where offset(0x4461e0);

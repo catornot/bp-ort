@@ -37,7 +37,6 @@ pub fn path_to_target(
     helper: &CUserCmdHelper,
 ) -> bool {
     let dt_funcs = RECAST_DETOUR.wait();
-    #[cfg(not(feature = "release"))]
     let debug = ENGINE_INTERFACES.wait().debug_overlay;
     let Some(nav) = local_data.nav_query.as_mut() else {
         log::warn!("null nav");
@@ -48,58 +47,54 @@ pub fn path_to_target(
         return false;
     }
 
-    #[cfg(not(feature = "release"))]
-    {
-        _ = nav
-            .path_points
-            .last()
-            .map(|point| unsafe { debug.AddLineOverlay(&origin, point, 0, 255, 0, true, 0.1) });
-        nav.path_points
-            .iter()
-            .cloned()
-            .tuple_windows()
-            .for_each(|(p1, p2)| unsafe { debug.AddLineOverlay(&p1, &p2, 0, 255, 0, true, 0.5) });
-        _ = nav
-            .path_points
-            .last()
-            .map(|point| unsafe { debug.AddLineOverlay(point, &target_pos, 0, 255, 0, true, 0.1) });
-    }
+    _ = nav
+        .path_points
+        .last()
+        .map(|point| unsafe { debug.AddLineOverlay(&origin, point, 0, 255, 0, true, 0.1) });
+    nav.path_points
+        .iter()
+        .cloned()
+        .tuple_windows()
+        .for_each(|(p1, p2)| unsafe { debug.AddLineOverlay(&p1, &p2, 0, 255, 0, true, 0.5) });
+    _ = nav
+        .path_points
+        .last()
+        .map(|point| unsafe { debug.AddLineOverlay(point, &target_pos, 0, 255, 0, true, 0.1) });
 
     if nav
-        .path_points
-        .first()
-        .map(|point| distance(*point, target_pos) > BOT_PATH_RECAL_RANGE)
+        .end_point
+        .map(|point| distance(point, target_pos) > BOT_PATH_RECAL_RANGE)
         .map(|should_recalculate| should_recalculate || should_recalcute_path)
         .unwrap_or(true)
+        || nav.path_points.is_empty()
     {
         local_data.last_time_node_reached = unsafe { helper.globals.cur_time.copy_inner() };
         local_data.next_target_pos = origin;
 
         // this might be the reason of the sudden aim shift or not really idk
         if local_data.last_bad_path + 1. >= unsafe { helper.globals.cur_time.copy_inner() } {
-            try_avoid_obstacle(cmd, helper);
+            try_avoid_obstacle(cmd, local_data, helper);
 
             return false;
         }
 
         if let Err(err) = nav.new_path(origin, target_pos, dt_funcs) {
             log::warn!("navigation pathing failed stuck somewhere probably! {err}");
-            try_avoid_obstacle(cmd, helper);
+            try_avoid_obstacle(cmd, local_data, helper);
 
-            local_data.last_bad_path = unsafe { helper.globals.cur_time.copy_inner() };
+            local_data.last_bad_path = time(helper);
 
             return false;
         }
     }
 
     if nav
-        .path_points
-        .first()
-        .cloned()
+        .end_point
         .map(|point| distance(point, target_pos) > BOT_PATH_RECAL_RANGE)
         .unwrap_or(true)
+        || nav.path_points.is_empty()
     {
-        try_avoid_obstacle(cmd, helper);
+        try_avoid_obstacle(cmd, local_data, helper);
         cmd.world_view_angles.y = look_at(origin, target_pos).y;
 
         return true;
@@ -112,19 +107,34 @@ pub fn path_to_target(
             .expect("should always have enough points here");
     }
 
+    // origin is from the eyes?
+    if local_data.next_target_pos.z - origin.z >= -40.
+        && (is_timedout(local_data.jump_delay, helper, 0.5)
+            .then(|| local_data.jump_hold = 4)
+            .map(|_| true)
+            .unwrap_or_default()
+            || local_data.jump_hold != 0)
+    {
+        // log::info!("jumpiness: {}", local_data.next_target_pos.z - origin.z);
+        cmd.buttons |= Action::Jump as u32;
+        local_data.jump_delay = time(helper);
+
+        local_data.jump_hold = local_data.jump_hold.saturating_sub(1);
+    }
+
     cmd.world_view_angles.y = look_at(origin, local_data.next_target_pos).y;
     cmd.move_.x = 1.0;
     cmd.buttons |= Action::Forward as u32 | Action::Speed as u32;
 
     if is_timedout(local_data.last_time_node_reached, helper, 5.) {
-        try_avoid_obstacle(cmd, helper);
+        try_avoid_obstacle(cmd, local_data, helper);
     }
 
     true
 }
 
 pub fn is_timedout(last_time: f32, helper: &CUserCmdHelper<'_>, time_elasped: f32) -> bool {
-    last_time + time_elasped <= unsafe { helper.globals.cur_time.copy_inner() }
+    last_time + time_elasped <= time(helper)
 }
 
 pub unsafe fn find_player_in_view<'a>(
@@ -134,6 +144,7 @@ pub unsafe fn find_player_in_view<'a>(
     helper: &'a CUserCmdHelper,
 ) -> Option<(&'a mut CPlayer, bool)> {
     const BOT_VIEW: f32 = 270_f32;
+    let pos = Vector3::new(0., 0., 80.) + pos; // since it's from the feet
 
     let mut v = Vector3::ZERO;
 
@@ -325,7 +336,8 @@ pub unsafe fn view_rate(
     }
 }
 
-pub fn try_avoid_obstacle(cmd: &mut CUserCmd, helper: &CUserCmdHelper) {
+pub fn try_avoid_obstacle(cmd: &mut CUserCmd, local_data: &mut BotData, helper: &CUserCmdHelper) {
+    local_data.jump_delay_obstacle = time(helper);
     cmd.move_ = Vector3::new(
         1.,
         if unsafe { helper.globals.frame_count.copy_inner() } / 100 % 2 == 0 {
@@ -337,9 +349,17 @@ pub fn try_avoid_obstacle(cmd: &mut CUserCmd, helper: &CUserCmdHelper) {
     );
     cmd.buttons |= Action::Forward as u32
         | Action::Walk as u32
-        | (unsafe { helper.globals.frame_count.copy_inner() } / 10 % 4 == 0)
-            .then_some(Action::Jump as u32)
-            .unwrap_or_default();
+        | (is_timedout(local_data.jump_delay_obstacle, helper, 0.5)
+            .then(|| local_data.jump_hold = 4))
+        .or_else(|| (local_data.jump_hold != 0).then_some(()))
+        .map(|_| Action::Jump as u32)
+        .unwrap_or_default();
+
+    local_data.jump_hold = local_data.jump_hold.saturating_sub(0);
+}
+
+fn time(helper: &CUserCmdHelper<'_>) -> f32 {
+    unsafe { helper.globals.cur_time.copy_inner() }
 }
 
 pub fn distance(pos: Vector3, target: Vector3) -> f32 {

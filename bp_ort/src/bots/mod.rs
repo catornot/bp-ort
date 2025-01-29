@@ -78,6 +78,9 @@ pub(super) struct BotData {
     nav_query: Option<Navigation>,
     next_target_pos: Vector3,
     last_time_node_reached: f32,
+    jump_delay: f32,
+    jump_delay_obstacle: f32,
+    jump_hold: u32,
     last_bad_path: f32,
     last_target_index: u32,
     target_pos: Vector3,
@@ -172,11 +175,11 @@ impl Plugin for Bots {
 
         let max_players: u32 = unsafe {
             CStr::from_ptr((ENGINE_FUNCTIONS.wait().get_current_playlist_var)(
-                "max_players\0"
+                c"max_players"
                     .as_ptr()
                     .cast::<i8>()
                     .as_ref()
-                    .unwrap_or_else(|| &*("err\0".as_ptr() as *const i8)),
+                    .unwrap_or_else(|| &*c"err".as_ptr()),
                 false as i32,
             ))
             .to_string_lossy()

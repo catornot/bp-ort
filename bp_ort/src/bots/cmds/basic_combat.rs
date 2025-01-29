@@ -19,7 +19,7 @@ pub(crate) fn basic_combat(
 ) -> CUserCmd {
     let mut v = Vector3::ZERO;
     let v = &mut v;
-    let origin = unsafe { *player.get_origin(v) };
+    let origin = unsafe { player.vec_abs_origin.copy_inner() };
     let team = unsafe { **player.team };
 
     let target = unsafe {
@@ -129,7 +129,10 @@ pub(crate) fn basic_combat(
             target
         };
 
-        if should_shoot || sim_type == 5 {
+        let enemy_is_titan = unsafe { (helper.sv_funcs.is_titan)(target_player) };
+        let is_titan = unsafe { (helper.sv_funcs.is_titan)(player) };
+
+        if (should_shoot || sim_type == 5) && !enemy_is_titan {
             let angles = look_at(origin, target);
 
             let angles = {
@@ -164,9 +167,6 @@ pub(crate) fn basic_combat(
                 .unwrap_or(angles.y);
         }
 
-        let enemy_is_titan = unsafe { (helper.sv_funcs.is_titan)(target_player) };
-        let is_titan = unsafe { (helper.sv_funcs.is_titan)(player) };
-
         if (!is_titan
             && (origin.x - target.x).powi(2) * (origin.y - target.y).powi(2) < 81000.
             && (origin.z - target.z).abs() < 50.)
@@ -191,13 +191,7 @@ pub(crate) fn basic_combat(
         if is_titan {
             use crate::bots::TitanClass as TC;
             cmd.buttons |= match (local_data.counter, local_data.titan) {
-                (_, TC::Scorch) => {
-                    Action::OffHand0 as u32
-                        | Action::OffHand1 as u32
-                        | Action::OffHand2 as u32
-                        | Action::OffHand3 as u32
-                        | Action::OffHand4 as u32
-                }
+                (_, TC::Scorch) if distance(origin, target) <= 900. => Action::OffHand0 as u32,
                 (1, TC::Ronin | TC::Ion) => 0,
                 (2, TC::Legion) => 0,
                 (0, _) => Action::OffHand0 as u32,
