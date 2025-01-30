@@ -81,6 +81,11 @@ impl Plugin for DevToys {
                 let fov_ptr = unsafe { fov_scale_convar.get_raw_convar_ptr().as_mut() }
                     .expect("cl_fovscale should exist");
 
+                log::info!("cl_fovscale {}", fov_ptr.m_bHasMax);
+                log::info!("cl_fovscale {}", fov_ptr.m_bHasMin);
+                log::info!("cl_fovscale {}", fov_ptr.m_fMaxVal);
+                log::info!("cl_fovscale {}", fov_ptr.m_fMaxVal);
+
                 fov_ptr.m_bHasMax = false;
                 fov_ptr.m_bHasMin = false;
                 fov_ptr.m_fMaxVal = f32::MIN;
