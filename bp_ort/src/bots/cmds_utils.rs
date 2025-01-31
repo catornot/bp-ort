@@ -118,6 +118,7 @@ pub fn path_to_target(
         // log::info!("jumpiness: {}", local_data.next_target_pos.z - origin.z);
         cmd.buttons |= Action::Jump as u32;
         local_data.jump_delay = time(helper);
+        cmd.move_.z = 1.0; // hmmm
 
         local_data.jump_hold = local_data.jump_hold.saturating_sub(1);
     }

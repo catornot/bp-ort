@@ -19,7 +19,7 @@ pub(crate) fn basic_combat(
 ) -> CUserCmd {
     let mut v = Vector3::ZERO;
     let v = &mut v;
-    let origin = unsafe { player.vec_abs_origin.copy_inner() };
+    let origin = unsafe { *player.get_origin(v) };
     let team = unsafe { **player.team };
 
     let target = unsafe {
@@ -210,7 +210,7 @@ pub(crate) fn basic_combat(
             local_data.counter += 1;
         }
     } else {
-        cmd.buttons = Action::Reload as u32;
+        cmd.buttons |= Action::Reload as u32;
 
         cmd.world_view_angles.x = 0.;
     }
