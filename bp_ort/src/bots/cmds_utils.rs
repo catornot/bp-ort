@@ -145,8 +145,6 @@ pub unsafe fn find_player_in_view<'a>(
     helper: &'a CUserCmdHelper,
 ) -> Option<(&'a mut CPlayer, bool)> {
     const BOT_VIEW: f32 = 270_f32;
-    let pos = Vector3::new(0., 0., 80.) + pos; // since it's from the feet
-
     let mut v = Vector3::ZERO;
 
     if let Some(target) = unsafe {
