@@ -367,7 +367,10 @@ offset_functions! {
         get_player_net_int = unsafe extern "C" fn(*const CPlayer, *const c_char) -> i32 where offset(0x5ddc30);
         get_net_var_from_ent = unsafe extern "C" fn(*const CBaseEntity, *const c_char, i32, *mut i32) -> i32 where offset(0x1fa9c0);
         get_entity_name = unsafe extern "C" fn(*const CPlayer) -> *const c_char where offset(0x4179b0);
-        ent_list = *const CEntInfo where offset(0x112D770);
+        ent_list = *const CEntInfo where offset(0x112d770);
+        find_next_entity_by_class_name = unsafe extern "C" fn(*const c_void, *const CBaseEntity, *const c_char) -> *mut CBaseEntity where offset(0x44fdc0);
+        some_magic_function_for_class_name = unsafe extern "C" fn(*mut *const c_char, *const c_char) -> *const *const c_char where offset(0x199e70);
+        get_ent_by_script_name = unsafe extern "C" fn(*const c_void, *const c_char, *mut i32) -> *mut CBaseEntity where offset(0x455030);
 
         get_offhand_weapon = unsafe extern "C" fn(*const CPlayer,u32 ) -> bool where offset(0xe1ec0); // not done
         set_weapon_by_slot = unsafe extern "C" fn(*const c_void, *const c_char) where offset(0xe4ba0);

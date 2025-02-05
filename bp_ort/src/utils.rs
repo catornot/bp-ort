@@ -10,12 +10,52 @@ use windows_sys::Win32::System::{
 
 use crate::bindings::{CBaseEntity, ServerFunctions, ENGINE_FUNCTIONS};
 
+pub struct ClassNameIter<'a> {
+    // class_name: &'a CStr,
+    magic_class_name: *const i8,
+    server_funcs: &'a ServerFunctions,
+    ent: *mut CBaseEntity,
+}
+
+impl<'a> ClassNameIter<'a> {
+    pub fn new(class_name: &'a CStr, server_funcs: &'a ServerFunctions) -> Self {
+        let mut magic = std::ptr::null();
+
+        unsafe {
+            (server_funcs.some_magic_function_for_class_name)(&mut magic, class_name.as_ptr())
+        };
+
+        ClassNameIter {
+            server_funcs,
+            ent: std::ptr::null_mut(),
+            magic_class_name: magic,
+        }
+    }
+}
+
+impl Iterator for ClassNameIter<'_> {
+    type Item = *mut CBaseEntity;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        unsafe {
+            (self.server_funcs.find_next_entity_by_class_name)(
+                self.server_funcs.ent_list.cast(),
+                self.ent,
+                self.magic_class_name,
+            )
+            .as_mut()
+            .inspect(|ent| self.ent = std::ptr::from_ref(*ent).cast_mut())
+            .map(std::ptr::from_mut)
+        }
+    }
+}
+
 pub struct Pointer<'a, T> {
     pub ptr: *const T,
     marker: PhantomData<&'a T>,
 }
 
-impl<'a, T> From<*const T> for Pointer<'a, T> {
+impl<T> From<*const T> for Pointer<'_, T> {
     fn from(value: *const T) -> Self {
         Self {
             ptr: value,
@@ -24,7 +64,7 @@ impl<'a, T> From<*const T> for Pointer<'a, T> {
     }
 }
 
-impl<'a, T> From<*mut T> for Pointer<'a, T> {
+impl<T> From<*mut T> for Pointer<'_, T> {
     fn from(value: *mut T) -> Self {
         Self {
             ptr: value.cast_const(),
@@ -137,4 +177,11 @@ pub fn get_net_var(
         (server_funcs.get_net_var_from_ent)(ent, netvar.as_ptr(), index, buf.as_mut_ptr())
     })
     .map(|_| buf[0])
+}
+
+pub fn get_ents_by_class_name<'a>(
+    name: &'a CStr,
+    server_funcs: &'a ServerFunctions,
+) -> impl Iterator<Item = *mut CBaseEntity> + 'a {
+    ClassNameIter::new(name, server_funcs)
 }

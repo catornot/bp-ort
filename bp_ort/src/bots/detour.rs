@@ -6,13 +6,14 @@ use rrplug::{
 use std::{
     ffi::{c_char, c_uchar, c_void},
     mem,
+    ops::Not,
 };
 
 use super::{
     cmds_exec::{replace_cmd, run_bots_cmds},
     set_on_join::set_stuff_on_join,
 };
-use crate::bindings::{CMoveHelperServer, CUserCmd, SERVER_FUNCTIONS};
+use crate::bindings::{CBaseEntity, CMoveHelperServer, CUserCmd, SERVER_FUNCTIONS};
 
 static_detour! {
     static Physics_RunThinkFunctions: unsafe extern "C" fn(bool);
@@ -25,6 +26,7 @@ static_detour! {
     static CMoveHelperServer__PlayerFallingDamage: unsafe extern "C" fn(*mut CMoveHelperServer, *mut c_void, *const c_void, *const c_void);
     static GetPlayerNetInt: unsafe extern "C" fn(*mut CPlayer, *const c_char)-> i32 ;
     static GetNetVarFromEnt: unsafe extern "C" fn(*mut CPlayer, *const c_char, i32, *const i32) -> usize ;
+    static FindNextEntByClass: unsafe extern "C" fn(*const c_void, *const CBaseEntity, *const c_char) -> *mut CBaseEntity;
 }
 
 fn physics_run_think_functions_hook(paused: bool) {
@@ -73,6 +75,43 @@ fn get_net_var_from_ent_hook(
         let value = GetNetVarFromEnt.call(player, var, index, unk1);
 
         log::info!("value: {value}");
+
+        value
+    }
+}
+
+fn find_next_ent_by_class_hook(
+    ent_list: *const c_void,
+    ent: *const CBaseEntity,
+    class_name: *const c_char,
+) -> *mut CBaseEntity {
+    unsafe {
+        log::info!(
+            "ent: {:?}",
+            ent.is_null()
+                .not()
+                .then(|| str_from_char_ptr((SERVER_FUNCTIONS.wait().get_entity_name)(ent.cast())))
+        );
+        log::info!(
+            "className: {:?}",
+            class_name
+                .is_null()
+                .not()
+                .then(|| str_from_char_ptr(class_name))
+                .flatten()
+        );
+        log::info!("ent_list: {:?}", ent_list as usize);
+        let value = FindNextEntByClass.call(ent_list, ent, class_name);
+
+        log::info!(
+            "value: {:?}",
+            value
+                .is_null()
+                .not()
+                .then(
+                    || str_from_char_ptr((SERVER_FUNCTIONS.wait().get_entity_name)(value.cast()))
+                )
+        );
 
         value
     }
@@ -130,6 +169,17 @@ pub fn hook_server(addr: *const c_void) {
         // .expect("failure to enable the GetPlayerNetInt");
 
         log::info!("hooked GetPlayerNetInt");
+
+        FindNextEntByClass
+            .initialize(
+                mem::transmute(addr.offset(0x44fdc0)),
+                find_next_ent_by_class_hook,
+            )
+            .expect("failed to hook FindNextEntByClass");
+        // .enable()
+        // .expect("failure to enable the FindNextEntByClass");
+
+        log::info!("hooked FindNextEntByClass");
 
         GetNetVarFromEnt
             .initialize(

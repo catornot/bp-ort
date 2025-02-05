@@ -175,7 +175,7 @@ pub(super) fn get_cmd(
 
             cmd
         },
-        4..=7 => basic_combat::basic_combat(player, &helper, sim_type, local_data),
+        4..=10 => basic_combat::basic_combat(player, &helper, sim_type, local_data),
         13..=15 => 'end: {
             let mut cmd = CUserCmd::new_empty(&helper);
 

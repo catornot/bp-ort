@@ -4,12 +4,27 @@ use rand::{thread_rng, Rng};
 use rrplug::{
     bindings::class_types::cplayer::CPlayer, high::UnsafeHandle, prelude::EngineToken, prelude::*,
 };
+use std::cell::UnsafeCell;
 
 use crate::{
     bindings::{Action, CBaseEntity, CUserCmd},
     bots::{cmds_helper::CUserCmdHelper, cmds_utils::*, BotData},
-    utils::get_net_var,
+    utils::{get_ents_by_class_name, get_net_var},
 };
+
+/// this cannot be accessed from multiple places so it's safe
+static HEADHUNTER_DATA: EngineGlobal<UnsafeCell<HeadHunterData>> =
+    EngineGlobal::new(UnsafeCell::new(HeadHunterData {
+        last_checked: -1,
+        batteries: Vec::new(),
+        hardpoints: Vec::new(),
+    }));
+
+struct HeadHunterData {
+    last_checked: i32,
+    batteries: Vec<Vector3>,
+    hardpoints: Vec<Vector3>,
+}
 
 pub(crate) fn basic_combat(
     player: &mut CPlayer,
@@ -73,6 +88,8 @@ pub(crate) fn basic_combat(
             local_data.should_recaculate_path = false;
         }
         (7, vision) if vision.is_none() || matches!(vision, Some((_, false))) => {
+            // this may be a big issue here
+            // this sometimes does need to recaculate the path
             _ = path_to_target(
                 &mut cmd,
                 local_data,
@@ -82,6 +99,52 @@ pub(crate) fn basic_combat(
                 helper,
             );
 
+            local_data.should_recaculate_path = false;
+        }
+        (8, target) if target.is_none() || matches!(target, Some((_, false))) => {
+            let (new_target_pos, should_recaculate) =
+            // check if team members are dead
+                if get_net_var(player, c"batteryCount", 191, helper.sv_funcs).unwrap_or(0) > 0{
+                    // log::info!("going to a dropoff point");
+                    (find_closest_hardpoint(origin, helper), None)
+                } else if let Some(battery) = find_closest_battery(origin, helper) {
+                    // log::info!("going to a battery");
+                    (battery, None)
+                } else if let Some(((target_pos, target), _)) = target {
+                    // log::info!("going to a kill");
+                    let result = (
+                        *target_pos,
+                        Some(
+                            local_data.last_target_index
+                                != unsafe { target.player_index.copy_inner() },
+                        ),
+                    );
+                    local_data.last_target_index = unsafe { target.player_index.copy_inner() };
+
+                    result
+                } else {
+                    // log::info!("going to a hardpoint");
+                    (find_closest_hardpoint(origin, helper), None)
+                };
+
+            // log::info!(
+            //     "location: {} {}",
+            //     new_target_pos,
+            //     should_recaculate.unwrap_or_else(|| local_data.target_pos != new_target_pos)
+            // );
+
+            _ = path_to_target(
+                &mut cmd,
+                local_data,
+                origin,
+                new_target_pos,
+                should_recaculate.unwrap_or_else(|| local_data.target_pos != new_target_pos)
+                    || local_data.should_recaculate_path,
+                helper,
+            );
+
+            // not the actual use but it's okay
+            local_data.target_pos = new_target_pos;
             local_data.should_recaculate_path = false;
         }
         (_, Some((_, _))) => {
@@ -242,4 +305,63 @@ pub(crate) fn basic_combat(
     cmd.camera_angles = cmd.world_view_angles;
 
     cmd
+}
+
+fn find_closest_battery(pos: Vector3, helper: &CUserCmdHelper) -> Option<Vector3> {
+    let token = try_refresh_headhunter(helper);
+
+    unsafe { &*HEADHUNTER_DATA.get(token).get() }
+        .batteries
+        .iter()
+        .map(|this| (*this, distance(pos, *this)))
+        .reduce(|closer, other| if closer.1 < other.1 { other } else { closer })
+        .map(|(pos, _)| pos)
+}
+
+fn find_closest_hardpoint(pos: Vector3, helper: &CUserCmdHelper) -> Vector3 {
+    let token = try_refresh_headhunter(helper);
+
+    unsafe { &*HEADHUNTER_DATA.get(token).get() }
+        .hardpoints
+        .iter()
+        .map(|this| (*this, distance(pos, *this)))
+        .reduce(|closer, other| if closer.1 < other.1 { other } else { closer })
+        .map(|(pos, _)| pos)
+        .unwrap_or_else(|| {
+            log::warn!("no hardpoints found");
+            Vector3::ZERO
+        })
+}
+
+fn try_refresh_headhunter(helper: &CUserCmdHelper) -> EngineToken {
+    let token = unsafe { EngineToken::new_unchecked() };
+    let data = unsafe { &mut *HEADHUNTER_DATA.get(token).get() };
+    let mut v = Vector3::ZERO;
+
+    if data.last_checked == unsafe { helper.globals.frame_count.copy_inner() } {
+        return token;
+    }
+
+    data.batteries.clear();
+    data.hardpoints.clear(); // hmm
+
+    data.batteries.extend(
+        get_ents_by_class_name(c"item_titan_battery", helper.sv_funcs).map(|ent| unsafe {
+            // the vtable is the almost the same so it's safe
+            *ent.cast::<CPlayer>()
+                .as_ref()
+                .unwrap_unchecked()
+                .get_origin(&mut v)
+        }),
+    );
+    data.hardpoints.extend(
+        get_ents_by_class_name(c"info_hardpoint", helper.sv_funcs).map(|ent| unsafe {
+            *ent.cast::<CPlayer>()
+                .as_ref()
+                .unwrap_unchecked()
+                .get_origin(&mut v)
+        }),
+    );
+
+    token
 }

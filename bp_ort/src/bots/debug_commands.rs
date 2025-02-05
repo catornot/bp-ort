@@ -1,9 +1,11 @@
-use mid::utils::from_char_ptr;
-use rrplug::prelude::*;
-use rrplug::{bindings::cvar::convar::FCVAR_GAMEDLL, mid::utils::try_cstring};
+use rrplug::{
+    bindings::cvar::convar::FCVAR_GAMEDLL,
+    mid::utils::{from_char_ptr, to_cstring, try_cstring},
+    prelude::*,
+};
 use std::ffi::CStr;
 
-use crate::utils::lookup_ent;
+use crate::utils::{get_ents_by_class_name, lookup_ent};
 use crate::{
     bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
     // bots::navmesh::get_path,
@@ -54,6 +56,16 @@ pub fn register_debug_concommands(engine: &EngineData, token: EngineToken) {
             token,
         )
         .expect("couldn't register concommand bot_list_player_indicies");
+
+    engine
+        .register_concommand(
+            "bot_find_ents_by_class",
+            bot_find_ents_by_class,
+            "",
+            FCVAR_GAMEDLL as i32,
+            token,
+        )
+        .expect("couldn't register concommand bot_find_ents_by_class");
 }
 
 #[rrplug::concommand]
@@ -173,4 +185,23 @@ pub fn bot_list_player_indicies() {
     }) {
         log::info!("{index}: {player}");
     }
+}
+
+#[rrplug::concommand]
+pub fn bot_find_ents_by_class(command: CCommandResult) -> Option<()> {
+    let mut v = Vector3::ZERO;
+
+    get_ents_by_class_name(
+        to_cstring(command.get_arg(0)?).as_c_str(),
+        SERVER_FUNCTIONS.wait(),
+    )
+    .map(|ent| unsafe {
+        *ent.cast::<rrplug::bindings::class_types::cplayer::CPlayer>()
+            .as_ref()
+            .unwrap_unchecked()
+            .get_origin(&mut v)
+    })
+    .for_each(|pos| log::info!("found ent at {pos:?}"));
+
+    None
 }
