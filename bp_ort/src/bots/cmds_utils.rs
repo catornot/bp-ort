@@ -14,7 +14,7 @@ use super::{cmds_helper::CUserCmdHelper, BotData};
 
 pub(super) const GROUND_OFFSET: Vector3 = Vector3::new(0., 0., 20.);
 pub(super) const BOT_VISON_RANGE: f32 = 3000.;
-pub(super) const BOT_PATH_NODE_RANGE: f32 = 50.;
+pub(super) const BOT_PATH_NODE_RANGE: f32 = 45.;
 pub(super) const BOT_PATH_RECAL_RANGE: f32 = 600.;
 
 pub fn look_at(origin: Vector3, target: Vector3) -> Vector3 {
@@ -43,7 +43,9 @@ pub fn path_to_target(
         return false;
     };
 
-    if distance(target_pos, origin) <= BOT_PATH_NODE_RANGE + 20. {
+    if distance3(target_pos, origin)
+        <= BOT_PATH_NODE_RANGE + local_data.approach_range.unwrap_or(20.)
+    {
         return false;
     }
 
@@ -363,6 +365,10 @@ fn time(helper: &CUserCmdHelper<'_>) -> f32 {
 
 pub fn distance(pos: Vector3, target: Vector3) -> f32 {
     ((pos.x - target.x).powi(2) + (pos.y - target.y).powi(2)).sqrt()
+}
+
+pub fn distance3(pos: Vector3, target: Vector3) -> f32 {
+    ((pos.x - target.x).powi(2) + (pos.y - target.y).powi(2) + (pos.z - target.z).powi(2)).sqrt()
 }
 
 pub fn dot(vec: Vector3, other_vec: Vector3) -> f32 {

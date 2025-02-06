@@ -19,11 +19,22 @@ static HEADHUNTER_DATA: EngineGlobal<UnsafeCell<HeadHunterData>> =
         batteries: Vec::new(),
         hardpoints: Vec::new(),
     }));
+static CTF_DATA: EngineGlobal<UnsafeCell<CtfData>> = EngineGlobal::new(UnsafeCell::new(CtfData {
+    last_checked: -1,
+    flags: Vec::new(),
+    bases: Vec::new(),
+}));
 
 struct HeadHunterData {
     last_checked: i32,
     batteries: Vec<Vector3>,
     hardpoints: Vec<Vector3>,
+}
+
+struct CtfData {
+    last_checked: i32,
+    flags: Vec<(Vector3, i32)>,
+    bases: Vec<(Vector3, i32)>,
 }
 
 pub(crate) fn basic_combat(
@@ -105,13 +116,12 @@ pub(crate) fn basic_combat(
             let (new_target_pos, should_recaculate) =
             // check if team members are dead
                 if get_net_var(player, c"batteryCount", 191, helper.sv_funcs).unwrap_or(0) > 0{
-                    // log::info!("going to a dropoff point");
+                    local_data.approach_range = Some(70.);
                     (find_closest_hardpoint(origin, helper), None)
                 } else if let Some(battery) = find_closest_battery(origin, helper) {
-                    // log::info!("going to a battery");
+                    local_data.approach_range = Some(-20.);
                     (battery, None)
                 } else if let Some(((target_pos, target), _)) = target {
-                    // log::info!("going to a kill");
                     let result = (
                         *target_pos,
                         Some(
@@ -123,15 +133,9 @@ pub(crate) fn basic_combat(
 
                     result
                 } else {
-                    // log::info!("going to a hardpoint");
+                    local_data.approach_range = Some(200.);
                     (find_closest_hardpoint(origin, helper), None)
                 };
-
-            // log::info!(
-            //     "location: {} {}",
-            //     new_target_pos,
-            //     should_recaculate.unwrap_or_else(|| local_data.target_pos != new_target_pos)
-            // );
 
             _ = path_to_target(
                 &mut cmd,
@@ -146,6 +150,7 @@ pub(crate) fn basic_combat(
             // not the actual use but it's okay
             local_data.target_pos = new_target_pos;
             local_data.should_recaculate_path = false;
+            local_data.approach_range = None;
         }
         (_, Some((_, _))) => {
             cmd.move_ = Vector3::new(1., 0., 0.);
@@ -314,7 +319,7 @@ fn find_closest_battery(pos: Vector3, helper: &CUserCmdHelper) -> Option<Vector3
         .batteries
         .iter()
         .map(|this| (*this, distance(pos, *this)))
-        .reduce(|closer, other| if closer.1 < other.1 { other } else { closer })
+        .reduce(|closer, other| if closer.1 < other.1 { closer } else { other })
         .map(|(pos, _)| pos)
 }
 
@@ -324,8 +329,8 @@ fn find_closest_hardpoint(pos: Vector3, helper: &CUserCmdHelper) -> Vector3 {
     unsafe { &*HEADHUNTER_DATA.get(token).get() }
         .hardpoints
         .iter()
-        .map(|this| (*this, distance(pos, *this)))
-        .reduce(|closer, other| if closer.1 < other.1 { other } else { closer })
+        .map(|this| (*this, distance3(pos, *this)))
+        .reduce(|closer, other| if closer.1 < other.1 { closer } else { other })
         .map(|(pos, _)| pos)
         .unwrap_or_else(|| {
             log::warn!("no hardpoints found");
@@ -342,17 +347,21 @@ fn try_refresh_headhunter(helper: &CUserCmdHelper) -> EngineToken {
         return token;
     }
 
+    data.last_checked = unsafe { helper.globals.frame_count.copy_inner() };
+
     data.batteries.clear();
     data.hardpoints.clear(); // hmm
 
     data.batteries.extend(
-        get_ents_by_class_name(c"item_titan_battery", helper.sv_funcs).map(|ent| unsafe {
-            // the vtable is the almost the same so it's safe
-            *ent.cast::<CPlayer>()
-                .as_ref()
-                .unwrap_unchecked()
-                .get_origin(&mut v)
-        }),
+        get_ents_by_class_name(c"item_titan_battery", helper.sv_funcs)
+            .filter(|ent| unsafe { (helper.sv_funcs.get_parent)((*ent).cast_const()).is_null() })
+            .map(|ent| unsafe {
+                // the vtable is the almost the same so it's safe
+                *ent.cast::<CPlayer>()
+                    .as_ref()
+                    .unwrap_unchecked()
+                    .get_origin(&mut v)
+            }),
     );
     data.hardpoints.extend(
         get_ents_by_class_name(c"info_hardpoint", helper.sv_funcs).map(|ent| unsafe {

@@ -88,6 +88,7 @@ pub(super) struct BotData {
     should_recaculate_path: bool,
     next_check: f32,
     has_started_to_slide_hop: bool,
+    approach_range: Option<f32>,
 }
 
 #[derive(Debug)]

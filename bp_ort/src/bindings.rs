@@ -371,6 +371,7 @@ offset_functions! {
         find_next_entity_by_class_name = unsafe extern "C" fn(*const c_void, *const CBaseEntity, *const c_char) -> *mut CBaseEntity where offset(0x44fdc0);
         some_magic_function_for_class_name = unsafe extern "C" fn(*mut *const c_char, *const c_char) -> *const *const c_char where offset(0x199e70);
         get_ent_by_script_name = unsafe extern "C" fn(*const c_void, *const c_char, *mut i32) -> *mut CBaseEntity where offset(0x455030);
+        get_parent = unsafe extern "C" fn(*const CBaseEntity) -> *mut CBaseEntity where offset(0x445d50);
 
         get_offhand_weapon = unsafe extern "C" fn(*const CPlayer,u32 ) -> bool where offset(0xe1ec0); // not done
         set_weapon_by_slot = unsafe extern "C" fn(*const c_void, *const c_char) where offset(0xe4ba0);
