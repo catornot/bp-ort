@@ -359,7 +359,7 @@ pub fn try_avoid_obstacle(cmd: &mut CUserCmd, local_data: &mut BotData, helper: 
     local_data.jump_hold = local_data.jump_hold.saturating_sub(0);
 }
 
-fn time(helper: &CUserCmdHelper<'_>) -> f32 {
+pub fn time(helper: &CUserCmdHelper<'_>) -> f32 {
     unsafe { helper.globals.cur_time.copy_inner() }
 }
 

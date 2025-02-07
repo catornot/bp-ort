@@ -33,7 +33,7 @@ struct HeadHunterData {
 
 struct CtfData {
     last_checked: i32,
-    flags: Vec<(Vector3, i32)>,
+    flags: Vec<(Vector3, i32, u32)>,
     bases: Vec<(Vector3, i32)>,
 }
 
@@ -152,6 +152,70 @@ pub(crate) fn basic_combat(
             local_data.should_recaculate_path = false;
             local_data.approach_range = None;
         }
+        (9, target) if target.is_none() || matches!(target, Some((_, false))) => {
+            let (team, player_index) =
+                unsafe { (player.team.copy_inner(), player.player_index.copy_inner()) };
+            let our_flag = find_flag_for(team, true, player_index, helper);
+            let their_flag = find_flag_for(team, false, player_index, helper);
+            let our_base = find_base_for(team, true, helper);
+            let _their_base = find_base_for(team, false, helper);
+
+            let is_team = move |player: &CPlayer| -> bool { unsafe { **player.team == team } };
+            // mm allocation every frame
+            let mut friendly_players = player_iterator(&is_team, helper)
+                .map(|friendly| {
+                    (
+                        unsafe { distance(*friendly.get_origin(v), their_flag.0) },
+                        std::ptr::eq(friendly, player),
+                    )
+                })
+                .collect::<Vec<_>>();
+            friendly_players.sort_by(|(dis, _), (other_dis, _)| dis.total_cmp(other_dis));
+
+            let (new_target_pos, should_recaculate) = if let Some(pet_titan) =
+                unsafe { (helper.sv_funcs.get_pet_titan)(player).as_ref() }
+            {
+                (
+                    unsafe {
+                        *(helper.sv_funcs.get_origin)((pet_titan as *const CBaseEntity).cast(), v)
+                    },
+                    Some(false),
+                )
+            } else if their_flag.1 {
+                local_data.approach_range = Some(-20.);
+                (our_base, None)
+            } else if friendly_players
+                .iter()
+                .position(|(_, is_self)| *is_self)
+                .unwrap_or(usize::MAX)
+                < friendly_players.len() / 2
+            {
+                local_data.approach_range = Some(-20.);
+                (their_flag.0, None)
+            } else if distance(our_flag.0, our_base) > 30. {
+                local_data.approach_range = Some(0.);
+                (our_flag.0, None)
+            } else if ((time(helper) as u64) / 30) % 2 == 0 {
+                (their_flag.0, None)
+            } else {
+                (our_flag.0, None)
+            };
+
+            _ = path_to_target(
+                &mut cmd,
+                local_data,
+                origin,
+                new_target_pos,
+                should_recaculate.unwrap_or_else(|| local_data.target_pos != new_target_pos)
+                    || local_data.should_recaculate_path,
+                helper,
+            );
+
+            // not the actual use but it's okay
+            local_data.target_pos = new_target_pos;
+            local_data.should_recaculate_path = false;
+            local_data.approach_range = None;
+        }
         (_, Some((_, _))) => {
             cmd.move_ = Vector3::new(1., 0., 0.);
             cmd.buttons |= Action::Forward as u32 | Action::Walk as u32;
@@ -200,13 +264,13 @@ pub(crate) fn basic_combat(
         let enemy_is_titan = unsafe { (helper.sv_funcs.is_titan)(target_player) };
         let is_titan = unsafe { (helper.sv_funcs.is_titan)(player) };
 
-        if (should_shoot || sim_type == 5) && !enemy_is_titan {
+        if should_shoot || sim_type == 5 {
             let angles = look_at(origin, target);
 
             let angles = {
                 let length = { get_velocity_length(helper, target_player, v) };
 
-                if length > 200. {
+                if length > 200. && !enemy_is_titan {
                     let mut rng = thread_rng();
                     let error_amount = length.sqrt() / 10f32;
 
@@ -338,6 +402,35 @@ fn find_closest_hardpoint(pos: Vector3, helper: &CUserCmdHelper) -> Vector3 {
         })
 }
 
+fn find_flag_for(
+    team: i32,
+    match_team: bool,
+    player_index: u32,
+    helper: &CUserCmdHelper,
+) -> (Vector3, bool) {
+    let token = try_refresh_ctf(helper);
+
+    unsafe { &*CTF_DATA.get(token).get() }
+        .flags
+        .iter()
+        .find(|(_, flag_team, _)| (*flag_team == team) == match_team)
+        .copied()
+        .map(|(pos, _, parent)| (pos, parent == player_index))
+        .unwrap_or(Default::default())
+}
+
+fn find_base_for(team: i32, match_team: bool, helper: &CUserCmdHelper) -> Vector3 {
+    let token = try_refresh_ctf(helper);
+
+    unsafe { &*CTF_DATA.get(token).get() }
+        .bases
+        .iter()
+        .find(|(_, flag_team)| (*flag_team == team) == match_team)
+        .copied()
+        .map(|(pos, _)| pos)
+        .unwrap_or(Default::default())
+}
+
 fn try_refresh_headhunter(helper: &CUserCmdHelper) -> EngineToken {
     let token = unsafe { EngineToken::new_unchecked() };
     let data = unsafe { &mut *HEADHUNTER_DATA.get(token).get() };
@@ -369,6 +462,51 @@ fn try_refresh_headhunter(helper: &CUserCmdHelper) -> EngineToken {
                 .as_ref()
                 .unwrap_unchecked()
                 .get_origin(&mut v)
+        }),
+    );
+
+    token
+}
+
+fn try_refresh_ctf(helper: &CUserCmdHelper) -> EngineToken {
+    let token = unsafe { EngineToken::new_unchecked() };
+    let data = unsafe { &mut *CTF_DATA.get(token).get() };
+    let mut v = Vector3::ZERO;
+
+    if data.last_checked == unsafe { helper.globals.frame_count.copy_inner() } {
+        return token;
+    }
+
+    data.last_checked = unsafe { helper.globals.frame_count.copy_inner() };
+
+    data.bases.clear();
+    data.flags.clear(); // hmm
+
+    data.bases.extend(
+        get_ents_by_class_name(c"info_spawnpoint_flag", helper.sv_funcs).map(|ent| unsafe {
+            // the vtable is the almost the same so it's safe
+            (
+                *ent.cast::<CPlayer>()
+                    .as_ref()
+                    .unwrap_unchecked()
+                    .get_origin(&mut v),
+                (*ent.cast::<CPlayer>()).team.copy_inner(),
+            )
+        }),
+    );
+    data.flags.extend(
+        get_ents_by_class_name(c"item_flag", helper.sv_funcs).map(|ent| unsafe {
+            (
+                *ent.cast::<CPlayer>()
+                    .as_ref()
+                    .unwrap_unchecked()
+                    .get_origin(&mut v),
+                (*ent.cast::<CPlayer>()).team.copy_inner(),
+                ((helper.sv_funcs.get_parent)(ent.cast_const()).cast::<CPlayer>())
+                    .as_ref()
+                    .map(|parent| parent.player_index.copy_inner())
+                    .unwrap_or(u32::MAX),
+            )
         }),
     );
 
