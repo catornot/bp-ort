@@ -83,7 +83,7 @@ pub struct CUserCmd {
     pub predicted_server_event_hack: DWORD,
     pub dword98: DWORD,
     pub frame_time: f32,
-    pub gap_a0: [c_char; 152], // eh
+    // pub gap_a0: [c_char; 152], // eh
 }
 
 #[repr(C)]

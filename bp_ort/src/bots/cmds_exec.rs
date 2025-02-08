@@ -70,7 +70,7 @@ pub fn run_bots_cmds(_paused: bool) {
             .collect_vec()
             .into_iter() // can collect here to stop the globals from complaning about mutability
     } {
-        cmd.frame_time = globals.tickInterval;
+        cmd.frame_time = globals.frameTime;
         unsafe {
             // add_user_cmd_to_player(
             //     player,
