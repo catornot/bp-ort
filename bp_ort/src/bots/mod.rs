@@ -527,13 +527,13 @@ fn bot_spawn(bot_name: String) -> Option<i32> {
         .is_empty()
         .not()
         .then_some(bot_name)
+        .to_owned()
         .unwrap_or_else(|| {
             names
                 .get(rng.gen_range(0..names.len()))
-                .unwrap_or(&names[0])
-                .to_owned()
-        })
-        .to_owned();
+                .cloned()
+                .unwrap_or_else(|| "bot".to_string())
+        });
 
     spawn_fake_player(
         name,
@@ -543,4 +543,23 @@ fn bot_spawn(bot_name: String) -> Option<i32> {
         ENGINE_FUNCTIONS.wait(),
         engine_token,
     )
+}
+
+#[rrplug::sqfunction(VM = "Server", ExportName = "AddBotName")]
+fn add_bot_name(name: String) {
+    let mut names = PLUGIN.wait().bots.generic_bot_names.lock().expect("how");
+    if !name.is_empty() {
+        names.push(name);
+    }
+}
+
+#[rrplug::sqfunction(VM = "Server", ExportName = "ClearBotNames")]
+fn clear_bot_names() {
+    let mut names = PLUGIN.wait().bots.generic_bot_names.lock().expect("how");
+    names.clear();
+}
+
+#[rrplug::sqfunction(VM = "Server", ExportName = "RememberNameOverride")]
+fn remember_name_override(player: Option<&mut CPlayer>, name: String, clan_tag: String) {
+    todo!()
 }

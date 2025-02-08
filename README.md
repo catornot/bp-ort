@@ -26,7 +26,24 @@ they are mostly implemented in the plugin exepected fetching the titan class whi
 To add new functionallity a simple api could be used to change the behavior of the bots at runtime from scripts or with cvar.
 
 ### current sq api
-uh just look at the source code or ask me (@catornot)
+
+### bots
+
+- `void function BotSetTitan(player bot, string titan)`
+- `void function BotSetTargetPos(player bot, vector target)`
+- `void function BotSetSimulationType(player bot, int sim_type)`
+- `int ornull function BotSpawn(bot_name: String)`
+- `void function AddBotName(bot_name: String)`
+- `void function ClearBotNames()`
+
+### navigation
+
+- `var ornull function NavigationCreate(int hull)`
+- `void function NavigationFindPath(var nav, vector start, vector end)`
+- `array<vector> function NavigationGetAllPoints(var nav)`
+- `vector ornull  function NavigationNextPoint(var nav)`
+
+there are probably more
 
 ### bot names
 so bots have "unique" names either derived from contributors to n* to make bot puns or from rust
@@ -41,13 +58,18 @@ the two most useful ones would be simply standing still (0) (for testing stuff) 
 
 the combat ai is currently very not very smart since it just chases the closest enemy and tries to kill them
 
+- `bot_cmds_type <index:int>`
+controls which behavior is the default for the bots
+
+- `bot_clang_tag <tag:string>`
+the clan tag the bots get on spawn (default is BOT) 
+
 ### cmds
 
 - `bot_spawn <name:int> <team:int> <ai:int>`
 spawns a bot with a given name team or ai index
 
-other ones are found under `bot_` namespace
-
+other ones are found under `bot_` namespace (they are not so important)
 
 ### all the ai indices
 - 0 => stand still
@@ -58,8 +80,8 @@ other ones are found under `bot_` namespace
 - 5 => shoot at closest enemy + walk to them
 - 6 => "combat ai" (requires navmesh)
 - 7 => goal follower assigned from scripts (reqires navmesh)
-- 8 => reserved
-- 9 => reserved
+- 8 => headhunter ai (requires navmesh)
+- 9 => ctf ai (requires navmesh)
 - 10 => reserved
 - 10 => reserved
 - 10 => reserved
@@ -73,6 +95,13 @@ other ones are found under `bot_` namespace
 - 17 => view debugger
 - 18 => battery yoinker
 
+### comments on "combat ai" and it's derivatives
+it's a general purpose routine for the bots to follow.
+it's just shoot anything or walk to the closest enemy.
+it does support all facets of titanfall 2 gameplay (titan calling, embarking titans, using titans, pilot combat, etc) but it's very basic.
+it also has a feature to actually make them a bit fair where they will get more aim spread the faster the target moves (only for pilots).
+the derivations like the headhunter ai try to play the objective of the gamemode but they are not auto activated and have to manually set via the `bot_cmds_type` cvar.
+
 # other features
 
 ## admin abuse (incomplete) with auto completion!!!
@@ -80,3 +109,22 @@ some of the commands from script admin abuse are included
 
 ## name renaming
 contact cat_or_not for this
+
+the cvar `bot_uwufy` controls if connecting players will get their name uwufied (on by default)
+
+- `void function RememberNameOverride(entity player, string name string clan_tag)`
+
+# BotExtras
+this a optinal but recommend to have script mod for this plugin. it adds extra features on top of the plugin that are simply easier to implement in scripts.
+
+it adds mod setting integration for bp_ort
+
+## exposed functions
+- `void function SpawnNBots(int n, string name = "")`
+this spawns the specified amount of bots (useful for filling whole lobbies)
+
+usage:
+```bash
+sv_cheats 1
+script SpawnNBots(32, "bot")
+```
