@@ -132,6 +132,7 @@ impl Plugin for Bots {
             "RoyalBot",
             "Bobby_McBotFace",
             "sb0tdge",
+            "JustANormalBot",
         ]
         .into_iter()
         .map(str::to_string)
