@@ -9,7 +9,7 @@ use rrplug::{
         squirreldatatypes::{CSquirrelVM, HSquirrelVM, SQObject},
     },
     high::vector::Vector3,
-    offset_functions, offset_struct,
+    offset_functions,
 };
 use std::{
     ffi::{c_char, c_int, c_short, c_uchar, c_void},
@@ -83,7 +83,7 @@ pub struct CUserCmd {
     pub predicted_server_event_hack: DWORD,
     pub dword98: DWORD,
     pub frame_time: f32,
-    // pub gap_a0: [c_char; 152], // eh
+    pub gap_a0: [c_char; 152], // eh
 }
 
 #[repr(C)]
@@ -140,23 +140,38 @@ pub enum Action {
     Ping = 0x40000000,
 }
 
-offset_struct! {
-    pub struct CGlobalVars {
-        real_time: f64 where offset(0x0),
-        frame_count: i32 where offset(0x8),
-        absolute_frame_time: f32 where offset(0xc),
-        cur_time: f32 where offset(0x10),
-        frametime: f32 where offset(0x30),
-
-        // there is stuff here too (I skiped things)
-        tick_count: u32 where offset(0x3C),
-        tick_interval: f32 where offset(0x40),
-    }
+#[allow(non_snake_case, dead_code)]
+#[repr(C)]
+pub struct CGlobalVars {
+    pub m_nUnkTime: f32,
+    pub realTime: f32,
+    pub frameCount: i32,
+    pub absoluteFrameTime: f32,
+    pub curTime: f32,
+    pub m_flCurTimeUnknown0: f32,
+    pub m_flCurTimeUnknown1: f32,
+    pub m_flCurTimeUnknown2: f32,
+    pub lastFrameTimeSincePause: f32,
+    pub m_flCurTimeUnknown3: f32,
+    pub exactCurTime: f32,
+    pub m_flUnknown4: f32,
+    pub frameTime: f32,
+    pub maxPlayers: i32,
+    pub maxClients: i32,
+    pub gameMode: i32,
+    pub tickCount: u32,
+    pub tickInterval: f32,
+    pub m_nUnk1: i32,
+    pub m_bClient: bool,
+    pub m_nTimestampNetworkingBase: i32,
+    pub m_nTimestampRandomizeWindow: i32,
 }
 
 // opaque type
 #[repr(C)]
-pub struct CBaseEntity;
+pub struct CBaseEntity {
+    _private: [u8; 0],
+}
 
 #[derive(Debug, Clone)]
 #[repr(C)]

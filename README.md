@@ -126,5 +126,5 @@ this spawns the specified amount of bots (useful for filling whole lobbies)
 usage:
 ```bash
 sv_cheats 1
-script SpawnNBots(32, "bot")
+script thread SpawnNBots(32)
 ```

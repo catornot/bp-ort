@@ -35,50 +35,44 @@ impl<'a> CUserCmdHelper<'a> {
 
 impl CUserCmd {
     pub fn new_basic_move(move_: Vector3, buttons: u32, helper: &CUserCmdHelper) -> Self {
-        unsafe {
-            // union access :pain:
-            CUserCmd {
-                move_,
-                tick_count: **helper.globals.tick_count,
-                frame_time: **helper.globals.absolute_frame_time,
-                command_time: **helper.globals.cur_time,
-                command_number: helper.cmd_num,
-                world_view_angles: helper.angles,
-                local_view_angles: Vector3::ZERO,
-                attackangles: helper.angles,
-                buttons,
-                impulse: 0,
-                weaponselect: 0,
-                meleetarget: 0,
-                camera_pos: Vector3::ZERO,
-                camera_angles: Vector3::ZERO,
-                tick_something: **helper.globals.tick_count as i32,
-                dword90: **helper.globals.tick_count + 4,
-                ..CUserCmd::init_default(helper.sv_funcs)
-            }
+        CUserCmd {
+            move_,
+            tick_count: helper.globals.tickCount,
+            frame_time: helper.globals.absoluteFrameTime,
+            command_time: helper.globals.curTime,
+            command_number: helper.cmd_num,
+            world_view_angles: helper.angles,
+            local_view_angles: Vector3::ZERO,
+            attackangles: helper.angles,
+            buttons,
+            impulse: 0,
+            weaponselect: 0,
+            meleetarget: 0,
+            camera_pos: Vector3::ZERO,
+            camera_angles: Vector3::ZERO,
+            tick_something: helper.globals.tickCount as i32,
+            dword90: helper.globals.tickCount + 4,
+            ..CUserCmd::init_default(helper.sv_funcs)
         }
     }
 
     pub fn new_empty(helper: &CUserCmdHelper) -> Self {
-        unsafe {
-            // union access :pain:
-            CUserCmd {
-                tick_count: **helper.globals.tick_count,
-                frame_time: **helper.globals.absolute_frame_time,
-                command_time: **helper.globals.cur_time,
-                command_number: helper.cmd_num,
-                world_view_angles: helper.angles,
-                local_view_angles: Vector3::ZERO,
-                attackangles: helper.angles,
-                impulse: 0,
-                weaponselect: 0,
-                meleetarget: 0,
-                camera_pos: Vector3::ZERO,
-                camera_angles: helper.angles,
-                tick_something: **helper.globals.tick_count as i32,
-                dword90: **helper.globals.tick_count + 4,
-                ..CUserCmd::init_default(helper.sv_funcs)
-            }
+        CUserCmd {
+            tick_count: helper.globals.tickCount,
+            frame_time: helper.globals.absoluteFrameTime,
+            command_time: helper.globals.curTime,
+            command_number: helper.cmd_num,
+            world_view_angles: helper.angles,
+            local_view_angles: Vector3::ZERO,
+            attackangles: helper.angles,
+            impulse: 0,
+            weaponselect: 0,
+            meleetarget: 0,
+            camera_pos: Vector3::ZERO,
+            camera_angles: helper.angles,
+            tick_something: helper.globals.tickCount as i32,
+            dword90: helper.globals.tickCount + 4,
+            ..CUserCmd::init_default(helper.sv_funcs)
         }
     }
 }

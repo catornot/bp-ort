@@ -267,7 +267,7 @@ pub(super) fn get_cmd(
                 );
 
                 if (origin.x - titan_pos.x).powi(2) * (origin.y - titan_pos.y).powi(2) < 81000.
-                    && (unsafe { helper.globals.frame_count.copy_inner() } / 2 % 4 != 0)
+                    && (helper.globals.frameCount / 2 % 4 != 0)
                 {
                     cmd.world_view_angles = look_at(origin, titan_pos);
                     cmd.buttons |= Action::Use as u32;

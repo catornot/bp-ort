@@ -1,18 +1,23 @@
+use std::cell::UnsafeCell;
+
 use crate::{
     bindings::{Action, CUserCmd, ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
     utils::iterate_c_array_sized,
 };
 use itertools::Itertools;
 use rrplug::{
-    bindings::class_types::client::SignonState, high::vector::Vector3, prelude::EngineToken,
+    bindings::class_types::client::SignonState,
+    high::{vector::Vector3, UnsafeHandle},
+    prelude::EngineToken,
 };
 
 use super::{cmds_helper::CUserCmdHelper, BOT_DATA_MAP, SIMULATE_TYPE_CONVAR};
 
-static mut LAST_CMD: Option<CUserCmd> = None;
+static LAST_CMD: UnsafeHandle<UnsafeCell<Option<CUserCmd>>> =
+    unsafe { UnsafeHandle::new(UnsafeCell::new(None)) };
 
 pub fn replace_cmd() -> Option<&'static CUserCmd> {
-    unsafe { LAST_CMD.as_ref() }
+    unsafe { LAST_CMD.get().get().as_ref()?.as_ref() }
 }
 
 pub fn run_bots_cmds(_paused: bool) {
@@ -65,7 +70,7 @@ pub fn run_bots_cmds(_paused: bool) {
             .collect_vec()
             .into_iter() // can collect here to stop the globals from complaning about mutability
     } {
-        cmd.frame_time = unsafe { globals.tick_interval.copy_inner() };
+        cmd.frame_time = globals.tickInterval;
         unsafe {
             // add_user_cmd_to_player(
             //     player,
@@ -87,8 +92,8 @@ pub fn run_bots_cmds(_paused: bool) {
             if !*(player as *const _ as *const bool).offset(0xc88)
                 || cmd.buttons & Action::WeaponDiscard as u32 == 0
             {
-                let frametime = **globals.frametime;
-                let cur_time = **globals.cur_time;
+                let frametime = globals.frameTime;
+                let cur_time = globals.curTime;
 
                 *player.cplayer_state_fixangle.get_inner_mut() = 0;
                 set_base_time(player, cur_time);
@@ -113,8 +118,8 @@ pub fn run_bots_cmds(_paused: bool) {
                 // );
 
                 move_helper.host = std::ptr::null_mut();
-                *globals.frametime.get_inner_mut() = frametime;
-                *globals.cur_time.get_inner_mut() = cur_time;
+                globals.frameTime = frametime;
+                globals.curTime = cur_time;
 
                 // is this needed?
                 // looks like it's not
@@ -125,7 +130,7 @@ pub fn run_bots_cmds(_paused: bool) {
             // *player.angles.get_inner_mut() = cmd.world_view_angles // this is not really great -> bad aim
 
             // this is still a bit jitary :(
-            if globals.frame_count.copy_inner() % 10 == 0 {
+            if globals.frameCount % 10 == 0 {
                 // HACK: so setting origin forces the game to check touching so kind of fixes that but doesn't work for exiting triggers maybe?
                 (server_functions.calc_origin)(player, &std::ptr::from_ref(player), 0, 0);
                 (server_functions.set_origin_hack_do_not_use)(
@@ -139,6 +144,8 @@ pub fn run_bots_cmds(_paused: bool) {
             // (server_functions.perform_collision_check)(player, 1);
             // (server_functions.another_perform_collision_check)(player, std::ptr::null());
         }
-        unsafe { LAST_CMD = None }
+        unsafe {
+            *LAST_CMD.get().get() = None;
+        };
     }
 }

@@ -31,7 +31,7 @@ pub(crate) fn battery_yoinker(
         }
         return cmd;
     } else {
-        local_data.last_shot = unsafe { helper.globals.cur_time.copy_inner() };
+        local_data.last_shot = helper.globals.curTime;
     }
 
     let is_team = move |player: &CPlayer| -> bool { unsafe { **player.team == team } };

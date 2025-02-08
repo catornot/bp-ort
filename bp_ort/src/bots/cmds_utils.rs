@@ -70,11 +70,11 @@ pub fn path_to_target(
         .unwrap_or(true)
         || nav.path_points.is_empty()
     {
-        local_data.last_time_node_reached = unsafe { helper.globals.cur_time.copy_inner() };
+        local_data.last_time_node_reached = helper.globals.curTime;
         local_data.next_target_pos = origin;
 
         // this might be the reason of the sudden aim shift or not really idk
-        if local_data.last_bad_path + 1. >= unsafe { helper.globals.cur_time.copy_inner() } {
+        if local_data.last_bad_path + 1. >= helper.globals.curTime {
             try_avoid_obstacle(cmd, local_data, helper);
 
             return false;
@@ -103,7 +103,7 @@ pub fn path_to_target(
     }
 
     if distance(local_data.next_target_pos, origin) <= BOT_PATH_NODE_RANGE {
-        local_data.last_time_node_reached = unsafe { helper.globals.cur_time.copy_inner() };
+        local_data.last_time_node_reached = helper.globals.curTime;
         local_data.next_target_pos = nav
             .next_point()
             .expect("should always have enough points here");
@@ -341,7 +341,7 @@ pub fn try_avoid_obstacle(cmd: &mut CUserCmd, local_data: &mut BotData, helper: 
     local_data.jump_delay_obstacle = time(helper);
     cmd.move_ = Vector3::new(
         1.,
-        if unsafe { helper.globals.frame_count.copy_inner() } / 100 % 2 == 0 {
+        if helper.globals.frameCount / 100 % 2 == 0 {
             -1.
         } else {
             1.
@@ -360,7 +360,7 @@ pub fn try_avoid_obstacle(cmd: &mut CUserCmd, local_data: &mut BotData, helper: 
 }
 
 pub fn time(helper: &CUserCmdHelper<'_>) -> f32 {
-    unsafe { helper.globals.cur_time.copy_inner() }
+    helper.globals.curTime
 }
 
 pub fn distance(pos: Vector3, target: Vector3) -> f32 {

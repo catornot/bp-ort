@@ -228,13 +228,13 @@ pub(crate) fn basic_combat(
     if let Some(((target, target_player), should_shoot)) = target {
         cmd.buttons |= if should_shoot && is_timedout(local_data.last_shot, helper, 0.8) {
             Action::Zoom as u32
-                | (unsafe { helper.globals.frame_count.copy_inner() } / 2 % 4 != 0)
+                | (helper.globals.frameCount / 2 % 4 != 0)
                     .then_some(Action::Attack as u32)
                     .unwrap_or_default()
         } else if should_shoot {
             0
         } else {
-            local_data.last_shot = unsafe { helper.globals.cur_time.copy_inner() };
+            local_data.last_shot = helper.globals.curTime;
             0
         };
 
@@ -248,7 +248,7 @@ pub(crate) fn basic_combat(
             let (dis, ent) = unsafe { view_rate(helper, titan_pos, origin, player, true) };
             if dis >= 1.0 || ent == titan as *const CBaseEntity {
                 if (origin.x - titan_pos.x).powi(2) * (origin.y - titan_pos.y).powi(2) < 81000.
-                    && (unsafe { helper.globals.frame_count.copy_inner() } / 2 % 4 != 0)
+                    && (helper.globals.frameCount / 2 % 4 != 0)
                 {
                     cmd.world_view_angles = look_at(origin, titan_pos);
                     cmd.buttons |= Action::Use as u32;
@@ -368,7 +368,7 @@ pub(crate) fn basic_combat(
             .unwrap_or_default();
         }
 
-        local_data.next_check = unsafe { helper.globals.cur_time.copy_inner() }
+        local_data.next_check = helper.globals.curTime;
     }
 
     cmd.camera_angles = cmd.world_view_angles;
@@ -436,11 +436,10 @@ fn try_refresh_headhunter(helper: &CUserCmdHelper) -> EngineToken {
     let data = unsafe { &mut *HEADHUNTER_DATA.get(token).get() };
     let mut v = Vector3::ZERO;
 
-    if data.last_checked == unsafe { helper.globals.frame_count.copy_inner() } {
+    if data.last_checked == helper.globals.frameCount {
         return token;
     }
-
-    data.last_checked = unsafe { helper.globals.frame_count.copy_inner() };
+    data.last_checked = helper.globals.frameCount;
 
     data.batteries.clear();
     data.hardpoints.clear(); // hmm
@@ -473,11 +472,10 @@ fn try_refresh_ctf(helper: &CUserCmdHelper) -> EngineToken {
     let data = unsafe { &mut *CTF_DATA.get(token).get() };
     let mut v = Vector3::ZERO;
 
-    if data.last_checked == unsafe { helper.globals.frame_count.copy_inner() } {
+    if data.last_checked == helper.globals.frameCount {
         return token;
     }
-
-    data.last_checked = unsafe { helper.globals.frame_count.copy_inner() };
+    data.last_checked = helper.globals.frameCount;
 
     data.bases.clear();
     data.flags.clear(); // hmm
