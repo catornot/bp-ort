@@ -112,7 +112,6 @@ impl Plugin for Bots {
             "botornot",
             "perhaps_bot",
             "sybotn",
-            "botsimp",
             "thx_bob",
             "PetarBot",
             "hOlOB0t",
@@ -128,11 +127,17 @@ impl Plugin for Bots {
             "Ihatewarnings",
             "Triboty",
             "bornet",
-            "4botv",
-            "RoyalBot",
+            "4b",
+            "BlueBot",
             "Bobby_McBotFace",
             "sb0tdge",
             "JustANormalBot",
+            "Bot0358",
+            "Bot9182",
+            "ABotPlaysGames",
+            "GeckoBot",
+            "FrontierBotter",
+            "UniBot",
         ]
         .into_iter()
         .map(str::to_string)
@@ -143,8 +148,6 @@ impl Plugin for Bots {
         if time.month() == 12 && time.day() > 15 {
             bot_names = [
                 "santa",
-                "дед мороз",
-                "чародеи",
                 "5minutes",
                 "christmas_in_a_week",
                 "overworked_elf",
@@ -152,7 +155,6 @@ impl Plugin for Bots {
                 "sled",
                 "skates",
                 "christmas_tree",
-                "",
             ]
             .into_iter()
             .map(str::to_string)
