@@ -301,6 +301,7 @@ pub unsafe fn view_rate(
         is_swept: false,
         is_smth: false,
         flags: 0,
+        unk8: 0,
     };
 
     if corretness {

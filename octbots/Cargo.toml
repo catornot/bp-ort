@@ -7,6 +7,9 @@ edition = "2021"
 log = "*"
 rrplug = { workspace = true }
 shared = { workspace = true }
+parking_lot = "*"
+once_cell = "*"
+libc = "0.2.*"
 
 [lib]
 crate-type = ["cdylib"]

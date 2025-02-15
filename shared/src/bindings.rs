@@ -215,6 +215,7 @@ pub struct TraceResults {
 
 #[repr(C)]
 #[allow(dead_code)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum HostState {
     NewGame = 0,
     LoadGame,
@@ -270,6 +271,7 @@ pub struct Ray {
     pub is_swept: bool,
     pub is_smth: bool,
     pub flags: ::std::os::raw::c_int,
+    pub unk8: ::std::os::raw::c_int, // this is just because there seams to be extra fields
 }
 
 #[repr(C)]
@@ -396,6 +398,7 @@ offset_functions! {
         util_trace_line = unsafe extern "C" fn(*const Vector3, *const Vector3, c_char, c_char, i32, i32, i32, *mut TraceResults )  where offset(0x2725c0);
         ctraceengine = *const *const *const fn() where offset(0xbfbdc8);
         simple_filter_vtable = *const fn() where offset(0x8ebbf8);
+        create_trace_hull = unsafe extern "C" fn(this: *mut Ray, start: *const Vector3, end: *const Vector3, min: *const Vector3, max: *const Vector3) where offset(0x0ba0d0);
 
         draw_debug_line = unsafe extern "C" fn(point1: *const Vector3, point2: *const Vector3, r: i32, g: i32, b: i32, throught_walls: bool, time: f32) where offset(0x001ccf40);
 

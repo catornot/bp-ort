@@ -241,7 +241,10 @@ dependencies = [
 name = "octbots"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "log",
+ "once_cell",
+ "parking_lot",
  "rrplug",
  "shared",
 ]

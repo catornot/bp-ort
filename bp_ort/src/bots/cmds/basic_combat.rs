@@ -37,6 +37,7 @@ struct CtfData {
     bases: Vec<(Vector3, i32)>,
 }
 
+// TODO INFO bots may be crashing "in titans" when in fact they crash when checking a player when they are embarking
 pub(crate) fn basic_combat(
     player: &mut CPlayer,
     helper: &CUserCmdHelper,
