@@ -14,6 +14,7 @@ use super::{cmds_helper::CUserCmdHelper, cmds_utils::*, BotData};
 
 mod basic_combat;
 mod battery_yoinker;
+mod hardpoint;
 mod slide_hopper;
 
 pub(super) fn get_cmd(

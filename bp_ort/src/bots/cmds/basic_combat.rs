@@ -217,6 +217,11 @@ pub(crate) fn basic_combat(
             local_data.should_recaculate_path = false;
             local_data.approach_range = None;
         }
+        (10, target) if target.is_none() || matches!(target, Some((_, false))) => {
+            super::hardpoint::basic_cap_holding(
+                player, helper, local_data, origin, &mut cmd, target,
+            );
+        }
         (_, Some((_, _))) => {
             cmd.move_ = Vector3::new(1., 0., 0.);
             cmd.buttons |= Action::Forward as u32 | Action::Walk as u32;
