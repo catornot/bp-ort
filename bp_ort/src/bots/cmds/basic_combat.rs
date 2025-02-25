@@ -346,6 +346,7 @@ pub(crate) fn basic_combat(
             use crate::bots::TitanClass as TC;
             cmd.buttons |= match (local_data.counter, local_data.titan) {
                 (_, TC::Scorch) if distance(origin, target) <= 900. => Action::OffHand0 as u32,
+                (0, TC::Scorch) => 0,
                 (1, TC::Ronin | TC::Ion) => 0,
                 (2, TC::Legion) => 0,
                 (0, _) => Action::OffHand0 as u32,

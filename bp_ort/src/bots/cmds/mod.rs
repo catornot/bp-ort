@@ -284,6 +284,11 @@ pub(super) fn get_cmd(
             cmd
         }
         20 => slide_hopper::slide_hopper(&helper, player, local_data),
+        30 => CUserCmd::new_basic_move(Vector3::ZERO, Action::OffHand0 as u32, &helper),
+        31 => CUserCmd::new_basic_move(Vector3::ZERO, Action::OffHand1 as u32, &helper),
+        32 => CUserCmd::new_basic_move(Vector3::ZERO, Action::OffHand2 as u32, &helper),
+        33 => CUserCmd::new_basic_move(Vector3::ZERO, Action::OffHand3 as u32, &helper),
+        34 => CUserCmd::new_basic_move(Vector3::ZERO, Action::OffHand4 as u32, &helper),
         _ => CUserCmd::new_empty(&helper),
     })?;
 
