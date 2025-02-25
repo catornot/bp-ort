@@ -1,3 +1,4 @@
+use parking_lot::{RwLock, RwLockReadGuard};
 use rrplug::{
     bindings::class_types::{client::SignonState, cplayer::CPlayer},
     mid::utils::from_char_ptr,
@@ -21,7 +22,7 @@ mod slay;
 mod switch;
 mod teleport;
 
-static mut ADMINS: Vec<Box<str>> = Vec::new();
+static ADMINS: RwLock<Vec<Box<str>>> = RwLock::new(Vec::new());
 
 #[derive(Debug)]
 pub struct AdminAbuse;
@@ -84,24 +85,25 @@ fn register_grant_admin(token: EngineToken) -> ConVarStruct {
 }
 
 fn parse_admins(convar: ConVarStruct) {
-    let admins: &mut Vec<Box<str>> = unsafe { ADMINS.as_mut() };
-    admins.clear();
-    admins.extend(
-        convar
-            .get_value_str()
-            .map_err(|_| {
-                log::error!("grant_admins is not utf-8");
-            })
-            .unwrap_or_default()
-            .split(',')
-            .map(Box::from),
-    );
-
+    {
+        let mut admins = ADMINS.write();
+        admins.clear();
+        admins.extend(
+            convar
+                .get_value_str()
+                .map_err(|_| {
+                    log::error!("grant_admins is not utf-8");
+                })
+                .unwrap_or_default()
+                .split(',')
+                .map(Box::from),
+        );
+    }
     log::info!("parsed grant_admins: new admins: {:?}", get_admins());
 }
 
-pub fn get_admins() -> &'static [Box<str>] {
-    unsafe { ADMINS.as_ref() }
+pub fn get_admins<'a>() -> RwLockReadGuard<'a, Vec<Box<str>>> {
+    ADMINS.read()
 }
 
 pub fn filter_target(filter: Option<&str>, player: &CPlayer, name: &str) -> bool {

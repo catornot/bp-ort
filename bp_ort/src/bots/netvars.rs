@@ -5,10 +5,17 @@ use once_cell::sync::Lazy;
 use retour::static_detour;
 use rrplug::{
     bindings::squirreldatatypes::HSquirrelVM,
-    high::engine::{EngineGlobal, EngineToken},
+    high::{
+        engine::{EngineGlobal, EngineToken},
+        UnsafeHandle,
+    },
     mid::{squirrel::SQVM_SERVER, utils::str_from_char_ptr},
 };
-use std::{cell::RefCell, collections::HashMap, mem};
+use std::{
+    cell::{RefCell, UnsafeCell},
+    collections::HashMap,
+    mem,
+};
 
 static_detour! {
     static FUN_180723940: unsafe extern "C" fn(*const c_char) -> i32;
@@ -16,8 +23,10 @@ static_detour! {
     static FUN_180005dd0: unsafe extern "C" fn(*const HSquirrelVM, i32, usize) -> usize;
 }
 
-static mut NEXT_NETVAR_NAME: *const c_char = c"uwu".as_ptr();
-static mut NEXT_NETVAR_INDEX: i32 = 0;
+static NEXT_NETVAR_NAME: UnsafeHandle<UnsafeCell<*const c_char>> =
+    unsafe { UnsafeHandle::new(UnsafeCell::new(c"uwu".as_ptr())) };
+static NEXT_NETVAR_INDEX: UnsafeHandle<UnsafeCell<i32>> =
+    unsafe { UnsafeHandle::new(UnsafeCell::new(0)) };
 pub static NETVARS: EngineGlobal<RefCell<Lazy<HashMap<String, i32>>>> =
     EngineGlobal::new(RefCell::new(Lazy::new(HashMap::new)));
 
@@ -26,8 +35,8 @@ fn maybe_register_netvar_hook(var: *const c_void, index: i32, unk: usize) -> i32
     unsafe {
         log::info!(
             "name: {:?}; index: {}",
-            str_from_char_ptr(NEXT_NETVAR_NAME),
-            NEXT_NETVAR_INDEX
+            str_from_char_ptr(*NEXT_NETVAR_NAME.get().get()),
+            *NEXT_NETVAR_INDEX.get().get()
         )
     };
     unsafe {
@@ -54,9 +63,9 @@ fn maybe_register_netvar_hook(var: *const c_void, index: i32, unk: usize) -> i32
 
 fn fun_180723940_hook(name: *const c_char) -> i32 {
     unsafe {
-        NEXT_NETVAR_NAME = name;
-        NEXT_NETVAR_INDEX = FUN_180723940.call(name);
-        NEXT_NETVAR_INDEX
+        *NEXT_NETVAR_NAME.get().get() = name;
+        *NEXT_NETVAR_INDEX.get().get() = FUN_180723940.call(name);
+        *NEXT_NETVAR_INDEX.get().get()
     }
 }
 

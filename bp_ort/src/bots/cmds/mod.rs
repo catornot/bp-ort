@@ -10,7 +10,7 @@ use crate::{
     navmesh::Hull,
 };
 
-use super::{cmds_helper::CUserCmdHelper, cmds_utils::*, BotData};
+use super::{cmds_helper::CUserCmdHelper, cmds_utils::*, BotData, BotShared};
 
 mod basic_combat;
 mod battery_yoinker;
@@ -18,10 +18,11 @@ mod hardpoint;
 mod slide_hopper;
 
 pub(super) fn get_cmd(
-    player: &'static mut CPlayer,
+    player: &mut CPlayer,
     helper: &CUserCmdHelper,
     sim_type: i32,
     local_data: &mut BotData,
+    shared: &mut BotShared,
 ) -> Option<CUserCmd> {
     let mut v = Vector3::default();
     let player_by_index = helper.sv_funcs.get_player_by_index;
@@ -176,7 +177,7 @@ pub(super) fn get_cmd(
 
             cmd
         },
-        4..=10 => basic_combat::basic_combat(player, &helper, sim_type, local_data),
+        4..=10 => basic_combat::basic_combat(player, &helper, sim_type, local_data, shared),
         13..=15 => 'end: {
             let mut cmd = CUserCmd::new_empty(&helper);
 
@@ -232,6 +233,8 @@ pub(super) fn get_cmd(
                     Some(*(helper.sv_funcs.view_angles)(player, &mut v)),
                     team,
                     &helper,
+                    None,
+                    None,
                 )
                 .map(|(player, should_shoot)| ((*player.get_origin(&mut v), player), should_shoot))
             };

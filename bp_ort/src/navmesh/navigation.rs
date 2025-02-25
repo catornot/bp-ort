@@ -233,7 +233,41 @@ impl Navigation {
         self.path_points.pop()
     }
 
-    // pub(crate) fn reach_next_point(&mut self, local_data: &mut BotData, cmd: &mut CUserCmd) {}
+    // TODO: actually return a none on failure
+    pub fn random_point_around(&mut self, point: Vector3, radius: f32) -> Option<Vector3> {
+        let funcs = RECAST_DETOUR.wait();
+
+        unsafe {
+            let mut poly = 0;
+            let mut out_pos = Vector3::ZERO;
+            (funcs.dtNavMeshQuery__findNearestPoly)(
+                &mut self.query,
+                &point,
+                self.extents,
+                &self.filter,
+                &mut poly,
+                &mut out_pos,
+            );
+
+            let mut out_poly = 0;
+            let mut out_pos_buffer = Vector3::ZERO;
+            (funcs.dtFreeNavMeshQuery_findRandomPointsAroundCircle)(
+                &mut self.query,
+                poly,
+                &point,
+                radius,
+                radius,
+                &self.filter,
+                funcs.dtfrand,
+                &mut out_poly,
+                &mut out_pos,
+                1,
+                &mut out_pos_buffer,
+            );
+
+            Some(out_pos_buffer)
+        }
+    }
 }
 
 impl Drop for Navigation {

@@ -145,6 +145,8 @@ pub unsafe fn find_player_in_view<'a>(
     view: Option<Vector3>,
     team: i32,
     helper: &'a CUserCmdHelper,
+    player_index: Option<u32>,
+    targets_locks: Option<&[(f32, u32)]>,
 ) -> Option<(&'a mut CPlayer, bool)> {
     const BOT_VIEW: f32 = 270_f32;
     let mut v = Vector3::ZERO;
@@ -164,6 +166,16 @@ pub unsafe fn find_player_in_view<'a>(
 
         possible_targets
             .into_iter()
+            .filter(|(_, target, _)| {
+                (helper.sv_funcs.is_titan)(*target)
+                    || targets_locks
+                        .and_then(|l| l.get(target.player_index.copy_inner() as usize))
+                        .copied()
+                        .map(|(last_shot, by)| {
+                            is_timedout(last_shot, helper, 0.5) || Some(by) == player_index
+                        })
+                        .unwrap_or(true)
+            })
             .find_map(|(target, player, _)| {
                 Some(view_rate(helper, pos, target, player, false)).and_then(|(fraction, ent)| {
                     (fraction == 1.0 || ent as usize == player as *const CPlayer as usize)

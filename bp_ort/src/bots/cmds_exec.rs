@@ -4,14 +4,13 @@ use crate::{
     bindings::{Action, CUserCmd, ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
     utils::iterate_c_array_sized,
 };
-use itertools::Itertools;
 use rrplug::{
     bindings::class_types::client::SignonState,
     high::{vector::Vector3, UnsafeHandle},
     prelude::EngineToken,
 };
 
-use super::{cmds_helper::CUserCmdHelper, BOT_DATA_MAP, SIMULATE_TYPE_CONVAR};
+use super::{cmds_helper::CUserCmdHelper, BOT_DATA_MAP, SHARED_BOT_DATA, SIMULATE_TYPE_CONVAR};
 
 static LAST_CMD: UnsafeHandle<UnsafeCell<Option<CUserCmd>>> =
     unsafe { UnsafeHandle::new(UnsafeCell::new(None)) };
@@ -33,19 +32,11 @@ pub fn run_bots_cmds(_paused: bool) {
     let globals =
         unsafe { engine_functions.globals.as_mut() }.expect("globals were null for some reason");
 
-    let helper = CUserCmdHelper::new(
-        globals,
-        Vector3::ZERO,
-        0,
-        server_functions,
-        engine_functions,
-    );
+    let token = unsafe { EngineToken::new_unchecked() };
+    let mut bot_local_data = BOT_DATA_MAP.get(token).borrow_mut();
+    let mut bot_shared_data = SHARED_BOT_DATA.get(token).borrow_mut();
 
-    let mut bot_tasks = BOT_DATA_MAP
-        .get(unsafe { EngineToken::new_unchecked() })
-        .borrow_mut();
-
-    for (mut cmd, player) in unsafe {
+    for (player, edict) in unsafe {
         iterate_c_array_sized::<_, 32>(engine_functions.client_array.into())
             .enumerate()
             .filter(|(_, client)| **client.signon == SignonState::FULL)
@@ -55,21 +46,35 @@ pub fn run_bots_cmds(_paused: bool) {
                 let edict = **client.edict as usize;
 
                 (server_functions.calc_origin)(bot_player, &std::ptr::from_ref(bot_player), 0, 0);
-                let data = bot_tasks.as_mut().get_mut(edict)?;
-                data.edict = edict as u16;
-                Some((
-                    super::cmds::get_cmd(
-                        bot_player,
-                        &helper,
-                        data.sim_type.unwrap_or(sim_type),
-                        data,
-                    )?,
-                    player_by_index((i + 1) as i32).as_mut()?,
-                ))
+
+                Some((bot_player, edict))
             })
-            .collect_vec()
-            .into_iter() // can collect here to stop the globals from complaning about mutability
     } {
+        let mut cmd = {
+            let Some(local_data) = bot_local_data.get_mut(edict) else {
+                log::warn!("bot {edict} without valid local data entry");
+                continue;
+            };
+            local_data.edict = edict as u16;
+
+            let helper = CUserCmdHelper::new(
+                globals,
+                Vector3::ZERO,
+                0,
+                server_functions,
+                engine_functions,
+            );
+
+            super::cmds::get_cmd(
+                player,
+                &helper,
+                local_data.sim_type.unwrap_or(sim_type),
+                local_data,
+                &mut bot_shared_data,
+            )
+            .unwrap_or_else(|| CUserCmd::new_empty(&helper))
+        };
+
         cmd.frame_time = globals.frameTime;
         unsafe {
             // add_user_cmd_to_player(

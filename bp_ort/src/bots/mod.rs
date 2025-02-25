@@ -56,6 +56,8 @@ pub(super) static BOT_DATA_MAP: EngineGlobal<RefCell<Lazy<[BotData; 64]>>> =
     EngineGlobal::new(RefCell::new(Lazy::new(|| {
         std::array::from_fn(|_| BotData::default())
     })));
+pub(super) static SHARED_BOT_DATA: EngineGlobal<Lazy<RefCell<BotShared>>> =
+    EngineGlobal::new(Lazy::new(|| RefCell::new(BotShared::default())));
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum TitanClass {
@@ -89,6 +91,19 @@ pub(super) struct BotData {
     next_check: f32,
     has_started_to_slide_hop: bool,
     approach_range: Option<f32>,
+}
+
+#[derive(Debug)]
+pub(super) struct BotShared {
+    reserved_targets: [(f32, u32); 64],
+}
+
+impl Default for BotShared {
+    fn default() -> Self {
+        Self {
+            reserved_targets: std::array::from_fn(|_| Default::default()),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -171,11 +186,13 @@ impl Plugin for Bots {
         }
     }
 
-    fn on_sqvm_created(&self, handle: &CSquirrelVMHandle, _token: EngineToken) {
+    fn on_sqvm_created(&self, handle: &CSquirrelVMHandle, token: EngineToken) {
         match handle.get_context() {
             ScriptContext::SERVER => {}
             _ => return,
         }
+
+        SHARED_BOT_DATA.get(token).replace(BotShared::default());
 
         let max_players: u32 = unsafe {
             CStr::from_ptr((ENGINE_FUNCTIONS.wait().get_current_playlist_var)(

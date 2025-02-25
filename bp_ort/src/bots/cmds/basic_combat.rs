@@ -12,6 +12,8 @@ use crate::{
     utils::{get_ents_by_class_name, get_net_var},
 };
 
+use super::BotShared;
+
 /// this cannot be accessed from multiple places so it's safe
 static HEADHUNTER_DATA: EngineGlobal<UnsafeCell<HeadHunterData>> =
     EngineGlobal::new(UnsafeCell::new(HeadHunterData {
@@ -43,6 +45,7 @@ pub(crate) fn basic_combat(
     helper: &CUserCmdHelper,
     sim_type: i32,
     local_data: &mut BotData,
+    shared: &mut BotShared,
 ) -> CUserCmd {
     let mut v = Vector3::ZERO;
     let v = &mut v;
@@ -55,6 +58,11 @@ pub(crate) fn basic_combat(
             Some(*(helper.sv_funcs.view_angles)(player, v)),
             team,
             helper,
+            None,
+            None,
+            // disabled for now since it doesn't actually help instead it makes them worse
+            // Some(player.player_index.copy_inner()),
+            // Some(shared.reserved_targets.as_ref()),
         )
         .map(|(player, should_shoot)| ((*player.get_origin(v), player), should_shoot))
         .or_else(|| {
@@ -232,6 +240,14 @@ pub(crate) fn basic_combat(
     }
 
     if let Some(((target, target_player), should_shoot)) = target {
+        if let Some(target) = shared
+            .reserved_targets
+            .get_mut(unsafe { target_player.player_index.copy_inner() } as usize)
+        {
+            // a last shot target system would be a lot better imo or even prefered target
+            *target = (time(helper), unsafe { player.player_index.copy_inner() });
+        }
+
         cmd.buttons |= if should_shoot && is_timedout(local_data.last_shot, helper, 0.8) {
             Action::Zoom as u32
                 | (helper.globals.frameCount / 2 % 4 != 0)

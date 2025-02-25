@@ -15,6 +15,7 @@ libc = "0.2.*"
 thiserror = "1.0.57"
 itertools = "0.12.1"
 chrono = { version = "0.4.38", features = ["clock", "std", "winapi", "windows-targets"], default-features = true }
+parking_lot = "*"
 
 [lib]
 crate-type = ["cdylib"]

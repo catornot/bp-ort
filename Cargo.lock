@@ -53,6 +53,7 @@ dependencies = [
  "libc",
  "log",
  "once_cell",
+ "parking_lot",
  "rand",
  "retour",
  "rrplug",

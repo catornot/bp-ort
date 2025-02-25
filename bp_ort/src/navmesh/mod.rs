@@ -123,7 +123,10 @@ offset_functions! {
         dtNavMesh__getTileMaybe = unsafe extern "C" fn() where offset(0x3f0da0);
         dtNavMeshQuery__findNearestPoly = unsafe extern "C" fn(this: *mut dtNavMeshQuery, center: *const Vector3,halfExtents: *const Vector3,filter: *const dtQueryFilter,nearestRef: *mut dtPolyRef ,nearestPt: *mut Vector3) -> dtStatus64 where offset(0x3ebe50);
         dtFreeNavMeshQuery_Destroy = unsafe extern "C" fn(*mut dtNavMeshQuery) where offset(0x3e95d0); // doesn't free the pointer only things inside
+        dtFreeNavMeshQuery_findRandomPointsAroundCircle = unsafe extern "C" fn(this: *mut dtNavMeshQuery, startRef: dtPolyRef, centerPos: *const Vector3, maxRadius: f32, otherfloat: f32, filter: *const dtQueryFilter, extern "C" fn() -> f32, randomRef: *mut dtPolyRef, randomPt: *mut Vector3, values: u32, buffer: *mut Vector3) where offset(0x3ee660);
 
         GetNavMeshHullIndex = unsafe extern "C" fn(i32) -> i32 where offset(0x35e200);
+
+        dtfrand = extern "C" fn() -> f32 where offset(0x3533f0);
     }
 }

@@ -46,8 +46,19 @@ pub fn basic_cap_holding(
         .map(|(_, _, pos)| pos);
 
     let (new_target_pos, should_recaculate) = if let Some(hardpoint) = prefered_hardpoint {
-        local_data.approach_range = Some(300.);
-        (hardpoint, None)
+        if distance3(hardpoint, origin) <= 200. {
+            (
+                local_data
+                    .nav_query
+                    .as_mut()
+                    .and_then(|nav| nav.random_point_around(hardpoint, 200.))
+                    .unwrap_or_else(|| hardpoint + Vector3::new(0., 0., 50.)),
+                None,
+            )
+        } else {
+            local_data.approach_range = Some(100.);
+            (hardpoint, None)
+        }
     } else if let Some(((target_pos, target), _)) = target.as_ref() {
         (
             *target_pos,
