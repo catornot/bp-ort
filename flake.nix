@@ -60,7 +60,6 @@
           WINEPATH = nixpkgs.lib.makeLibraryPath buildInputs;
         };
 
-        # TODO
         nix.settings = {
           substituters = [
             "https://cache.nixos.org/"
