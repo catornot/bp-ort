@@ -84,6 +84,7 @@ impl Plugin for OctBots {
         unsafe { reloading::ReloadResponse::allow_reload() }
     }
 
+    #[allow(unused_variables, unreachable_code)]
     fn runframe(&self, _engine_token: EngineToken) {
         if let Some(state) = unsafe { ENGINE_FUNCTIONS.wait().host_state.as_ref() } {
             let current_name =

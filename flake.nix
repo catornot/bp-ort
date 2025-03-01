@@ -1,31 +1,57 @@
 {
-  description = "a collection of plugins for northstar related to bots";
+  description = "A collection of plugins for northstar related to bots";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-24.11";
-    flake-utils = { url = "github:numtide/flake-utils"; };
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    flake-utils = {
+      url = "github:numtide/flake-utils";
+    };
   };
 
-  outputs = { self, nixpkgs, flake-utils }: 
-     flake-utils.lib.eachDefaultSystem (system:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+      rust-overlay,
+      ...
+    }:
+    flake-utils.lib.eachDefaultSystem (
+      system:
       let
-          pkgs = import nixpkgs {
-            inherit system;
-            crossSystem = {
-              config = "x86_64-w64-mingw32";
-              libc = "msvcrt";
-            };
+        native-pkgs = import nixpkgs {
+          inherit system;
+          overlays = [ (import rust-overlay) ];
+        };
+        pkgs = import nixpkgs {
+          inherit system;
+          overlays = [ (import rust-overlay) ];
+          crossSystem = {
+            config = "x86_64-w64-mingw32";
+            libc = "msvcrt";
           };
+        };
       in
       {
+        formatter = native-pkgs.nixfmt-rfc-style;
+        packages = {
+          bp-ort = pkgs.callPackage ./default.nix {
+            rust-bin = rust-overlay.lib.mkRustBin { } pkgs.buildPackages;
+          };
+          default = self.packages.${system}.bp-ort;
+        };
+
         devShell = pkgs.mkShell rec {
-          nativeBuildInputs = with pkgs; [ 
+          nativeBuildInputs = with pkgs; [
             pkg-config
           ];
 
-
-          buildInputs = with pkgs; [ 
-            windows.mingw_w64_headers 
+          buildInputs = with pkgs; [
+            windows.mingw_w64_headers
             windows.mcfgthreads
             windows.mingw_w64_pthreads
           ];
@@ -33,5 +59,17 @@
           PATH = nixpkgs.lib.makeLibraryPath buildInputs;
           WINEPATH = nixpkgs.lib.makeLibraryPath buildInputs;
         };
-      });
+
+        # TODO
+        nix.settings = {
+          substituters = [
+            "https://cache.nixos.org/"
+            "https://nix-community.cachix.org"
+          ];
+          trusted-public-keys = [
+            "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
+          ];
+        };
+      }
+    );
 }

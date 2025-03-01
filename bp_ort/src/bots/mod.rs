@@ -575,5 +575,6 @@ fn clear_bot_names() {
 
 #[rrplug::sqfunction(VM = "Server", ExportName = "RememberNameOverride")]
 fn remember_name_override(player: Option<&mut CPlayer>, name: String, clan_tag: String) {
+    _ = (player, name, clan_tag);
     todo!()
 }

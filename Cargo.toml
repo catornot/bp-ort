@@ -6,9 +6,9 @@ members = [
 ]
 
 [workspace.dependencies]
-rrplug = { path = "../rrplug" }
+# rrplug = { path = "../rrplug" }
 shared = { path = "shared" }
-# rrplug = { git = "https://github.com/catornot/rrplug.git" }
+rrplug = { git = "https://github.com/catornot/rrplug.git" }
 
 # for crates that deal with ub a lot 
 [profile.release-ub]

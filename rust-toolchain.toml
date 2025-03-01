@@ -1,0 +1,5 @@
+[toolchain]
+channel = "nightly-2025-01-09"
+components = [ "rustfmt", "rust-analyzer" ]
+targets = [ "x86_64-pc-windows-gnu" ]
+
