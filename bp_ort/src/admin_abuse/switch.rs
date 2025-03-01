@@ -55,7 +55,7 @@ fn switch_server_command(command: CCommandResult) {
             str_from_char_ptr(
                 engine
                     .client_array
-                    .add(admin.player_index.copy_inner() as usize - 1)
+                    .add(admin.pl.index as usize - 1)
                     .as_ref()?
                     .name
                     .get_inner()
@@ -66,9 +66,7 @@ fn switch_server_command(command: CCommandResult) {
 
     execute_for_matches(
         filter,
-        |player| unsafe {
-            *player.team.get_inner_mut() = if player.team.copy_inner() == 2 { 3 } else { 2 }
-        },
+        |player| player.m_iTeamNum = if player.m_iTeamNum == 2 { 3 } else { 2 },
         false,
         funcs,
         engine,
@@ -90,10 +88,10 @@ fn setteam(command: CCommandResult) {
         return;
     }
 
-    _ = admin.map(|player| {
-        unsafe { *player.team.get_inner_mut() = command.get_arg(0)?.parse().ok()? }
-        Some(())
-    });
+    if let (Some(player), Some(team)) = (admin, command.get_arg(0).unwrap_or_default().parse().ok())
+    {
+        player.m_iTeamNum = team;
+    }
 }
 
 #[rrplug::completion]

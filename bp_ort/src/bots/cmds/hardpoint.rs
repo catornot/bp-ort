@@ -27,8 +27,8 @@ pub fn basic_cap_holding(
     target: &Option<((Vector3, &mut CPlayer), bool)>,
 ) {
     let mut v = Vector3::ZERO;
-    let team = unsafe { player.team.copy_inner() };
-    let predicate = |other: &CPlayer| unsafe { other.team.copy_inner() } == team && !std::ptr::eq(other, player);
+    let team = player.m_iTeamNum;
+    let predicate = |other: &CPlayer| other.m_iTeamNum == team && !std::ptr::eq(other, player);
     let allied_player_count = player_iterator(&predicate, helper).count();
     let prefered_hardpoint = get_hardpoints(helper)
         .map(|hardpoint| {
@@ -62,7 +62,7 @@ pub fn basic_cap_holding(
     } else if let Some(((target_pos, target), _)) = target.as_ref() {
         (
             *target_pos,
-            Some(local_data.last_target_index != unsafe { target.player_index.copy_inner() }),
+            Some(local_data.last_target_index != target.pl.index),
         )
     } else {
         local_data.approach_range = Some(300.);

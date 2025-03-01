@@ -74,7 +74,7 @@ pub fn interfaces_load_some(command: CCommandResult) -> Option<()> {
         }
 
         let create_interface: Option<CreateInterfaceFn> =
-            mem::transmute(GetProcAddress(dll, "CreateInterface\0".as_ptr()));
+            mem::transmute(GetProcAddress(dll, c"CreateInterface".as_ptr().cast()));
 
         let interface = (create_interface?)(c_interface_name.as_ptr(), std::ptr::null_mut());
 
@@ -120,7 +120,7 @@ pub fn interfaces_player() -> Option<()> {
         log::info!("base : {base:X}");
 
         // let vtable = **player.vtable as *const _ as *const *const c_void;
-        let vtable_array = **player.vtable as *const _ as *const [usize; 214];
+        let vtable_array = player.vftable as *const _ as *const [usize; 214];
 
         for (i, ptr) in (*vtable_array).iter().enumerate() {
             if ptr - base == 0x5A9FD0 {

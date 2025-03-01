@@ -1,11 +1,12 @@
 use itertools::Itertools;
-use rrplug::{bindings::class_types::cplayer::CPlayer, high::vector::Vector3};
+use rrplug::{
+    bindings::class_types::{cbaseentity::CBaseEntity, cplayer::CPlayer},
+    high::vector::Vector3,
+};
 use std::mem::MaybeUninit;
 
 use crate::{
-    bindings::{
-        Action, CBaseEntity, CTraceFilterSimple, CUserCmd, Ray, TraceResults, VectorAligned,
-    },
+    bindings::{Action, CTraceFilterSimple, CUserCmd, Ray, TraceResults, VectorAligned},
     interfaces::ENGINE_INTERFACES,
     navmesh::RECAST_DETOUR,
 };
@@ -169,7 +170,7 @@ pub unsafe fn find_player_in_view<'a>(
             .filter(|(_, target, _)| {
                 (helper.sv_funcs.is_titan)(*target)
                     || targets_locks
-                        .and_then(|l| l.get(target.player_index.copy_inner() as usize))
+                        .and_then(|l| l.get(target.pl.index as usize))
                         .copied()
                         .map(|(last_shot, by)| {
                             is_timedout(last_shot, helper, 0.5) || Some(by) == player_index
@@ -219,7 +220,7 @@ pub fn enemy_player_iterator<'b, 'a: 'b>(
 ) -> impl Iterator<Item = &'a mut CPlayer> + 'b {
     (0..32)
         .filter_map(|i| unsafe { (helper.sv_funcs.get_player_by_index)(i + 1).as_mut() })
-        .filter(move |player| unsafe { **player.team != team && **player.team != 0 })
+        .filter(move |player| player.m_iTeamNum != team && player.m_iTeamNum != 0)
         .filter(|player| unsafe { (helper.sv_funcs.is_alive)(*player) != 0 })
 }
 
@@ -229,7 +230,7 @@ pub fn enemy_titan_iterator<'b, 'a: 'b>(
 ) -> impl Iterator<Item = &'a mut CPlayer> + 'b {
     (0..32)
         .filter_map(|i| unsafe { (helper.sv_funcs.get_player_by_index)(i + 1).as_mut() })
-        .filter(move |player| unsafe { **player.team != team && **player.team != 0 })
+        .filter(move |player| player.m_iTeamNum != team && player.m_iTeamNum != 0)
         .filter_map(|player| {
             unsafe {
                 (helper.sv_funcs.get_pet_titan)(player)

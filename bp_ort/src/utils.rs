@@ -1,4 +1,7 @@
-use rrplug::{bindings::class_types::cplayer::CPlayer, mid::utils::try_cstring};
+use rrplug::{
+    bindings::class_types::{cbaseentity::CBaseEntity, cplayer::CPlayer},
+    mid::utils::try_cstring,
+};
 use std::{
     ffi::{c_char, c_void, CStr},
     marker::PhantomData,
@@ -8,7 +11,7 @@ use windows_sys::Win32::System::{
     Diagnostics::Debug::WriteProcessMemory, Threading::GetCurrentProcess,
 };
 
-use crate::bindings::{CBaseEntity, ServerFunctions, ENGINE_FUNCTIONS};
+use crate::bindings::{ServerFunctions, ENGINE_FUNCTIONS};
 
 pub struct ClassNameIter<'a> {
     // class_name: &'a CStr,
@@ -125,7 +128,7 @@ pub(crate) fn send_client_print(player: &CPlayer, msg: &str) -> Option<()> {
     let client = unsafe {
         engine
             .client_array
-            .add(player.player_index.copy_inner() as usize - 1)
+            .add(player.pl.index as usize - 1)
             .as_ref()?
     };
     let msg = try_cstring(msg).ok()?;
@@ -169,14 +172,11 @@ pub fn get_net_var(
     server_funcs: &ServerFunctions,
 ) -> Option<i32> {
     let mut buf = [0; 4];
-    lookup_ent(
-        unsafe { player.player_script_net_data_global.copy_inner() },
-        server_funcs,
-    )
-    .map(|ent| unsafe {
-        (server_funcs.get_net_var_from_ent)(ent, netvar.as_ptr(), index, buf.as_mut_ptr())
-    })
-    .map(|_| buf[0])
+    lookup_ent(player.m_playerScriptNetDataGlobal, server_funcs)
+        .map(|ent| unsafe {
+            (server_funcs.get_net_var_from_ent)(ent, netvar.as_ptr(), index, buf.as_mut_ptr())
+        })
+        .map(|_| buf[0])
 }
 
 pub fn get_ents_by_class_name<'a>(

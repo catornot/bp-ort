@@ -16,7 +16,7 @@ pub(crate) fn slide_hopper(
         CUserCmd::new_basic_move(Vector3::new(1., 0., 0.), Action::Forward as u32, helper);
     let origin = unsafe { *player.get_origin(v) };
 
-    let target = closest_player(origin, unsafe { player.team.copy_inner() }, helper)
+    let target = closest_player(origin, player.m_iTeamNum, helper)
         .map(|target| unsafe { *target.get_origin(v) });
 
     if let Some(target) = target {

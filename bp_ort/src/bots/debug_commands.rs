@@ -96,13 +96,11 @@ pub fn bot_dump_players() {
         .map(|i| unsafe { (SERVER_FUNCTIONS.wait().get_player_by_index)(i + 1) })
         .filter_map(|ptr| unsafe { ptr.as_ref() })
     {
-        unsafe {
-            log::info!(
-                "player at index {:?} on team {:?}",
-                player.player_index,
-                player.team,
-            )
-        }
+        log::info!(
+            "player at index {:?} on team {:?}",
+            player.pl.index,
+            player.m_iTeamNum,
+        );
     }
 }
 
@@ -124,13 +122,11 @@ pub fn set_clan_tag(command: CCommandResult) {
     log::info!("setting clan tag");
 
     match unsafe { (SERVER_FUNCTIONS.wait().get_player_by_index)(index + 1).as_mut() } {
-        Some(player) => unsafe {
-            player
-                .community_clan_tag
-                .iter_mut()
-                .zip(tag)
-                .for_each(|(c, tag_c)| *c = tag_c as i8)
-        },
+        Some(player) => player
+            .m_communityClanTag
+            .iter_mut()
+            .zip(tag)
+            .for_each(|(c, tag_c)| *c = tag_c as i8),
         None => log::info!("failed to find the player"),
     }
 }
@@ -155,10 +151,8 @@ pub fn test_net_int(command: CCommandResult) -> Option<()> {
                     // )?
                     //     as *const _
                     //     as *const CPlayer))
-                    dbg!(
-                        lookup_ent(player.pet_titan.copy_inner(), server_funcs,)? as *const _
-                            as usize
-                    ) == (server_funcs.get_pet_titan)(player) as usize
+                    dbg!(lookup_ent(player.m_petTitan, server_funcs,)? as *const _ as usize)
+                        == (server_funcs.get_pet_titan)(player) as usize
                 );
                 Some((server_funcs.get_player_net_int)(
                     player,

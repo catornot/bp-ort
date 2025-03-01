@@ -12,11 +12,7 @@ use rrplug::{
     exports::OnceCell,
 };
 use std::ops::Not;
-use std::{
-    cell::RefCell,
-    ffi::CStr,
-    {ops::Deref, sync::Mutex},
-};
+use std::{cell::RefCell, ffi::CStr, sync::Mutex};
 
 use crate::bindings::{EngineFunctions, ServerFunctions};
 use crate::interfaces::ENGINE_INTERFACES;
@@ -84,7 +80,7 @@ pub(super) struct BotData {
     jump_delay_obstacle: f32,
     jump_hold: u32,
     last_bad_path: f32,
-    last_target_index: u32,
+    last_target_index: i32,
     target_pos: Vector3,
     last_shot: f32,
     should_recaculate_path: bool,
@@ -438,12 +434,10 @@ fn choose_team() -> i32 {
             .filter(|(_, c)| unsafe { c.signon.get_inner() } >= &SignonState::CONNECTED)
             .inspect(|_| total_players += 1)
             .filter_map::<i32, _>(|(index, _)| {
-                Some(*unsafe {
+                Some(unsafe {
                     (server_functions.get_player_by_index)(index as i32 + 1)
                         .as_ref()?
-                        .team
-                        .deref()
-                        .deref()
+                        .m_iTeamNum
                 })
             })
             .filter(|team| *team == 2)
@@ -476,7 +470,7 @@ fn bot_set_titan(bot: Option<&mut CPlayer>, titan: String) -> Option<()> {
         ENGINE_FUNCTIONS
             .wait()
             .client_array
-            .add((bot?.player_index.copy_inner() - 1) as usize)
+            .add((bot?.pl.index - 1) as usize)
             .as_ref()?
             .edict
             .copy_inner() as usize
@@ -505,7 +499,7 @@ fn bot_set_target_pos(bot: Option<&mut CPlayer>, target: Vector3) -> Option<()> 
         ENGINE_FUNCTIONS
             .wait()
             .client_array
-            .add((bot?.player_index.copy_inner() - 1) as usize)
+            .add((bot?.pl.index - 1) as usize)
             .as_ref()?
             .edict
             .copy_inner() as usize
@@ -523,7 +517,7 @@ fn bot_set_sim_type(bot: Option<&mut CPlayer>, sim_type: i32) -> Option<()> {
         ENGINE_FUNCTIONS
             .wait()
             .client_array
-            .add((bot?.player_index.copy_inner() - 1) as usize)
+            .add((bot?.pl.index - 1) as usize)
             .as_ref()?
             .edict
             .copy_inner() as usize

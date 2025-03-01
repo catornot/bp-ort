@@ -69,10 +69,8 @@ fn set_health(player: &mut CPlayer, mut health: i32) {
         health = 524286;
     }
 
-    unsafe {
-        *player.max_health.get_inner_mut() = health;
-        *player.health.get_inner_mut() = health;
-    }
+    player.m_iMaxHealth = health;
+    player.m_iHealth = health;
 }
 
 #[rrplug::completion]

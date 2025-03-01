@@ -7,7 +7,7 @@ use rrplug::{
 use std::cell::UnsafeCell;
 
 use crate::{
-    bindings::{Action, CBaseEntity, CUserCmd},
+    bindings::{Action, CUserCmd},
     bots::{cmds_helper::CUserCmdHelper, cmds_utils::*, BotData},
     utils::{get_ents_by_class_name, get_net_var},
 };
@@ -50,7 +50,7 @@ pub(crate) fn basic_combat(
     let mut v = Vector3::ZERO;
     let v = &mut v;
     let origin = unsafe { *player.get_origin(v) };
-    let team = unsafe { **player.team };
+    let team = player.m_iTeamNum;
 
     let target = unsafe {
         find_player_in_view(
@@ -85,9 +85,7 @@ pub(crate) fn basic_combat(
                     &mut cmd,
                     local_data,
                     origin,
-                    unsafe {
-                        *(helper.sv_funcs.get_origin)((pet_titan as *const CBaseEntity).cast(), v)
-                    },
+                    unsafe { *pet_titan.get_origin(v) },
                     local_data.should_recaculate_path,
                     helper,
                 );
@@ -97,11 +95,11 @@ pub(crate) fn basic_combat(
                     local_data,
                     origin,
                     *target_pos,
-                    local_data.last_target_index != unsafe { target.player_index.copy_inner() }
+                    local_data.last_target_index != target.pl.index
                         || local_data.should_recaculate_path,
                     helper,
                 ) {
-                    local_data.last_target_index = unsafe { target.player_index.copy_inner() }
+                    local_data.last_target_index = target.pl.index
                 }
             }
 
@@ -135,10 +133,10 @@ pub(crate) fn basic_combat(
                         *target_pos,
                         Some(
                             local_data.last_target_index
-                                != unsafe { target.player_index.copy_inner() },
+                                != target.pl.index ,
                         ),
                     );
-                    local_data.last_target_index = unsafe { target.player_index.copy_inner() };
+                    local_data.last_target_index = target.pl.index ;
 
                     result
                 } else {
@@ -162,14 +160,13 @@ pub(crate) fn basic_combat(
             local_data.approach_range = None;
         }
         (9, target) if target.is_none() || matches!(target, Some((_, false))) => {
-            let (team, player_index) =
-                unsafe { (player.team.copy_inner(), player.player_index.copy_inner()) };
+            let (team, player_index) = (player.m_iTeamNum, player.pl.index as u32);
             let our_flag = find_flag_for(team, true, player_index, helper);
             let their_flag = find_flag_for(team, false, player_index, helper);
             let our_base = find_base_for(team, true, helper);
             let _their_base = find_base_for(team, false, helper);
 
-            let is_team = move |player: &CPlayer| -> bool { unsafe { **player.team == team } };
+            let is_team = move |player: &CPlayer| -> bool { player.m_iTeamNum == team };
             // mm allocation every frame
             let mut friendly_players = player_iterator(&is_team, helper)
                 .map(|friendly| {
@@ -184,12 +181,7 @@ pub(crate) fn basic_combat(
             let (new_target_pos, should_recaculate) = if let Some(pet_titan) =
                 unsafe { (helper.sv_funcs.get_pet_titan)(player).as_ref() }
             {
-                (
-                    unsafe {
-                        *(helper.sv_funcs.get_origin)((pet_titan as *const CBaseEntity).cast(), v)
-                    },
-                    Some(false),
-                )
+                (unsafe { *pet_titan.get_origin(v) }, Some(false))
             } else if their_flag.1 {
                 local_data.approach_range = Some(-20.);
                 (our_base, None)
@@ -242,10 +234,10 @@ pub(crate) fn basic_combat(
     if let Some(((target, target_player), should_shoot)) = target {
         if let Some(target) = shared
             .reserved_targets
-            .get_mut(unsafe { target_player.player_index.copy_inner() } as usize)
+            .get_mut(target_player.pl.index as usize)
         {
             // a last shot target system would be a lot better imo or even prefered target
-            *target = (time(helper), unsafe { player.player_index.copy_inner() });
+            *target = (time(helper), player.pl.index as u32);
         }
 
         cmd.buttons |= if should_shoot && is_timedout(local_data.last_shot, helper, 0.8) {
@@ -260,28 +252,25 @@ pub(crate) fn basic_combat(
             0
         };
 
-        let target = if let Some(titan) =
-            unsafe { (helper.sv_funcs.get_pet_titan)(player).as_ref() }
-        {
-            let titan_pos = unsafe {
-                *(helper.sv_funcs.get_origin)((titan as *const CBaseEntity).cast::<CPlayer>(), v)
-            };
+        let target =
+            if let Some(titan) = unsafe { (helper.sv_funcs.get_pet_titan)(player).as_ref() } {
+                let titan_pos = unsafe { *titan.get_origin(v) };
 
-            let (dis, ent) = unsafe { view_rate(helper, titan_pos, origin, player, true) };
-            if dis >= 1.0 || ent == titan as *const CBaseEntity {
-                if (origin.x - titan_pos.x).powi(2) * (origin.y - titan_pos.y).powi(2) < 81000.
-                    && (helper.globals.frameCount / 2 % 4 != 0)
-                {
-                    cmd.world_view_angles = look_at(origin, titan_pos);
-                    cmd.buttons |= Action::Use as u32;
+                let (dis, ent) = unsafe { view_rate(helper, titan_pos, origin, player, true) };
+                if dis >= 1.0 || ent == std::ptr::from_ref(titan) {
+                    if (origin.x - titan_pos.x).powi(2) * (origin.y - titan_pos.y).powi(2) < 81000.
+                        && (helper.globals.frameCount / 2 % 4 != 0)
+                    {
+                        cmd.world_view_angles = look_at(origin, titan_pos);
+                        cmd.buttons |= Action::Use as u32;
+                    }
+                    titan_pos
+                } else {
+                    target
                 }
-                titan_pos
             } else {
                 target
-            }
-        } else {
-            target
-        };
+            };
 
         let enemy_is_titan = unsafe { (helper.sv_funcs.is_titan)(target_player) };
         let is_titan = unsafe { (helper.sv_funcs.is_titan)(player) };
@@ -505,27 +494,21 @@ fn try_refresh_ctf(helper: &CUserCmdHelper) -> EngineToken {
 
     data.bases.extend(
         get_ents_by_class_name(c"info_spawnpoint_flag", helper.sv_funcs).map(|ent| unsafe {
-            // the vtable is the almost the same so it's safe
             (
-                *ent.cast::<CPlayer>()
-                    .as_ref()
-                    .unwrap_unchecked()
-                    .get_origin(&mut v),
-                (*ent.cast::<CPlayer>()).team.copy_inner(),
+                *ent.as_ref().unwrap_unchecked().get_origin(&mut v),
+                ent.as_ref().unwrap_unchecked().m_iTeamNum,
             )
         }),
     );
     data.flags.extend(
         get_ents_by_class_name(c"item_flag", helper.sv_funcs).map(|ent| unsafe {
             (
-                *ent.cast::<CPlayer>()
+                *ent.as_ref().unwrap_unchecked().get_origin(&mut v),
+                ent.as_ref().unwrap_unchecked().m_iTeamNum,
+                (helper.sv_funcs.get_parent)(ent.cast_const())
                     .as_ref()
-                    .unwrap_unchecked()
-                    .get_origin(&mut v),
-                (*ent.cast::<CPlayer>()).team.copy_inner(),
-                ((helper.sv_funcs.get_parent)(ent.cast_const()).cast::<CPlayer>())
-                    .as_ref()
-                    .map(|parent| parent.player_index.copy_inner())
+                    .and_then(|parent| parent.up_cast())
+                    .map(|parent| parent.pl.index as u32)
                     .unwrap_or(u32::MAX),
             )
         }),

@@ -1,6 +1,6 @@
 use retour::static_detour;
 use rrplug::{
-    bindings::class_types::{client::CClient, cplayer::CPlayer},
+    bindings::class_types::{cbaseentity::CBaseEntity, client::CClient, cplayer::CPlayer},
     mid::utils::str_from_char_ptr,
 };
 use std::{
@@ -13,7 +13,7 @@ use super::{
     cmds_exec::{replace_cmd, run_bots_cmds},
     set_on_join::set_stuff_on_join,
 };
-use crate::bindings::{CBaseEntity, CMoveHelperServer, CUserCmd, SERVER_FUNCTIONS};
+use crate::bindings::{CMoveHelperServer, CUserCmd, SERVER_FUNCTIONS};
 
 static_detour! {
     static Physics_RunThinkFunctions: unsafe extern "C" fn(bool);
@@ -126,7 +126,7 @@ fn fun_18069e7a0_hook(unk1: *mut c_void, player: *mut CPlayer, unk2: *const c_vo
             .as_mut()
             .expect("like fr? why is the player null here FUN_69e7a0");
 
-        if player.current_command.is_null() {
+        if player.m_pCurrentCommand.is_null() {
             return;
         }
 

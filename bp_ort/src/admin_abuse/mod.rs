@@ -109,8 +109,8 @@ pub fn get_admins<'a>() -> RwLockReadGuard<'a, Vec<Box<str>>> {
 pub fn filter_target(filter: Option<&str>, player: &CPlayer, name: &str) -> bool {
     match filter {
         Some("all") => true,
-        Some("imc") => unsafe { *player.team.get_inner() == 2 },
-        Some("militia") => unsafe { *player.team.get_inner() == 3 },
+        Some("imc") => player.m_iTeamNum == 2,
+        Some("militia") => player.m_iTeamNum == 3,
         Some(fname) => name.starts_with(fname),
         None => false,
     }
@@ -128,7 +128,7 @@ pub fn admin_check<'a, 'b>(
         .and_then(|caller_player| unsafe {
             engine_funcs
                 .client_array
-                .add(caller_player.player_index.copy_inner().saturating_sub(1) as usize)
+                .add(caller_player.pl.index.saturating_sub(1) as usize)
                 .as_ref()
                 .map(|c| from_c_string::<String>(c.uid.as_ptr()))
         })

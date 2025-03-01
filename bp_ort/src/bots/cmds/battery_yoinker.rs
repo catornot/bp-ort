@@ -16,10 +16,10 @@ pub(crate) fn battery_yoinker(
     let mut cmd =
         CUserCmd::new_basic_move(Vector3::new(1., 0., 0.), Action::Forward as u32, helper);
     let origin = unsafe { *player.get_origin(v) };
-    let team = unsafe { **player.team };
+    let team = player.m_iTeamNum;
     local_data.counter = local_data.counter.wrapping_add(1);
 
-    if unsafe { player.titan_soul_being_rodeoed.copy_inner() } != -1 {
+    if player.m_titanSoulBeingRodeoed != -1 {
         log::info!(
             "{} {}",
             local_data.last_shot,
@@ -34,7 +34,7 @@ pub(crate) fn battery_yoinker(
         local_data.last_shot = helper.globals.curTime;
     }
 
-    let is_team = move |player: &CPlayer| -> bool { unsafe { **player.team == team } };
+    let is_team = move |player: &CPlayer| -> bool { player.m_iTeamNum == team };
     let maybe_rodeo_target = get_net_var(player, c"batteryCount", 191, helper.sv_funcs)
         .and_then(|value| value.eq(&0).then_some(()))
         .and_then(|_| {

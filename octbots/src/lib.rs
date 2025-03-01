@@ -1,4 +1,4 @@
-use std::{ffi::CStr, mem::MaybeUninit, ops::Range, ptr};
+use std::{ffi::CStr, mem::MaybeUninit, ops::Range};
 
 use once_cell::sync::OnceCell;
 use parking_lot::{Mutex, RwLock};
@@ -26,6 +26,7 @@ unsafe impl Sync for EngineInterfaces {}
 unsafe impl Send for EngineInterfaces {}
 
 pub struct OctBots {
+    #[allow(clippy::type_complexity)]
     nav_grid: RwLock<Vec<Vec<Vec<(bool, Vector3)>>>>,
     current_map: Mutex<String>,
 }
@@ -190,7 +191,7 @@ fn check_block(
     origin: Vector3,
 ) -> bool {
     const TRACE_MASK_SHOT: i32 = 1178615859;
-    const TRACE_MASK_SOLID_BRUSHONLY: i32 = 16907;
+    // const TRACE_MASK_SOLID_BRUSHONLY: i32 = 16907;
     const TRACE_COLLISION_GROUP_BLOCK_WEAPONS: i32 = 0x12; // 18
 
     let mut result: MaybeUninit<TraceResults> = MaybeUninit::zeroed();

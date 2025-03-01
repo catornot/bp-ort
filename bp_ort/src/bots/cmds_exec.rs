@@ -100,11 +100,10 @@ pub fn run_bots_cmds(_paused: bool) {
                 let frametime = globals.frameTime;
                 let cur_time = globals.curTime;
 
-                *player.cplayer_state_fixangle.get_inner_mut() = 0;
+                player.pl.fixangle = 0;
                 set_base_time(player, cur_time);
 
-                *(player.current_command.get_inner_mut() as *mut *const _
-                    as *mut *const CUserCmd) = &cmd;
+                *std::ptr::from_mut(&mut player.m_pCurrentCommand).cast() = &cmd;
 
                 let move_helper = move_helper()
                     .cast_mut()
@@ -114,7 +113,7 @@ pub fn run_bots_cmds(_paused: bool) {
                 move_helper.host = player;
 
                 player_run_command(player, &mut cmd, move_helper);
-                *player.latest_command_run.get_inner_mut() = cmd.command_number;
+                player.m_latestCommandRun = cmd.command_number as i32;
                 // (server_functions.set_last_cmd)(
                 //     (player as *const _ as *const CUserCmd)
                 //         .offset(0x20a0)
@@ -138,10 +137,7 @@ pub fn run_bots_cmds(_paused: bool) {
             if globals.frameCount % 10 == 0 {
                 // HACK: so setting origin forces the game to check touching so kind of fixes that but doesn't work for exiting triggers maybe?
                 (server_functions.calc_origin)(player, &std::ptr::from_ref(player), 0, 0);
-                (server_functions.set_origin_hack_do_not_use)(
-                    player,
-                    player.vec_abs_origin.get_inner(),
-                );
+                (server_functions.set_origin_hack_do_not_use)(player, &player.m_vecAbsOrigin);
             }
 
             // *std::ptr::from_mut(player).byte_offset(0x618).cast::<u32>() = 0; // m_collectedInvalidateFlags

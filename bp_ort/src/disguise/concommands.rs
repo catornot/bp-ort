@@ -70,8 +70,8 @@ pub fn disguise_name(command: CCommandResult) -> Option<()> {
 
     unsafe {
         set_c_char_array(&mut client.name, name);
-        set_c_char_array(&mut player.title, name);
-        set_c_char_array(&mut player.community_name, name);
+        set_c_char_array(&mut player.m_title, name);
+        set_c_char_array(&mut player.m_communityName, name);
     }
 
     None
@@ -89,7 +89,7 @@ pub fn disguise_tag(command: CCommandResult) -> Option<()> {
 
     unsafe {
         set_c_char_array(&mut client.clan_tag, tag);
-        set_c_char_array(&mut player.community_clan_tag, tag);
+        set_c_char_array(&mut player.m_communityClanTag, tag);
     }
 
     None
@@ -102,11 +102,11 @@ pub fn disguise_travesal(command: CCommandResult) -> Option<()> {
 
         let player = (SERVER_FUNCTIONS.wait().get_player_by_index)(index + 1).as_mut()?;
 
-        log::info!("player.traversal_type {}", *player.traversal_type);
+        log::info!("player.traversal_type {}", player.m_traversalType);
 
         let state: i32 = command.get_arg(0)?.parse().ok()?;
 
-        **player.traversal_type = state;
+        player.m_traversalType = state;
     }
     None
 }
@@ -134,11 +134,11 @@ pub fn disguise_generation(command: CCommandResult) -> Option<()> {
 
         let player = (SERVER_FUNCTIONS.wait().get_player_by_index)(index as i32 + 1).as_mut()?;
 
-        log::info!("player.generation {}", **player.generation);
+        log::info!("player.generation {}", player.m_generation);
 
         let generation: i32 = command.get_arg(0)?.parse().ok()?;
 
-        **player.generation = generation;
+        player.m_generation = generation;
     }
     None
 }

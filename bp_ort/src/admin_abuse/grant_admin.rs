@@ -63,7 +63,7 @@ fn add_admin(player: &CPlayer, engine_funcs: &EngineFunctions, token: EngineToke
     let uid = unsafe {
         let client = engine_funcs
             .client_array
-            .add(player.player_index.copy_inner() as usize - 1)
+            .add(player.pl.index as usize - 1)
             .as_ref()?;
         let uid = client.uid.as_ptr();
         str_from_char_ptr(uid)?

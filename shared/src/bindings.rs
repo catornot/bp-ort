@@ -1,6 +1,8 @@
 use rrplug::{
     bindings::{
-        class_types::{c_player::C_Player, client::CClient, cplayer::CPlayer},
+        class_types::{
+            c_player::C_Player, cbaseentity::CBaseEntity, client::CClient, cplayer::CPlayer,
+        },
         cvar::{
             command::{CCommand, ConCommand, FnCommandCallback_t},
             convar::Color,
@@ -165,12 +167,6 @@ pub struct CGlobalVars {
     pub m_bClient: bool,
     pub m_nTimestampNetworkingBase: i32,
     pub m_nTimestampRandomizeWindow: i32,
-}
-
-// opaque type
-#[repr(C)]
-pub struct CBaseEntity {
-    _private: [u8; 0],
 }
 
 #[derive(Debug, Clone)]

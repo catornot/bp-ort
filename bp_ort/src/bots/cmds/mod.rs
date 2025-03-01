@@ -6,7 +6,7 @@ use rrplug::{
 };
 
 use crate::{
-    bindings::{Action, CBaseEntity, CUserCmd},
+    bindings::{Action, CUserCmd},
     navmesh::Hull,
 };
 
@@ -29,7 +29,7 @@ pub(super) fn get_cmd(
     let helper = unsafe {
         CUserCmdHelper {
             angles: *(helper.sv_funcs.eye_angles)(player, &mut v),
-            cmd_num: **player.rank as u32,
+            cmd_num: player.m_rank as u32,
             ..CUserCmdHelper::construct_from_global(helper)
         }
     };
@@ -47,9 +47,9 @@ pub(super) fn get_cmd(
         }
     }
 
-    let command_number = unsafe {
-        **player.rank += 1; // using this for command number
-        **player.rank as u32
+    let command_number = {
+        player.m_rank += 1; // using this for command number
+        player.m_rank as u32
     };
 
     let mut cmd = Some(match sim_type {
@@ -92,7 +92,7 @@ pub(super) fn get_cmd(
             }
         }
         2 => {
-            let origin = unsafe { player.vec_abs_origin.copy_inner() };
+            let origin = player.m_vecAbsOrigin;
 
             let target = match local_data.counter {
                 0 => Vector3::new(-528., 13., 2.),
@@ -173,7 +173,7 @@ pub(super) fn get_cmd(
             let diff = target - origin;
             cmd.world_view_angles.y = diff.y.atan2(diff.x) * 180. / std::f32::consts::PI;
 
-            *player.angles.get_inner_mut() = cmd.world_view_angles;
+            player.m_localAngles = cmd.world_view_angles;
 
             cmd
         },
@@ -182,19 +182,17 @@ pub(super) fn get_cmd(
             let mut cmd = CUserCmd::new_empty(&helper);
 
             let origin = unsafe { *player.get_origin(&mut v) };
-            let team = unsafe { **player.team };
+            let team = player.m_iTeamNum;
             let mut v = Vector3::ZERO;
 
             let maybe_target = if sim_type == 13 {
-                farthest_player(origin, team, &helper).map(|target| unsafe {
-                    (*target.get_origin(&mut v), target.player_index.copy_inner())
-                })
+                farthest_player(origin, team, &helper)
+                    .map(|target| unsafe { (*target.get_origin(&mut v), target.pl.index) })
             } else if sim_type == 14 {
-                closest_player(origin, team, &helper).map(|target| unsafe {
-                    (*target.get_origin(&mut v), target.player_index.copy_inner())
-                })
+                closest_player(origin, team, &helper)
+                    .map(|target| unsafe { (*target.get_origin(&mut v), target.pl.index) })
             } else {
-                Some((local_data.target_pos, local_data.target_pos.x as u32))
+                Some((local_data.target_pos, local_data.target_pos.x as i32))
             };
 
             let Some((target, last_index)) = maybe_target else {
@@ -224,8 +222,8 @@ pub(super) fn get_cmd(
             cmd
         }
         17 => {
-            let origin = unsafe { player.vec_abs_origin.copy_inner() };
-            let team = unsafe { **player.team };
+            let origin = player.m_vecAbsOrigin;
+            let team = player.m_iTeamNum;
 
             let target = unsafe {
                 find_player_in_view(
@@ -257,9 +255,7 @@ pub(super) fn get_cmd(
             let origin = unsafe { *player.get_origin(&mut v) };
 
             if let Some(titan_pos) = unsafe { (helper.sv_funcs.get_pet_titan)(player).as_ref() }
-                .map(|titan| unsafe {
-                    *(helper.sv_funcs.get_origin)((titan as *const CBaseEntity).cast(), &mut v)
-                })
+                .map(|titan| unsafe { *titan.get_origin(&mut v) })
             {
                 path_to_target(
                     &mut cmd,
