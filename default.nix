@@ -6,8 +6,7 @@
 }:
 let
 in
-# why does it need to be so complicated >:(
-rustPlatform.buildRustPackage rec {
+rustPlatform.buildRustPackage {
   name = "bp-ort";
 
   rustToolchain = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;

@@ -1,0 +1,19 @@
+global function Init_botSettings
+
+struct {
+	string botName = "bot"
+} file
+
+void function Init_botSettings()
+{
+	ModSettings_AddModTitle("bp_ort")
+	ModSettings_AddModCategory("bots")
+	ModSettings_AddButton("Spawn a bot", SpawnBot)
+	ModSettings_AddSetting( "play_against_bots", "Play Against Bots", "bool" )
+	ModSettings_AddSetting( "auto_select_gamemode", "Auto select bot ai based on gamemode", "bool" )
+	ModSettings_AddSetting( "bot_uwufy", "UwUify names", "bool" )
+}
+
+void function SpawnBot() {
+	ClientCommand("bot_spawn")
+}

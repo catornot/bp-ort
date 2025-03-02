@@ -1,0 +1,325 @@
+global function Init_botSetup
+#if BP_ORT
+global function SpawnNBots
+global function CodeCallBack_Test
+#endif
+
+struct {
+	entity imcFlagSpawn
+	entity imcFlag	
+	entity militiaFlagSpawn
+	entity militiaFlag
+	int botCount
+	array<vector> cachedPos
+	array<array<vector> > tasks
+} file
+
+void function Init_botSetup()
+{
+    #if BP_ORT
+    AddCallback_OnPlayerRespawned( SetBotLoadout )
+	AddCallback_OnClientConnected( SetBotLoadout )
+	AddCallback_OnClientConnected( RunBotTitanFall )
+	AddCallback_OnClientConnected( DecideTeamBots )
+	AddCallback_OnClientConnected( MaybeRunTask )
+	AddCallback_OnPilotBecomesTitan( BotBecameTitan )
+
+	AddClientCommandCallback( "test_script_navs", TestScriptNavs )
+	AddClientCommandCallback( "bot_task", NewTask )
+	AddClientCommandCallback( "bump", BumpEveryone )
+
+	if (GetConVarBool("auto_select_gamemode"))
+		SelectCmdType()
+	
+    #endif
+
+	file.tasks = []
+}
+
+#if BP_ORT
+void function SelectCmdType() {
+	int aiType = 6;
+	switch ( GAMETYPE )
+	{
+		case CAPTURE_THE_FLAG:
+		case RAID:
+			aiType = 9
+			break
+		case TEAM_DEATHMATCH:
+		case TITAN_BRAWL:
+		case LAST_TITAN_STANDING:
+			aiType = 6
+			break
+		case "cp":
+			aiType = 10;
+			break
+	}
+
+	SetConVarInt("bot_cmds_type", aiType)
+}
+
+void function RunBotTitanFall( entity bot ) {
+	if ( !bot.IsBot() )
+		return
+	
+	thread RunBotTitanFallThreaded( bot )
+}
+
+void function RunBotTitanFallThreaded( entity bot ) {
+	bot.EndSignal("OnDestroy")
+	return
+
+	for(;;) {
+		if ( PlayerEarnMeter_GetOwnedFrac( bot ) == 1.0 ) {
+			thread CreateTitanForPlayerAndHotdrop( bot, GetTitanReplacementPoint( bot, false ) )
+
+			float oldRewardFrac = PlayerEarnMeter_GetRewardFrac( bot )
+			PlayerEarnMeter_Reset( bot )
+			PlayerEarnMeter_SetRewardFrac( bot, oldRewardFrac )
+			PlayerEarnMeter_EnableReward( bot )
+
+			if ( PlayerEarnMeter_GetRewardFrac( bot ) != 0 )
+				PlayerEarnMeter_EnableReward( bot )
+			
+			ClearTitanAvailable( bot )
+		}
+
+		wait 5
+	}
+}
+
+void function SetBotLoadout( entity bot ) {
+	if ( !bot.IsBot() )
+		return
+	
+	int settingsNum = RandomIntRange(0,7)
+	SetPersistentSpawnLoadoutIndex( bot, "titan", settingsNum )
+
+	SetPersistentSpawnLoadoutIndex( bot, "pilot", RandomIntRange(0,9) )
+}
+
+void function BotBecameTitan( entity bot, entity titan ) {	
+	if ( !bot.IsBot() )
+		return
+	
+    entity soul = bot.GetTitanSoul()
+    if ( !IsValid( soul ) )
+        return		
+	
+	BotSetTitan( bot, GetSoulPlayerSettings( soul ) )
+}
+
+void function DecideTeamBots( entity player ) {
+	if ( ( GAMETYPE != MARKED_FOR_DEATH && GAMETYPE != CAPTURE_THE_FLAG && GAMETYPE != LAST_TITAN_STANDING) || !GetConVarBool( "play_against_bots" ) )
+		return
+
+	if ( GAMETYPE == CAPTURE_THE_FLAG && !IsValid( file.imcFlag ) )
+	{
+		file.imcFlag  = GetGlobalNetEnt( "imcFlag" )
+		file.imcFlagSpawn = GetGlobalNetEnt( "imcFlagHome" )
+		file.militiaFlag = GetGlobalNetEnt( "milFlag" )
+		file.militiaFlagSpawn = GetGlobalNetEnt( "milFlagHome" ) 
+	}
+
+	if ( player.IsBot() )
+	{
+		file.botCount++
+
+		SetTeam( player, TEAM_IMC )
+		
+		if ( GAMETYPE == CAPTURE_THE_FLAG ) {
+			return
+			switch ( file.botCount % 4 ) {
+				case 0:
+				case 1:
+					BotSetSimulationType( player, 7 )
+					thread CTFBotThinkProtect( player, file.botCount )
+					break
+				case 2:
+					BotSetSimulationType( player, 7 )
+					thread CTFBotThinkAttack( player, file.botCount )
+					break
+				case 3:
+					BotSetSimulationType( player, 6 )
+					break
+			}
+			
+			
+		}
+	} else {
+		SetTeam( player, TEAM_MILITIA )
+	} 	
+}
+
+void function CTFBotThinkProtect( entity bot, int botId ) {
+	bot.EndSignal("OnDestroy")
+	// svGlobal.levelEnt.EndSignal( "GameStateChanged" )
+
+	for(;;) {
+		BotSetSimulationType( bot, 7 )
+		if ( GetGameState() == eGameState.Playing || !IsValid(file.imcFlag) || !IsValid(file.militiaFlag) || !IsValid(file.militiaFlagSpawn) || !IsValid(file.imcFlagSpawn) ) {
+			wait 1
+			continue
+		}
+		
+		float radius = 60.
+		if ( distance( file.imcFlag.GetOrigin(), file.imcFlagSpawn.GetOrigin() ) < 50. ) {
+			radius = 300.
+		}
+
+		array<vector> points = NavMesh_RandomPositions(file.imcFlag.GetOrigin(), HULL_HUMAN, 1, 0, radius );
+		BotSetTargetPos(bot, points.len() > 0 ? points.getrandom() : file.imcFlag.GetOrigin() )
+
+		wait 1
+	}
+}
+
+void function CTFBotThinkAttack( entity bot, int botId ) {
+	bot.EndSignal("OnDestroy")
+
+	for(;;) {
+		BotSetSimulationType( bot, 7 )
+		if ( GetGameState() == eGameState.Playing || !IsValid(file.imcFlag) || !IsValid(file.militiaFlag) || !IsValid(file.imcFlagSpawn) || !IsValid(file.militiaFlagSpawn) ) {
+			wait 1
+			continue
+		}
+
+		if ( distance( file.militiaFlag.GetOrigin(), file.militiaFlagSpawn.GetOrigin() ) < 20. ) {
+			array<vector> points = NavMesh_RandomPositions(file.militiaFlag.GetOrigin(), HULL_HUMAN, 1, 0, 50. );
+			BotSetTargetPos(bot, points.len() > 0 ? points[0] : file.militiaFlag.GetOrigin() )
+
+			// printt(distance( file.militiaFlag.GetOrigin(), bot.GetOrigin() ), bot.GetPlayerName())
+			if ( distance( file.militiaFlag.GetOrigin(), bot.GetOrigin() ) <= 70. ) {
+				CodeCallback_OnTouchHealthKit( bot, file.militiaFlag )
+				bot.SetVelocity(<500, 0, 500>)
+			}
+		} else {
+			array<vector> points = NavMesh_RandomPositions(file.imcFlagSpawn.GetOrigin(), HULL_HUMAN, 1, 0, 50. );
+			BotSetTargetPos(bot, points.len() > 0 ? points.getrandom() : file.imcFlagSpawn.GetOrigin() )
+
+			if ( distance( file.imcFlagSpawn.GetOrigin(), bot.GetOrigin() ) <= 70. ) {
+				bot.SetOrigin( file.imcFlagSpawn.GetOrigin() + <0, 0, 20> )
+				bot.SetVelocity(<500, 0, 500>)
+			}
+		}
+		wait 1
+	}
+}
+
+void function SpawnNBots(int amount, string name = "")
+{
+	for(int i = 0; i < amount; i++)
+	{
+		string new_name = name
+		if ( new_name != "" ) {
+			new_name += i.tostring()
+		}
+
+		BotSpawn(new_name)
+
+		print("bot " + i)
+
+		wait 0
+		// wait 1.5
+	}
+}
+
+string function CodeCallBack_Test( entity bot ) {
+	entity titan = bot.GetPetTitan()
+
+	if ( !IsValid( titan ) )
+        return bot.GetPlayerName() + " :("
+
+	entity soul = titan.GetTitanSoul()
+    if ( !IsValid( soul ) )
+        return bot.GetPlayerName()
+	
+	return GetSoulPlayerSettings( soul )
+}
+
+float function distance( vector origin1, vector origin2 )
+{
+    float X1 = origin1.x
+    float Y1 = origin1.y
+    float X2 = origin2.x
+    float Y2 = origin2.y
+
+    return sqrt(pow(X1-X2, 2) + pow(Y1-Y2, 2) )
+}
+
+bool function TestScriptNavs(entity player, array<string> args) {
+	try {
+		var navs = NavigationCreate(HULL_HUMAN);
+		NavigationFindPath(navs, player.GetOrigin(), GetPlayerCrosshairOrigin( player ));
+
+		vector prevPoint = player.GetOrigin();
+		// I messed up return types for arrays in rrplug somehow
+		foreach( var pointVar in expect array(NavigationGetAllPoints(navs))) {
+			vector point = expect vector(pointVar)
+			DebugDrawLine(prevPoint, point, 0, 255, 0, true, 1000)
+			prevPoint = point
+		}
+
+		return true
+	}
+	catch (error) {
+		
+	}
+
+	return true
+}
+
+bool function NewTask(entity player, array<string> args) {
+	file.tasks.insert(0, [player.GetOrigin(), GetPlayerCrosshairOrigin( player )])
+
+	BotSpawn("TaskCompletor")
+
+	return true
+}
+
+void function MaybeRunTask(entity player) {
+	if (!player.IsBot() || player.GetPlayerName().find( "TaskCompl") == -1 || file.tasks.len() == 0) {
+		return;
+	}
+
+	print("new task")
+
+	array<vector> task = file.tasks.pop()
+
+	player.SetOrigin(task[0])
+	
+	BotSetSimulationType( player, 7 )
+	BotSetTargetPos(player, task[1])
+
+	thread killOnCompletion(player, task)
+}
+
+void function killOnCompletion(entity bot, array<vector> task) {
+	wait 1
+
+	bot.SetOrigin( task[0] )
+	SetTeam( bot, GetPlayerArray()[0].GetTeam() )
+	
+	BotSetSimulationType( bot, 7 )
+	BotSetTargetPos(bot, task[1])
+	
+	bot.EndSignal("OnDeath")
+	
+	OnThreadEnd(
+		function() : ( bot )
+		{
+			NSDisconnectPlayer( bot, "done" )
+		}
+	)
+
+	while (Distance2D(bot.GetOrigin(), task[1]) > 100) {
+		wait 0
+	}
+}
+
+bool function BumpEveryone(entity player, array<string> args) {
+	foreach(entity player in GetPlayerArray()) { player.SetVelocity(< RandomInt( 500 ), RandomInt( 500 ), RandomInt( 500 ) >) }
+
+	return true
+}
+#endif

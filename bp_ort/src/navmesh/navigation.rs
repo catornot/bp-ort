@@ -238,29 +238,15 @@ impl Navigation {
         let funcs = RECAST_DETOUR.wait();
 
         unsafe {
-            let mut poly = 0;
-            let mut out_pos = Vector3::ZERO;
-            (funcs.dtNavMeshQuery__findNearestPoly)(
-                &mut self.query,
-                &point,
-                self.extents,
-                &self.filter,
-                &mut poly,
-                &mut out_pos,
-            );
-
-            let mut out_poly = 0;
             let mut out_pos_buffer = Vector3::ZERO;
             (funcs.dtFreeNavMeshQuery_findRandomPointsAroundCircle)(
                 &mut self.query,
-                poly,
                 &point,
                 radius,
                 radius,
                 &self.filter,
+                funcs.some_non_function_function,
                 funcs.dtfrand,
-                &mut out_poly,
-                &mut out_pos,
                 1,
                 &mut out_pos_buffer,
             );

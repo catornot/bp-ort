@@ -42,6 +42,7 @@
           bp-ort = pkgs.callPackage ./default.nix {
             rust-bin = rust-overlay.lib.mkRustBin { } pkgs.buildPackages;
           };
+          packaged-mod = pkgs.callPackage ./packaged-mod.nix { bp-ort = self.packages.${system}.bp-ort; };
           default = self.packages.${system}.bp-ort;
         };
 

@@ -86,6 +86,8 @@ impl Plugin for OctBots {
 
     #[allow(unused_variables, unreachable_code)]
     fn runframe(&self, _engine_token: EngineToken) {
+        return;
+
         if let Some(state) = unsafe { ENGINE_FUNCTIONS.wait().host_state.as_ref() } {
             let current_name =
                 unsafe { CStr::from_ptr(state.level_name.as_ptr()).to_string_lossy() };
