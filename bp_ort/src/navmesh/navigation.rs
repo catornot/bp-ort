@@ -1,3 +1,4 @@
+#![deny(clippy::unwrap_used, clippy::expect_used)]
 use rrplug::prelude::*;
 use std::mem::MaybeUninit;
 use thiserror::Error;
@@ -155,7 +156,10 @@ impl Navigation {
             )
         };
 
-        unsafe { self.path.set_len(path_size as usize) };
+        unsafe {
+            self.path
+                .set_len(path_size.min(self.path.capacity() as u32) as usize)
+        };
         self.path_points.clear();
 
         if path_size == 0 {
@@ -166,7 +170,7 @@ impl Navigation {
 
         let mut straight_size = 0;
         unsafe {
-            dbg!((dt_funcs.dtNavMeshQuery__findStraightPath)(
+            (dt_funcs.dtNavMeshQuery__findStraightPath)(
                 &mut self.query,
                 &start,
                 &end,
@@ -180,11 +184,12 @@ impl Navigation {
                 &mut straight_size,
                 PATH_CAPACITY as i32,
                 0,
-                0
-            ));
+                0,
+            );
         }
 
         if straight_size != 0 {
+            let straight_size = straight_size.min(self.path.capacity() as i32);
             unsafe {
                 self.jump_types.set_len(straight_size as usize);
                 self.straigth_path_jumps.set_len(straight_size as usize);

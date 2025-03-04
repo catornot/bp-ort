@@ -41,7 +41,7 @@ pub fn basic_cap_holding(
                 hardpoint,
             )
         })
-        .filter(move |(player_around, _, _)| *player_around <= allied_player_count / 3)
+        .filter(move |(player_around, _, _)| *player_around <= (allied_player_count / 6).max(1))
         .reduce(|first, second| if first.1 <= second.1 { first } else { second })
         .map(|(_, _, pos)| pos);
 

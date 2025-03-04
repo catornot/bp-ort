@@ -14,8 +14,13 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Install Nix
-      uses: DeterminateSystems/nix-installer-action@main
-    - run: nix build .#bp-ort
+    - uses: DeterminateSystems/nix-installer-action@main
+    - uses: DeterminateSystems/magic-nix-cache-action@main
+
+    - name: Build and Test
+    - run: |
+        nix build .#bp-ort
+        # TODO: add clippy tests
 
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v4

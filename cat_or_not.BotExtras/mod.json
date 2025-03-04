@@ -1,7 +1,7 @@
 {
   "Name": "cat_or_not.BotExtras",
   "Description": "",
-  "Version": "0.1.1",
+  "Version": "0.1.3",
   "LoadPriority": 1,
   "ConVars": [
     {

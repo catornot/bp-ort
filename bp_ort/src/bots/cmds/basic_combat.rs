@@ -1,3 +1,4 @@
+#![deny(clippy::unwrap_used, clippy::expect_used)]
 use high::squirrel::call_sq_function;
 use mid::squirrel::SQVM_SERVER;
 use rand::{thread_rng, Rng};
@@ -275,23 +276,38 @@ pub(crate) fn basic_combat(
         let enemy_is_titan = unsafe { (helper.sv_funcs.is_titan)(target_player) };
         let is_titan = unsafe { (helper.sv_funcs.is_titan)(player) };
 
-        if should_shoot || sim_type == 5 {
+        if should_shoot || sim_type == 5 || sim_type == 4 {
+            // for some reason this makes the game freeze later in the frame????
+            // if local_data.spread.len() < local_data.spread_offset {
+            //     generate_spread(player.m_vecAbsVelocity, &mut local_data.spread);
+            //     local_data.spread_offset = 0;
+            // }
+
             let angles = look_at(origin, target);
 
             let angles = {
                 let length = { get_velocity_length(helper, target_player, v) };
 
-                if length > 200. && !enemy_is_titan {
+                if length > 100. && !enemy_is_titan {
                     let mut rng = thread_rng();
-                    let error_amount = length.sqrt() / 10f32;
+                    let error_amount = (length + 50.).sqrt() / 7f32;
 
                     Vector3 {
                         x: angles.x + error_amount * rng.gen_range(-2..=2) as f32,
                         y: angles.y + error_amount * rng.gen_range(-2..=2) as f32,
                         z: 0.,
                     }
-                } else {
+                } else if sim_type == 5 || sim_type == 4 {
                     angles
+                } else {
+                    local_data.spread_offset += 1;
+
+                    angles
+                        + local_data
+                            .spread
+                            .get(local_data.spread_offset)
+                            .copied()
+                            .unwrap_or(Vector3::ZERO)
                 }
             };
 
@@ -308,6 +324,8 @@ pub(crate) fn basic_combat(
                     )
                 })
                 .unwrap_or(angles.y);
+        } else {
+            local_data.spread_offset = local_data.spread.len();
         }
 
         if (!is_titan
@@ -515,4 +533,29 @@ fn try_refresh_ctf(helper: &CUserCmdHelper) -> EngineToken {
     );
 
     token
+}
+
+// fn generate_spread(dir: Vector3) -> Vec<Vector3> {
+//     dbg!("wow");
+//     let dir = normalize(dir);
+//     (0..20i32)
+//         .map(|i| i.saturating_sub(1) as f32)
+//         .map(|i| dir * Vector3::new(i, i, 0.))
+//         .map(|angle| Vector3::new(angle.x.clamp(-10., 10.), angle.y.clamp(-10., 10.), 0.))
+//         .collect()
+// }
+
+#[allow(dead_code)]
+fn generate_spread(dir: Vector3, buffer: &mut [Vector3]) {
+    dbg!("wow");
+    let dir = normalize(dir);
+    let spread = (0..50)
+        .map(|i| (i as f32 / 25.))
+        .map(|i| dir * Vector3::new(i, i, 0.))
+        .map(|angle| Vector3::new(angle.x.clamp(-4., 4.), angle.y.clamp(-4., 4.), 0.));
+
+    buffer
+        .iter_mut()
+        .zip(spread)
+        .for_each(|(buffer, offset)| *buffer = offset);
 }

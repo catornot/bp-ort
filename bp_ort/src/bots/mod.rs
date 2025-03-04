@@ -87,6 +87,8 @@ pub(super) struct BotData {
     next_check: f32,
     has_started_to_slide_hop: bool,
     approach_range: Option<f32>,
+    spread: [Vector3; 20],
+    spread_offset: usize,
 }
 
 #[derive(Debug)]

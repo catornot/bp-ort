@@ -20,5 +20,9 @@ parking_lot = "*"
 [lib]
 crate-type = ["cdylib"]
 
-[features]
-release = []
+# this doesn't even fix it lol
+# this crate doesn't work in release otherwise (quite a bummer but eh)
+# [profile.release]
+# strip = "true"
+# opt-level = 0
+# debug-assertions = false

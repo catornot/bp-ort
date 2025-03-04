@@ -13,4 +13,6 @@ rrplug = { git = "https://github.com/catornot/rrplug.git" }
 # for crates that deal with ub a lot 
 [profile.release-ub]
 inherits = "release"
-opt-level = 1
+strip = "true"
+opt-level = 0
+debug-assertions = false

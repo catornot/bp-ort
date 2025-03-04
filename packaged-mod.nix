@@ -7,7 +7,7 @@ let
 in
   pkgs.stdenv.mkDerivation rec {
     pname = "bp_ort";
-    version = "1.1.0";
+    version = "0.1.3";
 
     manifest = pkgs.writeText "manifest.json" ''
       {
@@ -37,6 +37,7 @@ in
       cp ${bp-ort}/bin/ranim.dll $out/plugins/ranim.dll
       cp -r ${./cat_or_not.BotExtras} $out/mods/cat_or_not.BotExtras
       cp ${./cat_or_not.BotExtras/icon.png} $out/icon.png
+      cp ${./README.md} $out/README.md
       cp ${manifest} $out/manifest.json
     '';
 

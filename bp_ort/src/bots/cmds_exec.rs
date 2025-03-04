@@ -94,9 +94,7 @@ pub fn run_bots_cmds(_paused: bool) {
 
             // checks for m_animActive
             // looks like it still did nothing
-            if !*(player as *const _ as *const bool).offset(0xc88)
-                || cmd.buttons & Action::WeaponDiscard as u32 == 0
-            {
+            if !player.m_animActive || cmd.buttons & Action::WeaponDiscard as u32 == 0 {
                 let frametime = globals.frameTime;
                 let cur_time = globals.curTime;
 
