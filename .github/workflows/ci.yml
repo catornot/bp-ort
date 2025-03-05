@@ -13,11 +13,9 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Install Nix
+    - name: Install Nix and Build
     - uses: DeterminateSystems/nix-installer-action@main
     - uses: DeterminateSystems/magic-nix-cache-action@main
-
-    - name: Build and Test
     - run: |
         nix build .#bp-ort
         # TODO: add clippy tests
