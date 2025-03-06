@@ -1,28 +1,36 @@
 use chrono::Datelike;
 use once_cell::sync::Lazy;
 use rand::Rng;
-use rrplug::bindings::class_types::cplayer::CPlayer;
-use rrplug::mid::utils::{str_from_char_ptr, try_cstring};
-use rrplug::prelude::*;
 use rrplug::{
     bindings::{
-        class_types::client::{CClient, SignonState},
+        class_types::{
+            client::{CClient, SignonState},
+            cplayer::CPlayer,
+        },
         cvar::convar::FCVAR_GAMEDLL,
     },
     exports::OnceCell,
+    mid::utils::{str_from_char_ptr, try_cstring},
+    prelude::*,
 };
-use std::ops::Not;
-use std::{cell::RefCell, ffi::CStr, sync::Mutex};
+use std::{
+    cell::RefCell,
+    ffi::CStr,
+    ops::Not,
+    sync::{
+        atomic::{AtomicI32, Ordering},
+        Mutex,
+    },
+};
 
-use crate::bindings::{EngineFunctions, ServerFunctions};
-use crate::interfaces::ENGINE_INTERFACES;
 use crate::{
-    bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
+    bindings::{EngineFunctions, ServerFunctions, ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
     bots::{
         convars::register_required_convars,
         debug_commands::register_debug_concommands,
         detour::{hook_engine, hook_server},
     },
+    interfaces::ENGINE_INTERFACES,
     navmesh::{navigation::Navigation, Hull},
     utils::iterate_c_array_sized,
     PLUGIN,
@@ -40,9 +48,12 @@ mod set_on_join;
 
 pub const DEFAULT_SIMULATE_TYPE: i32 = 6;
 
+static BASE_AIM_PENALTY: OnceCell<ConVarStruct> = OnceCell::new();
 static CLAN_TAG_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
 pub static SIMULATE_TYPE_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
 pub static UWUFY_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
+
+pub static AIM_PENALTY_VALUE: AtomicI32 = AtomicI32::new(100);
 
 thread_local! {
     pub static MAX_PLAYERS: RefCell<u32> = const { RefCell::new(64) };
@@ -255,6 +266,21 @@ impl Plugin for Bots {
         .expect("failed to register the convar");
         _ = CLAN_TAG_CONVAR.set(convar);
 
+        let convar = ConVarStruct::try_new(
+            &ConVarRegister {
+                callback: Some(aim_penalty_changed),
+                ..ConVarRegister::mandatory(
+                    "bot_aim_penalty_speed",
+                    "100",
+                    FCVAR_GAMEDLL as i32,
+                    "the speed at which bots start having random aim applied",
+                )
+            },
+            token,
+        )
+        .expect("failed to register the convar");
+        _ = BASE_AIM_PENALTY.set(convar);
+
         let simulate_convar = ConVarStruct::try_new(&ConVarRegister::new(
                 "bot_cmds_type",
                 DEFAULT_SIMULATE_TYPE.to_string(),
@@ -463,6 +489,17 @@ fn clang_tag_changed() {
 
     let mut clan_tag = PLUGIN.wait().bots.clang_tag.lock().expect("how");
     *clan_tag = new_clan_tag;
+}
+#[rrplug::convar]
+fn aim_penalty_changed() -> Option<()> {
+    AIM_PENALTY_VALUE.store(
+        BASE_AIM_PENALTY
+            .get()
+            .map(|convar| convar.get_value_i32())?,
+        Ordering::Relaxed,
+    );
+
+    None
 }
 
 #[rrplug::sqfunction(VM = "Server", ExportName = "BotSetTitan")]

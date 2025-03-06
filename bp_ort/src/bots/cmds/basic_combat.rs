@@ -5,11 +5,11 @@ use rand::{thread_rng, Rng};
 use rrplug::{
     bindings::class_types::cplayer::CPlayer, high::UnsafeHandle, prelude::EngineToken, prelude::*,
 };
-use std::cell::UnsafeCell;
+use std::{cell::UnsafeCell, sync::atomic::Ordering};
 
 use crate::{
     bindings::{Action, CUserCmd},
-    bots::{cmds_helper::CUserCmdHelper, cmds_utils::*, BotData},
+    bots::{cmds_helper::CUserCmdHelper, cmds_utils::*, BotData, AIM_PENALTY_VALUE},
     utils::{get_ents_by_class_name, get_net_var},
 };
 
@@ -288,7 +288,7 @@ pub(crate) fn basic_combat(
             let angles = {
                 let length = { get_velocity_length(helper, target_player, v) };
 
-                if length > 100. && !enemy_is_titan {
+                if length > AIM_PENALTY_VALUE.load(Ordering::Relaxed) as f32 && !enemy_is_titan {
                     let mut rng = thread_rng();
                     let error_amount = (length + 50.).sqrt() / 7f32;
 
