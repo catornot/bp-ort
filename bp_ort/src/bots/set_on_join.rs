@@ -20,7 +20,7 @@ pub unsafe fn set_stuff_on_join(client: &mut CClient) {
     if *client.fake_player.get_inner() {
         set_c_char_array(
             &mut client.clan_tag,
-            &crate::PLUGIN.wait().bots.clang_tag.lock().expect("how"),
+            &crate::PLUGIN.wait().bots.clang_tag.lock(),
         );
 
         log::info!("set the clan tag for {} bot", name);

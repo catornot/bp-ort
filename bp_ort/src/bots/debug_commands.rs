@@ -5,7 +5,7 @@ use rrplug::{
 };
 use std::ffi::CStr;
 
-use crate::utils::{get_ents_by_class_name, lookup_ent};
+use crate::utils::{get_ents_by_class_name, get_weaponx_name, lookup_ent};
 use crate::{
     bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
     // bots::navmesh::get_path,
@@ -66,6 +66,16 @@ pub fn register_debug_concommands(engine: &EngineData, token: EngineToken) {
             token,
         )
         .expect("couldn't register concommand bot_find_ents_by_class");
+
+    engine
+        .register_concommand(
+            "bot_get_weapon_class",
+            bot_get_weapon_class,
+            "",
+            FCVAR_GAMEDLL as i32,
+            token,
+        )
+        .expect("couldn't register concommand bot_get_weapon_class");
 }
 
 #[rrplug::concommand]
@@ -97,9 +107,10 @@ pub fn bot_dump_players() {
         .filter_map(|ptr| unsafe { ptr.as_ref() })
     {
         log::info!(
-            "player at index {:?} on team {:?}",
+            "player at index {} on team {} {}",
             player.pl.index,
             player.m_iTeamNum,
+            player.m_boostMeter,
         );
     }
 }
@@ -196,6 +207,23 @@ pub fn bot_find_ents_by_class(command: CCommandResult) -> Option<()> {
             .get_origin(&mut v)
     })
     .for_each(|pos| log::info!("found ent at {pos:?}"));
+
+    None
+}
+
+#[rrplug::concommand]
+pub fn bot_get_weapon_class(command: CCommandResult) -> Option<()> {
+    let server = SERVER_FUNCTIONS.wait();
+    let engine = ENGINE_FUNCTIONS.wait();
+    let player = crate::admin_abuse::admin_check(&command, engine, server).1?;
+    let ent = lookup_ent(player.m_inventory.activeWeapon, server)?;
+    let name = ent.m_iClassname as usize as *const i8;
+    if !name.is_null() && ent.m_iClassname != 0xffff && ent.m_iClassname != 0xff {
+        log::info!("weapon name {}", unsafe {
+            rrplug::mid::utils::from_char_ptr(name)
+        });
+        log::info!("weapon name {}", get_weaponx_name(ent, server, engine)?);
+    }
 
     None
 }

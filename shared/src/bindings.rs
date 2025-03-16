@@ -2,6 +2,7 @@ use rrplug::{
     bindings::{
         class_types::{
             c_player::C_Player, cbaseentity::CBaseEntity, client::CClient, cplayer::CPlayer,
+            globalvars::CGlobalVars,
         },
         cvar::{
             command::{CCommand, ConCommand, FnCommandCallback_t},
@@ -142,33 +143,6 @@ pub enum Action {
     Ping = 0x40000000,
 }
 
-#[allow(non_snake_case, dead_code)]
-#[repr(C)]
-pub struct CGlobalVars {
-    pub m_nUnkTime: f32,
-    pub realTime: f32,
-    pub frameCount: i32,
-    pub absoluteFrameTime: f32,
-    pub curTime: f32,
-    pub m_flCurTimeUnknown0: f32,
-    pub m_flCurTimeUnknown1: f32,
-    pub m_flCurTimeUnknown2: f32,
-    pub lastFrameTimeSincePause: f32,
-    pub m_flCurTimeUnknown3: f32,
-    pub exactCurTime: f32,
-    pub m_flUnknown4: f32,
-    pub frameTime: f32,
-    pub maxPlayers: i32,
-    pub maxClients: i32,
-    pub gameMode: i32,
-    pub tickCount: u32,
-    pub tickInterval: f32,
-    pub m_nUnk1: i32,
-    pub m_bClient: bool,
-    pub m_nTimestampNetworkingBase: i32,
-    pub m_nTimestampRandomizeWindow: i32,
-}
-
 #[derive(Debug, Clone)]
 #[repr(C)]
 #[allow(dead_code)]
@@ -297,6 +271,21 @@ pub struct CEntInfo {
     gap: [c_char; 28],
 }
 
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct INetworkStringTable {
+    pub destroctor: extern "C" fn(*const Self),
+    pub unk1: extern "C" fn(),
+    pub unk2: extern "C" fn(),
+    pub unk3: extern "C" fn(),
+    pub unk4: extern "C" fn(),
+    pub unk5: extern "C" fn(),
+    pub unk6: extern "C" fn(),
+    pub unk7: extern "C" fn(),
+    pub unk8: extern "C" fn(),
+    pub get_string: extern "C" fn(*const Self, i32) -> *const c_char,
+}
+
 // struct IServerGameEnts {}
 
 // a really interesting function : FUN_00101370
@@ -316,6 +305,7 @@ offset_functions! {
         globals = *mut CGlobalVars where offset(0x7C6F70);
         render_line = unsafe extern "C" fn(*const Vector3, *const Vector3, Color, bool) where offset(0x192A70);
         cgame_client_printf = unsafe extern "C" fn(client: *const CClient, msg: *const c_char) where offset(0x1016A0);
+        cnetwork_string_table_vtable = *const INetworkStringTable where offset(0x60FAE8);
 
         props_and_world_filter = *const fn() where offset(0x5eb980);
         hit_all_filter = *const fn() where offset(0x5fc520);
@@ -390,6 +380,7 @@ offset_functions! {
         set_weapon_by_slot = unsafe extern "C" fn(*const c_void, *const c_char) where offset(0xe4ba0);
         replace_weapon = unsafe extern "C" fn(*const CPlayer, *const c_char, *const c_void, *const c_void) where offset(0xdbae0);
         get_active_weapon = unsafe extern "C" fn(*const CPlayer) -> *const CBaseEntity where offset(0xea4c0);
+        weapon_names_string_table = *const c_void where offset(0xbfbcf0);
 
         util_trace_line = unsafe extern "C" fn(*const Vector3, *const Vector3, c_char, c_char, i32, i32, i32, *mut TraceResults )  where offset(0x2725c0);
         ctraceengine = *const *const *const fn() where offset(0xbfbdc8);

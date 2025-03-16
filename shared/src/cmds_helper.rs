@@ -1,6 +1,6 @@
-use rrplug::prelude::*;
+use rrplug::{bindings::class_types::globalvars::CGlobalVars, prelude::*};
 
-use crate::bindings::{CGlobalVars, CUserCmd, EngineFunctions, ServerFunctions};
+use crate::bindings::{CUserCmd, EngineFunctions, ServerFunctions};
 
 #[derive(Clone)]
 pub struct CUserCmdHelper<'a> {

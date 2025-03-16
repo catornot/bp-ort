@@ -349,22 +349,22 @@ pub(crate) fn basic_combat(
             (false, false) => cmd.weaponselect = 0, // switch to default,
         }
 
-        if is_titan {
+        if is_titan && should_shoot {
             use crate::bots::TitanClass as TC;
             cmd.buttons |= match (local_data.counter, local_data.titan) {
-                (_, TC::Scorch) if distance(origin, target) <= 900. => Action::OffHand0 as u32,
-                (0, TC::Scorch) => 0,
-                (1, TC::Ronin | TC::Ion) => 0,
-                (2, TC::Legion) => 0,
-                (0, _) => Action::OffHand0 as u32,
-                (1, _) => Action::OffHand1 as u32,
-                (2, _) => Action::OffHand2 as u32,
-                (3, _) => Action::OffHand3 as u32,
-                (4, _) if should_shoot => {
+                (_, TC::Scorch) if distance(origin, target) <= 200. => Action::OffHand0 as u32,
+                (0..60, TC::Scorch) => 0,
+                (60..120, TC::Ronin | TC::Ion) => 0,
+                (120..180, TC::Legion) => 0,
+                (0..60, _) => Action::OffHand0 as u32,
+                (60..120, _) => Action::OffHand1 as u32,
+                (120..180, _) => Action::OffHand2 as u32,
+                (180..240, _) => Action::OffHand3 as u32,
+                (240..300, _) if should_shoot => {
                     local_data.counter = 0;
                     Action::OffHand4 as u32 // core
                 }
-                _ => {
+                (240.., _) => {
                     local_data.counter = 0;
                     0
                 }

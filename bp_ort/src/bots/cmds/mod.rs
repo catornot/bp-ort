@@ -1,9 +1,4 @@
-use rrplug::{
-    bindings::class_types::cplayer::CPlayer,
-    high::{squirrel::call_sq_function, UnsafeHandle},
-    mid::squirrel::SQVM_SERVER,
-    prelude::*,
-};
+use rrplug::{bindings::class_types::cplayer::CPlayer, prelude::*};
 
 use crate::{
     bindings::{Action, CUserCmd},
@@ -16,6 +11,10 @@ mod basic_combat;
 mod battery_yoinker;
 mod hardpoint;
 mod slide_hopper;
+
+pub fn reset_on_new_game() {
+    hardpoint::reset_hardpoint(None, None);
+}
 
 pub(super) fn get_cmd(
     player: &mut CPlayer,
@@ -57,19 +56,7 @@ pub(super) fn get_cmd(
             if let Some(query) = local_data.nav_query.as_mut() {
                 query.path_points.clear()
             }
-
-            let sqvm = SQVM_SERVER
-                .get(unsafe { EngineToken::new_unchecked() })
-                .borrow();
-            if let Some(sqvm) = sqvm.as_ref() {
-                call_sq_function::<(), _>(
-                    *sqvm,
-                    SQFUNCTIONS.server.wait(),
-                    "CodeCallBack_Test",
-                    unsafe { UnsafeHandle::new(&*player) },
-                )
-                .unwrap_or_default();
-            }
+            hardpoint::reset_hardpoint(Some(player), Some(local_data));
 
             CUserCmd::new_empty(&helper)
         }

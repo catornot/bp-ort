@@ -1,4 +1,5 @@
 #![deny(clippy::unwrap_used, clippy::expect_used)]
+use rand::Rng;
 use rrplug::prelude::*;
 use std::mem::MaybeUninit;
 use thiserror::Error;
@@ -238,25 +239,37 @@ impl Navigation {
         self.path_points.pop()
     }
 
-    // TODO: actually return a none on failure
     pub fn random_point_around(&mut self, point: Vector3, radius: f32) -> Option<Vector3> {
+        const MAX_RANDOM_POINTS: usize = 65; // the game uses this amount
         let funcs = RECAST_DETOUR.wait();
 
-        unsafe {
-            let mut out_pos_buffer = Vector3::ZERO;
+        let len = MAX_RANDOM_POINTS.min(self.straigth_path_points.capacity());
+        if dbg!(unsafe {
             (funcs.dtFreeNavMeshQuery_findRandomPointsAroundCircle)(
                 &mut self.query,
                 &point,
-                radius,
+                50f32.min(radius),
                 radius,
                 &self.filter,
                 funcs.some_non_function_function,
                 funcs.dtfrand,
-                1,
-                &mut out_pos_buffer,
-            );
-
-            Some(out_pos_buffer)
+                // straigth_path_points is only used as tmp storage so this won't break anything
+                len as u32,
+                self.straigth_path_points.as_mut_ptr(),
+            )
+        }) == 0x40000000
+        {
+            // SAFETY: the function should have filled every point
+            unsafe {
+                self.straigth_path_points.set_len(len);
+            }
+            self.straigth_path_points
+                .get(dbg!(
+                    rand::thread_rng().gen_range(0..self.straigth_path_points.len())
+                ))
+                .copied()
+        } else {
+            None
         }
     }
 }

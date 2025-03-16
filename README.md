@@ -117,7 +117,7 @@ the cvar `bot_uwufy` controls if connecting players will get their name uwufied 
 # BotExtras
 this a optinal but recommend to have script mod for this plugin. it adds extra features on top of the plugin that are simply easier to implement in scripts.
 
-it adds mod setting integration for bp_ort
+it adds mod settings integration for bp_ort
 
 ## exposed functions
 - `void function SpawnNBots(int n, string name = "")`

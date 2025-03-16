@@ -1,5 +1,6 @@
 use chrono::Datelike;
 use once_cell::sync::Lazy;
+use parking_lot::Mutex;
 use rand::Rng;
 use rrplug::{
     bindings::{
@@ -17,10 +18,7 @@ use std::{
     cell::RefCell,
     ffi::CStr,
     ops::Not,
-    sync::{
-        atomic::{AtomicI32, Ordering},
-        Mutex,
-    },
+    sync::atomic::{AtomicI32, Ordering},
 };
 
 use crate::{
@@ -100,6 +98,8 @@ pub(super) struct BotData {
     approach_range: Option<f32>,
     spread: [Vector3; 20],
     spread_offset: usize,
+    patrol_target: Option<Vector3>,
+    last_moved_from_cap: f32,
 }
 
 #[derive(Debug)]
@@ -119,6 +119,7 @@ impl Default for BotShared {
 pub struct Bots {
     pub clang_tag: Mutex<String>,
     pub generic_bot_names: Mutex<Vec<String>>,
+    pub next_bot_names: Mutex<Vec<String>>,
 }
 
 impl Plugin for Bots {
@@ -191,6 +192,7 @@ impl Plugin for Bots {
 
         Self {
             clang_tag: Mutex::new("BOT".into()),
+            next_bot_names: Mutex::new(bot_names.clone()),
             generic_bot_names: Mutex::new(bot_names),
         }
     }
@@ -200,6 +202,8 @@ impl Plugin for Bots {
             ScriptContext::SERVER => {}
             _ => return,
         }
+
+        cmds::reset_on_new_game();
 
         SHARED_BOT_DATA.get(token).replace(BotShared::default());
 
@@ -385,21 +389,34 @@ fn spawn_fake_player(
     Some(edict as i32)
 }
 
+fn get_bot_name() -> String {
+    let mut next_names = PLUGIN.wait().bots.next_bot_names.lock();
+    let bot_names = PLUGIN.wait().bots.generic_bot_names.lock();
+    let mut rng = rand::thread_rng();
+
+    match next_names
+        .is_empty()
+        .not()
+        .then(|| rng.gen_range(0..next_names.len()))
+        .map(|i| next_names.swap_remove(i))
+    {
+        Some(name) => name,
+        None => {
+            next_names.extend_from_slice(bot_names.as_slice());
+            next_names.pop().unwrap_or_else(|| "error".to_lowercase())
+        }
+    }
+}
+
 #[rrplug::concommand]
 fn spawn_fake_player_command(command: CCommandResult) {
-    let plugin = PLUGIN.wait();
     let engine_funcs = ENGINE_FUNCTIONS.wait();
-    let mut rng = rand::thread_rng();
-    let names = &plugin.bots.generic_bot_names.lock().expect("how");
 
     let name = command
         .get_args()
         .first()
-        .unwrap_or_else(|| {
-            names
-                .get(rng.gen_range(0..names.len()))
-                .unwrap_or(&names[0])
-        })
+        .cloned()
+        .unwrap_or_else(get_bot_name)
         .to_owned();
     let team = command
         .get_args()
@@ -487,7 +504,7 @@ fn clang_tag_changed() {
         Err(err) => return err.log(),
     };
 
-    let mut clan_tag = PLUGIN.wait().bots.clang_tag.lock().expect("how");
+    let mut clan_tag = PLUGIN.wait().bots.clang_tag.lock();
     *clan_tag = new_clan_tag;
 }
 #[rrplug::convar]
@@ -573,23 +590,8 @@ fn bot_set_sim_type(bot: Option<&mut CPlayer>, sim_type: i32) -> Option<()> {
 
 #[rrplug::sqfunction(VM = "Server", ExportName = "BotSpawn")]
 fn bot_spawn(bot_name: String) -> Option<i32> {
-    let mut rng = rand::thread_rng();
-    let names = &PLUGIN.wait().bots.generic_bot_names.lock().expect("how");
-
-    let name = bot_name
-        .is_empty()
-        .not()
-        .then_some(bot_name)
-        .to_owned()
-        .unwrap_or_else(|| {
-            names
-                .get(rng.gen_range(0..names.len()))
-                .cloned()
-                .unwrap_or_else(|| "bot".to_string())
-        });
-
     spawn_fake_player(
-        name,
+        bot_name.is_empty().then(get_bot_name).unwrap_or(bot_name),
         choose_team(),
         None,
         SERVER_FUNCTIONS.wait(),
@@ -600,7 +602,7 @@ fn bot_spawn(bot_name: String) -> Option<i32> {
 
 #[rrplug::sqfunction(VM = "Server", ExportName = "AddBotName")]
 fn add_bot_name(name: String) {
-    let mut names = PLUGIN.wait().bots.generic_bot_names.lock().expect("how");
+    let mut names = PLUGIN.wait().bots.generic_bot_names.lock();
     if !name.is_empty() {
         names.push(name);
     }
@@ -608,7 +610,7 @@ fn add_bot_name(name: String) {
 
 #[rrplug::sqfunction(VM = "Server", ExportName = "ClearBotNames")]
 fn clear_bot_names() {
-    let mut names = PLUGIN.wait().bots.generic_bot_names.lock().expect("how");
+    let mut names = PLUGIN.wait().bots.generic_bot_names.lock();
     names.clear();
 }
 

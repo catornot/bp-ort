@@ -11,6 +11,7 @@ void function Init_botSettings()
 	ModSettings_AddButton("Spawn a bot", SpawnBot)
 	ModSettings_AddSetting( "play_against_bots", "Play Against Bots", "bool" )
 	ModSettings_AddSetting( "auto_select_gamemode", "Auto select bot ai based on gamemode", "bool" )
+	ModSettings_AddSetting( "bot_aim_penalty_speed", "Speed required for bots to start having random aim offsets", "int" )
 	ModSettings_AddSetting( "bot_uwufy", "UwUify names", "bool" )
 }
 
