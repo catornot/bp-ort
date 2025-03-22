@@ -1,4 +1,5 @@
 use chrono::Datelike;
+use mid::utils::from_char_ptr;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use rand::Rng;
@@ -16,9 +17,8 @@ use rrplug::{
 };
 use std::{
     cell::RefCell,
-    ffi::CStr,
     ops::Not,
-    sync::atomic::{AtomicI32, Ordering},
+    sync::atomic::{AtomicI32, AtomicU32, Ordering},
 };
 
 use crate::{
@@ -53,9 +53,7 @@ pub static UWUFY_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
 
 pub static AIM_PENALTY_VALUE: AtomicI32 = AtomicI32::new(100);
 
-thread_local! {
-    pub static MAX_PLAYERS: RefCell<u32> = const { RefCell::new(64) };
-}
+thread_local! {}
 
 pub(super) static BOT_DATA_MAP: EngineGlobal<RefCell<Lazy<[BotData; 64]>>> =
     EngineGlobal::new(RefCell::new(Lazy::new(|| {
@@ -120,6 +118,8 @@ pub struct Bots {
     pub clang_tag: Mutex<String>,
     pub generic_bot_names: Mutex<Vec<String>>,
     pub next_bot_names: Mutex<Vec<String>>,
+    pub max_players: AtomicU32,
+    pub max_teams: AtomicU32,
 }
 
 impl Plugin for Bots {
@@ -194,6 +194,8 @@ impl Plugin for Bots {
             clang_tag: Mutex::new("BOT".into()),
             next_bot_names: Mutex::new(bot_names.clone()),
             generic_bot_names: Mutex::new(bot_names),
+            max_players: AtomicU32::new(32),
+            max_teams: AtomicU32::new(2),
         }
     }
 
@@ -208,7 +210,7 @@ impl Plugin for Bots {
         SHARED_BOT_DATA.get(token).replace(BotShared::default());
 
         let max_players: u32 = unsafe {
-            CStr::from_ptr((ENGINE_FUNCTIONS.wait().get_current_playlist_var)(
+            from_char_ptr((ENGINE_FUNCTIONS.wait().get_current_playlist_var)(
                 c"max_players"
                     .as_ptr()
                     .cast::<i8>()
@@ -216,7 +218,6 @@ impl Plugin for Bots {
                     .unwrap_or_else(|| &*c"err".as_ptr()),
                 false as i32,
             ))
-            .to_string_lossy()
         }
         .parse()
         .unwrap_or_else(|_| {
@@ -224,9 +225,27 @@ impl Plugin for Bots {
             32
         });
 
-        log::info!("MAX_PLAYERS is set to {max_players}");
+        let max_teams: u32 = unsafe {
+            from_char_ptr((ENGINE_FUNCTIONS.wait().get_current_playlist_var)(
+                c"max_teams"
+                    .as_ptr()
+                    .cast::<i8>()
+                    .as_ref()
+                    .unwrap_or_else(|| &*c"err".as_ptr()),
+                false as i32,
+            ))
+        }
+        .parse()
+        .unwrap_or_else(|_| {
+            log::warn!("max_teams is undefined; using default of 2");
+            2
+        });
 
-        MAX_PLAYERS.with(|i| *i.borrow_mut() = max_players);
+        log::info!("MAX_PLAYERS is set to {max_players}");
+        log::info!("MAX_TEAMS is set to {max_teams}");
+
+        self.max_players.store(max_players, Ordering::Release);
+        self.max_teams.store(max_players, Ordering::Release);
     }
 
     fn on_sqvm_destroyed(&self, handle: &CSquirrelVMHandle, _token: EngineToken) {
@@ -330,11 +349,12 @@ fn spawn_fake_player(
     engine_funcs: &EngineFunctions,
     token: EngineToken,
 ) -> Option<i32> {
+    let plugin = PLUGIN.wait();
     let engine_server = ENGINE_INTERFACES.wait().engine_server;
     let players = unsafe { iterate_c_array_sized::<_, 32>(engine_funcs.client_array.into()) }
         .filter(|c| unsafe { c.signon.get_inner() } >= &SignonState::CONNECTED)
         .count() as u32;
-    let max_players = MAX_PLAYERS.with(|i| *i.borrow());
+    let max_players = plugin.bots.max_players.load(Ordering::Acquire);
     if players >= max_players {
         log::warn!(
             "max players({}) reached({}) can't add more",
@@ -372,8 +392,14 @@ fn spawn_fake_player(
     unsafe { engine_server.LockNetworkStringTables(false) };
 
     log::info!(
-        "spawned a bot : {}",
-        unsafe { str_from_char_ptr(client.name.as_ptr()) }.unwrap_or("UNK")
+        "spawned a bot : {} with edict {edict} {}",
+        unsafe { str_from_char_ptr(client.name.as_ptr()) }.unwrap_or("UNK"),
+        unsafe {
+            from_char_ptr((server_funcs.get_entity_name)((server_funcs
+                .get_player_by_index)(
+                edict as i32 + 1
+            )))
+        }
     );
 
     *BOT_DATA_MAP
@@ -468,7 +494,7 @@ fn spawn_fake_player_completion(current: CurrentCommand, suggestions: CommandCom
     suggestions.commands_used()
 }
 
-fn choose_team() -> i32 {
+fn choose_team_normal() -> i32 {
     let server_functions = SERVER_FUNCTIONS.wait();
 
     let mut total_players = 0;
@@ -487,13 +513,46 @@ fn choose_team() -> i32 {
             })
             .filter(|team| *team == 2)
             .count();
-
     let team_3_count = total_players - team_2_count;
 
     if team_3_count < team_2_count {
         3
     } else {
         2
+    }
+}
+
+fn choose_team_ffa(max_teams: u32) -> i32 {
+    let server_functions = SERVER_FUNCTIONS.wait();
+    let teams = Vec::from_iter((0..=max_teams + 2).map(|_| 0));
+
+    (1..=PLUGIN.wait().bots.max_players.load(Ordering::Acquire) as i32)
+        .filter_map(|i| unsafe { (server_functions.get_player_by_index)(i).as_ref() })
+        .map(|player| player.m_iTeamNum as u32)
+        .fold(teams, |mut map, team| {
+            if let Some(team_slot) = map.get_mut(team as usize) {
+                *team_slot += 1;
+            } else {
+                map[0] += 1
+            }
+
+            map
+        })
+        .into_iter()
+        .enumerate()
+        .filter(|(team, _)| *team >= 2)
+        .reduce(|left, rigth| if left.1 < rigth.1 { left } else { rigth })
+        .map(|(team, _)| team as i32)
+        .unwrap_or(2)
+}
+
+fn choose_team() -> i32 {
+    let max_teams = PLUGIN.wait().bots.max_teams.load(Ordering::Acquire);
+
+    if max_teams > 2 {
+        choose_team_ffa(max_teams)
+    } else {
+        choose_team_normal()
     }
 }
 
@@ -522,15 +581,7 @@ fn aim_penalty_changed() -> Option<()> {
 #[rrplug::sqfunction(VM = "Server", ExportName = "BotSetTitan")]
 fn bot_set_titan(bot: Option<&mut CPlayer>, titan: String) -> Option<()> {
     let mut data_maps = BOT_DATA_MAP.get(engine_token).try_borrow_mut().ok()?;
-    let bot_data = data_maps.as_mut().get_mut(unsafe {
-        ENGINE_FUNCTIONS
-            .wait()
-            .client_array
-            .add((bot?.pl.index - 1) as usize)
-            .as_ref()?
-            .edict
-            .copy_inner() as usize
-    })?;
+    let bot_data = data_maps.as_mut().get_mut(bot?.pl.index as usize)?; // index and edict should be the same
 
     bot_data.titan = match titan.as_str().trim() {
         "titan_stryder_arc" | "titan_stryder_leadwall" | "titan_stryder_ronin_prime" => {
@@ -551,15 +602,7 @@ fn bot_set_titan(bot: Option<&mut CPlayer>, titan: String) -> Option<()> {
 #[rrplug::sqfunction(VM = "Server", ExportName = "BotSetTargetPos")]
 fn bot_set_target_pos(bot: Option<&mut CPlayer>, target: Vector3) -> Option<()> {
     let mut data_maps = BOT_DATA_MAP.get(engine_token).try_borrow_mut().ok()?;
-    let bot_data = data_maps.as_mut().get_mut(unsafe {
-        ENGINE_FUNCTIONS
-            .wait()
-            .client_array
-            .add((bot?.pl.index - 1) as usize)
-            .as_ref()?
-            .edict
-            .copy_inner() as usize
-    })?;
+    let bot_data = data_maps.as_mut().get_mut(bot?.pl.index as usize)?; // index and edict should be the same
 
     bot_data.target_pos = target;
 
@@ -569,15 +612,7 @@ fn bot_set_target_pos(bot: Option<&mut CPlayer>, target: Vector3) -> Option<()> 
 #[rrplug::sqfunction(VM = "Server", ExportName = "BotSetSimulationType")]
 fn bot_set_sim_type(bot: Option<&mut CPlayer>, sim_type: i32) -> Option<()> {
     let mut data_maps = BOT_DATA_MAP.get(engine_token).try_borrow_mut().ok()?;
-    let bot_data = data_maps.as_mut().get_mut(unsafe {
-        ENGINE_FUNCTIONS
-            .wait()
-            .client_array
-            .add((bot?.pl.index - 1) as usize)
-            .as_ref()?
-            .edict
-            .copy_inner() as usize
-    })?;
+    let bot_data = data_maps.as_mut().get_mut(bot?.pl.index as usize)?; // index and edict should be the same
 
     if sim_type >= 0 {
         bot_data.sim_type = Some(sim_type);

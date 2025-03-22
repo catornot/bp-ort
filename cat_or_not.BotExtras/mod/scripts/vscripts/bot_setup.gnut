@@ -128,7 +128,6 @@ void function DecideTeamBots( entity player ) {
 		SetTeam( player, TEAM_IMC )
 		
 		if ( GAMETYPE == CAPTURE_THE_FLAG ) {
-			return
 			switch ( file.botCount % 4 ) {
 				case 0:
 				case 1:

@@ -102,16 +102,43 @@ pub fn bot_find(command: CCommandResult) {
 
 #[rrplug::concommand]
 pub fn bot_dump_players() {
-    for player in (0..32)
-        .map(|i| unsafe { (SERVER_FUNCTIONS.wait().get_player_by_index)(i + 1) })
-        .filter_map(|ptr| unsafe { ptr.as_ref() })
+    let server_funcs = SERVER_FUNCTIONS.wait();
+    let engine_funcs = ENGINE_FUNCTIONS.wait();
+    for (player, client) in (0..32)
+        .map(|i| unsafe {
+            (
+                (server_funcs.get_player_by_index)(i + 1),
+                engine_funcs.client_array.add(i as usize),
+            )
+        })
+        .filter_map(|(player, client)| unsafe { Some((player.as_ref()?, client.as_ref()?)) })
     {
-        log::info!(
-            "player at index {} on team {} {}",
-            player.pl.index,
-            player.m_iTeamNum,
-            player.m_boostMeter,
-        );
+        if unsafe { client.fake_player.copy_inner() } {
+            let data = super::BOT_DATA_MAP.get(engine_token).try_borrow().ok();
+            log::info!(
+                "{}: {} on team {} with sim_type {} with titan {:?}",
+                unsafe { from_char_ptr((SERVER_FUNCTIONS.wait().get_entity_name)(player)) },
+                player.pl.index,
+                player.m_iTeamNum,
+                data.as_ref()
+                    .and_then(|data| data
+                        .get(unsafe { client.edict.copy_inner() as usize })?
+                        .sim_type)
+                    .unwrap_or(-1),
+                data.and_then(|data| Some(
+                    data.get(unsafe { client.edict.copy_inner() as usize })?
+                        .titan
+                ))
+                .unwrap_or_default(),
+            );
+        } else {
+            log::info!(
+                "{}: {} on team {}",
+                unsafe { from_char_ptr((SERVER_FUNCTIONS.wait().get_entity_name)(player)) },
+                player.pl.index,
+                player.m_iTeamNum,
+            );
+        }
     }
 }
 
