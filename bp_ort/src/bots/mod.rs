@@ -53,8 +53,6 @@ pub static UWUFY_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
 
 pub static AIM_PENALTY_VALUE: AtomicI32 = AtomicI32::new(100);
 
-thread_local! {}
-
 pub(super) static BOT_DATA_MAP: EngineGlobal<RefCell<Lazy<[BotData; 64]>>> =
     EngineGlobal::new(RefCell::new(Lazy::new(|| {
         std::array::from_fn(|_| BotData::default())
@@ -245,7 +243,7 @@ impl Plugin for Bots {
         log::info!("MAX_TEAMS is set to {max_teams}");
 
         self.max_players.store(max_players, Ordering::Release);
-        self.max_teams.store(max_players, Ordering::Release);
+        self.max_teams.store(max_teams, Ordering::Release);
     }
 
     fn on_sqvm_destroyed(&self, handle: &CSquirrelVMHandle, _token: EngineToken) {
