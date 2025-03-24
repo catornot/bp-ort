@@ -1,0 +1,13 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index 32d1d30..89f1661 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -2,7 +2,7 @@
+ resolver = "2"
+ 
+ members = [
+-    "bp_ort", "bspeater", "octbots", "ranim", "shared",
++    "bp_ort", "octbots", "ranim", "shared",
+ ]
+ 
+ [workspace.dependencies]

@@ -2,7 +2,7 @@
 resolver = "2"
 
 members = [
-    "bp_ort", "octbots", "ranim", "shared",
+    "bp_ort", "bspeater", "octbots", "ranim", "shared",
 ]
 
 [workspace.dependencies]

@@ -6,7 +6,7 @@
 }:
 let
 in
-rustPlatform.buildRustPackage {
+rustPlatform.buildRustPackage rec {
   name = "bp-ort";
 
   buildType = "debug";
@@ -30,10 +30,14 @@ rustPlatform.buildRustPackage {
     maintainers = [ "cat_or_not" ];
   };
 
-  cargoLock = {
+  # we need this since bspeater cannot be compiled for windows
+  patches = [
+    ./Cargo.toml.patch
+  ];
+
+  cargoDeps = rustPlatform.importCargoLock {
     lockFile = ./Cargo.lock;
     outputHashes = {
-      # "rrplug-4.1.0" = lib.fakeHash;
       "rrplug-4.1.0" = "sha256-4tfmFZifz8fL+Y8qCMm9vZRZnBrpGROe/6/tNNyrycQ=";
     };
   };

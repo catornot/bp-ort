@@ -36,7 +36,7 @@
           };
         };
       in
-      {
+      rec {
         formatter = native-pkgs.nixfmt-rfc-style;
         packages = {
           bp-ort = pkgs.callPackage ./default.nix {
@@ -44,9 +44,12 @@
           };
           packaged-mod = pkgs.callPackage ./packaged-mod.nix { bp-ort = self.packages.${system}.bp-ort; };
           default = self.packages.${system}.bp-ort;
+
+          default-shell = devShell.default;
+          run-shell = devShell.run;
         };
 
-        devShell = pkgs.mkShell rec {
+        devShell.default = pkgs.mkShell rec {
           nativeBuildInputs = with pkgs; [
             pkg-config
           ];
@@ -55,6 +58,23 @@
             windows.mingw_w64_headers
             windows.mcfgthreads
             windows.mingw_w64_pthreads
+          ];
+          LD_LIBRARY_PATH = nixpkgs.lib.makeLibraryPath buildInputs;
+          PATH = nixpkgs.lib.makeLibraryPath buildInputs;
+          WINEPATH = nixpkgs.lib.makeLibraryPath buildInputs;
+        };
+
+        devShell.run = pkgs.mkShell rec {
+          nativeBuildInputs = with native-pkgs; [
+            cmake
+            cmakeCurses
+            pkg-config
+            gcc
+          ];
+
+          buildInputs = with native-pkgs; [
+            libgcc
+            glibc.out
           ];
           LD_LIBRARY_PATH = nixpkgs.lib.makeLibraryPath buildInputs;
           PATH = nixpkgs.lib.makeLibraryPath buildInputs;
