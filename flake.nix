@@ -59,6 +59,7 @@
             windows.mcfgthreads
             windows.mingw_w64_pthreads
           ];
+
           LD_LIBRARY_PATH = nixpkgs.lib.makeLibraryPath buildInputs;
           PATH = nixpkgs.lib.makeLibraryPath buildInputs;
           WINEPATH = nixpkgs.lib.makeLibraryPath buildInputs;
@@ -66,10 +67,10 @@
 
         devShell.run = pkgs.mkShell rec {
           nativeBuildInputs = with native-pkgs; [
+            clang
             cmake
             cmakeCurses
             pkg-config
-            gcc
           ];
 
           buildInputs = with native-pkgs; [
@@ -79,6 +80,14 @@
           LD_LIBRARY_PATH = nixpkgs.lib.makeLibraryPath buildInputs;
           PATH = nixpkgs.lib.makeLibraryPath buildInputs;
           WINEPATH = nixpkgs.lib.makeLibraryPath buildInputs;
+
+          # adding the export worked!
+          shellHook = ''
+            echo "hi"
+            export CC=clang
+            export CXX=clang++
+            export CMAKE=${native-pkgs.cmake}/bin/cmake
+          '';
         };
 
         nix.settings = {
