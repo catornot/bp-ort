@@ -83,7 +83,6 @@
 
           # adding the export worked!
           shellHook = ''
-            echo "hi"
             export CC=clang
             export CXX=clang++
             export CMAKE=${native-pkgs.cmake}/bin/cmake
