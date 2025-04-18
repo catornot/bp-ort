@@ -19,7 +19,6 @@ use std::{
     mem::MaybeUninit,
 };
 
-pub type PServer = *const c_void;
 pub type BotName = *const c_char;
 pub type ServerGameClients = *const c_void;
 pub type PlayerByIndex = unsafe extern "C" fn(i32) -> *mut CPlayer;
@@ -35,7 +34,7 @@ pub type ProcessUsercmds = unsafe extern "C" fn(
     paused: c_uchar,
 );
 pub type CreateFakeClient = unsafe extern "C" fn(
-    PServer,
+    *const CServer,
     BotName,
     *const c_char,
     *const c_char,
@@ -286,6 +285,64 @@ pub struct INetworkStringTable {
     pub get_string: extern "C" fn(*const Self, i32) -> *const c_char,
 }
 
+#[repr(C)]
+#[allow(non_camel_case_types)]
+#[allow(dead_code)]
+pub enum server_state_t {
+    ss_dead = 0, // Dead
+    ss_loading,  // Spawning
+    ss_active,   // Running
+    ss_paused,   // Running, but paused
+}
+
+#[repr(C)]
+#[allow(non_snake_case)]
+// incomplete type
+pub struct CServer {
+    pub vtfable: *const c_void,
+    pub m_State: server_state_t,
+    pub m_Socket: i32,
+    pub m_nTickCount: i32,
+    pub m_bResetMaxTeams: bool,
+    pub m_szMapName: [c_char; 64],
+    pub m_szMapGroupName: [c_char; 64],
+    pub m_szPassword: [c_char; 32],
+    pub worldmapCRC: u32,
+    pub clientDllCRC: u32,
+    pub unkData: *mut c_void,
+    pub m_StringTables: *const c_void, /*CNetworkStringTableContainer*/
+    pub m_pInstanceBaselineTable: *const c_void, /*CNetworkStringTable*/
+    pub m_pLightStyleTable: *const c_void, /*CNetworkStringTable*/
+    pub m_pUserInfoTable: *const c_void, /*CNetworkStringTable*/
+    pub m_pServerQueryTable: *const c_void, /*CNetworkStringTable*/
+    pub m_bReplay: bool,
+    pub m_bUpdateFrame: bool,
+    pub m_bUseReputation: bool,
+    pub m_bSimulating: bool,
+    pub m_nPad: u32,
+    pub m_Signon: [c_char; 0x48], // this may be way off or not!
+    pub m_SignonBuffer: CUtlMemory<i8>,
+    pub m_nServerClasses: i32,
+    pub m_nServerClassBits: i32,
+    pub m_szConDetails: [c_char; 64],
+    pub m_szHostInfo: [c_char; 28],
+    pub pad: [c_char; 46],
+    pub m_Clients: [CClient; 32],
+}
+
+#[repr(C)]
+pub struct CUtlMemory<T: ?Sized> {
+    pub memory: *mut T,
+    pub allocation_count: usize,
+    pub grow_size: usize,
+}
+
+// illegal const usage for now
+// #[repr(C)]
+// struct CUtlMemoryFixed<const SIZE: usize, const nAlignment: usize = 0, T: ?Sized> {
+//     pub memory: [c_char; SIZE * std::mem::size_of::<T>() + nAlignment],
+// }
+
 // struct IServerGameEnts {}
 
 // a really interesting function : FUN_00101370
@@ -297,7 +354,7 @@ offset_functions! {
         host_client = *mut *mut CClient where offset(0x13158990);
         cmd_source = *const isize where offset(0x12A53F90); // when 1 host_client is invalid
         is_dedicated = *const bool where offset(0x13002498);
-        server = PServer where offset(0x12A53D40);
+        server = *mut CServer where offset(0x12A53D40);
         game_clients = ServerGameClients where offset(0x13F0AAA8);
         create_fake_client = CreateFakeClient where offset(0x114C60);
         cclient_disconnect = unsafe extern "C" fn(*mut CClient, u32, *const c_char) where offset(0x1012C0);
