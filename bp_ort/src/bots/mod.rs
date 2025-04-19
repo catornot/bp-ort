@@ -367,7 +367,7 @@ fn spawn_fake_player(
     let name = try_cstring(&name).unwrap_or_default();
     let bot = unsafe {
         (engine_funcs.create_fake_client)(
-            engine_funcs.server,
+            engine_funcs.server.cast_const(),
             name.as_ptr(),
             &'\0' as *const char as *const i8,
             &'\0' as *const char as *const i8,

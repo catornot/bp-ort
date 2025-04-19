@@ -480,9 +480,22 @@ dependencies = [
  "uuid",
 ]
 
-[[package]]
 name = "bevy_core_pipeline"
 version = "0.15.3"
+
+[[package]]
+name = "r2mole"
+version = "0.1.0"
+dependencies = [
+ "retour",
+ "rrplug",
+ "shared",
+ "windows-sys 0.48.0",
+]
+
+[[package]]
+name = "rand"
+version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee0ff0f4723f30a5a6578915dbfe0129f2befaec8438dde70ac1fb363aee01f5"
 dependencies = [

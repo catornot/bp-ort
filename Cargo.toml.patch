@@ -6,8 +6,8 @@ index 32d1d30..89f1661 100644
  resolver = "2"
  
  members = [
--    "bp_ort", "bspeater", "octbots", "ranim", "shared",
-+    "bp_ort", "octbots", "ranim", "shared",
+-    "bp_ort", "bspeater", "octbots", "r2mole", "ranim", "shared",
++    "bp_ort", "octbots", "r2mole", "ranim", "shared",
  ]
  
  [workspace.dependencies]
