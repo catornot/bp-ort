@@ -1,9 +1,13 @@
 #![allow(dead_code, unused)]
+use bevy::prelude::*;
 use std::{
     fs::File,
-    io::{self, Read, Seek},
+    io::{self, Read, Seek, SeekFrom, Write},
     process::Command,
 };
+
+trait SeekRead: Seek + Read {}
+impl<T: Seek + Read> SeekRead for T {}
 
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 enum LumpType {
@@ -137,27 +141,154 @@ enum LumpType {
     SHADOW_MESHES = 0x007F,
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct Lump {
-    fileofs: i32, // offset into file (bytes)
-    filelen: i32, // length of lump (bytes)
-    version: i32, // lump format version
-    four_cc: i32, // lump ident code}
+struct BSPHeader {
+    pub filemagic: [u8; 4],
+    pub version: i32,
+    pub map_revisions: i32,
+    pub _127: i32,
+    pub lumps: [Lump; 128],
 }
 
-fn read_i32(reader: &mut dyn Read) -> Result<i32, io::Error> {
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct Lump {
+    pub fileofs: i32, // offset into file (bytes)
+    pub filelen: i32, // length of lump (bytes)
+    pub version: i32, // lump format version
+    pub four_cc: i32, // lump ident code}
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct Brush {
+    pub origin: Vec3,
+    pub num_non_axial_no_discard: i32, // number of BrushSideProperties after the axial 6 w/ no DISCARD flag set
+    pub num_plane_offsets: i32,        // number of BrushSideX in this brush
+    pub index: i32, // index of this Brush; makes calculating BrushSideX indices easier
+    pub extents: Vec3,
+    pub brush_side_offset: i32, // alternatively, num_prior_non_axial
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct TricollHeader {
+    flags: i32,         // always 0?
+    texture_flags: i32, // copy of texture_data.flags
+    texture_data: i32,  // probably for surfaceproperties & decals
+    num_vertices: i32,  // Vertices indexed by TricollTriangles
+    num_triangles: i32, // number of TricollTriangles in this TricollHeader
+    // num_nodes is derived from the following formula
+    // 2 * (num_triangles - (num_triangles + 3) % 6 + 3) // 3
+    num_bevel_indices: i32,
+    first_vertex: i32, // index into Vertices, added as an offset to TricollTriangles
+    first_triangle: i32, // index into TricollTriangles;
+    first_node: i32,   // index into TricollNodes
+    first_bevel_index: i32, // index into TricollBevelIndices?
+    origin: Vec3,      // true origin is -(origin / scale)
+    scale: f32,        // 0.0 for patches
+}
+
+#[derive(Debug, Clone, Copy)]
+struct TricollModel {}
+
+fn read_i32(reader: &mut dyn SeekRead) -> Result<i32, io::Error> {
     let mut int = [0; size_of::<i32>()];
     reader.read_exact(&mut int)?;
     Ok(i32::from_le_bytes(int))
 }
 
-fn read_lump(reader: &mut dyn Read) -> Result<Lump, io::Error> {
+fn read_f32(reader: &mut dyn SeekRead) -> Result<f32, io::Error> {
+    let mut float = [0; size_of::<f32>()];
+    reader.read_exact(&mut float)?;
+    Ok(f32::from_le_bytes(float))
+}
+
+fn read_vec3(reader: &mut dyn SeekRead) -> Result<Vec3, io::Error> {
+    Ok(Vec3::new(
+        read_f32(reader)?,
+        read_f32(reader)?,
+        read_f32(reader)?,
+    ))
+}
+
+fn read_lump(reader: &mut dyn SeekRead) -> Result<Lump, io::Error> {
     Ok(Lump {
         fileofs: read_i32(reader)?,
         filelen: read_i32(reader)?,
         version: read_i32(reader)?,
         four_cc: read_i32(reader)?,
     })
+}
+
+fn read_bspheader(reader: &mut dyn SeekRead) -> Result<BSPHeader, io::Error> {
+    reader.seek(SeekFrom::Start(0))?;
+
+    let mut magic = [0; 4];
+    reader.read_exact(&mut magic)?;
+    let version = read_i32(reader)?;
+
+    assert_eq!(&magic, b"rBSP");
+    assert_eq!(version, 37);
+
+    Ok(BSPHeader {
+        filemagic: magic,
+        version,
+        map_revisions: read_i32(reader)?,
+        _127: read_i32(reader)?,
+        lumps: (0..128)
+            .map(|_| read_lump(reader))
+            .collect::<Result<Vec<_>, _>>()?
+            .try_into()
+            .map_err(|_| io::Error::new(io::ErrorKind::Other, "incorrect size for lumps how!"))?,
+    })
+}
+
+fn read_brush(reader: &mut dyn SeekRead) -> Result<Brush, io::Error> {
+    Ok(Brush {
+        origin: todo!(),
+        num_non_axial_no_discard: todo!(),
+        num_plane_offsets: todo!(),
+        index: todo!(),
+        extents: todo!(),
+        brush_side_offset: todo!(),
+    })
+}
+
+fn read_tricoll_headers(
+    reader: &mut dyn SeekRead,
+    header: &BSPHeader,
+) -> Result<Vec<TricollHeader>, io::Error> {
+    let lump = get_lump(header, LumpType::TRICOLL_HEADERS);
+    let size = std::mem::size_of::<TricollHeader>();
+
+    reader.seek(SeekFrom::Start(lump.fileofs as u64));
+
+    let mut buf = vec![0; lump.filelen as usize];
+
+    reader.read_exact(&mut buf)?;
+
+    dbg!(&buf);
+
+    let tricoll = unsafe {
+        Vec::<TricollHeader>::from_raw_parts(
+            buf.as_ptr().cast_mut().cast(),
+            buf.len() / size,
+            buf.capacity() / size,
+        )
+    };
+
+    std::mem::forget(buf);
+
+    Ok(tricoll)
+}
+fn read_tricoll_model(reader: &mut dyn SeekRead) -> Result<TricollModel, io::Error> {
+    Ok(TricollModel {})
+}
+
+fn get_lump(header: &BSPHeader, lump: LumpType) -> &Lump {
+    &header.lumps[lump as usize]
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -177,25 +308,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut bsp = File::open(format!("{}/maps/mp_lf_uma.bsp", UNPACK))?;
 
-    let mut file_magic = [0; 4];
-    bsp.read_exact(&mut file_magic)?;
+    let header = read_bspheader(&mut bsp)?;
 
-    assert_eq!(&file_magic, b"rBSP");
+    println!("header {:#?}", header);
 
-    // bsp version
-    let mut version = [0; 4];
-    bsp.read_exact(&mut version)?;
-    assert_eq!(version, 37i32.to_le_bytes());
-
-    dbg!(read_lump(&mut bsp)?);
-
-    bsp.seek(io::SeekFrom::Start(
-        (size_of::<i32>() * 2) as u64 + size_of::<Lump>() as u64 * LumpType::CM_BRUSHES as u64,
-    ))?;
-
-    dbg!(read_lump(&mut bsp)?);
-
-    dbg!(read_i32(&mut bsp)?);
+    println!("tricol {:#?}", read_tricoll_headers(&mut bsp, &header)?);
 
     Ok(())
 }
