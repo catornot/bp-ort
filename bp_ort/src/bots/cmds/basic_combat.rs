@@ -3,14 +3,16 @@ use high::squirrel::call_sq_function;
 use mid::squirrel::SQVM_SERVER;
 use rand::{thread_rng, Rng};
 use rrplug::{
-    bindings::class_types::cplayer::CPlayer, high::UnsafeHandle, prelude::EngineToken, prelude::*,
+    bindings::class_types::{cbaseentity::CBaseEntity, cplayer::CPlayer, cweaponx::CWeaponX},
+    high::UnsafeHandle,
+    prelude::{EngineToken, *},
 };
 use std::{cell::UnsafeCell, sync::atomic::Ordering};
 
 use crate::{
     bindings::{Action, CUserCmd},
     bots::{cmds_helper::CUserCmdHelper, cmds_utils::*, BotData, AIM_PENALTY_VALUE},
-    utils::{get_ents_by_class_name, get_net_var},
+    utils::{get_ents_by_class_name, get_net_var, get_weaponx_name, lookup_ent},
 };
 
 use super::BotShared;
@@ -232,6 +234,39 @@ pub(crate) fn basic_combat(
         _ => {}
     }
 
+    cmd.buttons |=
+        if matches!(target, Some((_, true))) && unsafe { !(helper.sv_funcs.is_titan)(player) } {
+            // pilot abilities TODO: check for cooldown
+            match lookup_ent(player.m_inventory.offhandWeapons[1], helper.sv_funcs)
+                .and_then(|ent| get_weaponx_name(ent, helper.sv_funcs, helper.engine_funcs))
+                .unwrap_or_default()
+            {
+                "mp_weapon_grenade_sonar" => Action::OffHand1 as u32,
+                "mp_ability_cloak" => Action::OffHand1 as u32,
+                "mp_ability_grapple" => 0,
+                "mp_ability_heal" if player.m_iHealth < 50 => Action::OffHand1 as u32,
+                "mp_ability_shifter" if player.m_iHealth < 50 => Action::OffHand1 as u32,
+                "mp_ability_holopilot" if player.m_iHealth < 50 => Action::OffHand1 as u32,
+                _ => 0,
+            }
+            .saturating_mul((time(helper) as u32 % 25 < 10) as u32)
+                // pilot nades TODO: check for cooldown
+                | match lookup_ent(player.m_inventory.offhandWeapons[0], helper.sv_funcs)
+                    .and_then(|ent| get_weaponx_name(ent, helper.sv_funcs, helper.engine_funcs))
+                    .unwrap_or_default()
+                {
+                    "mp_ability_shifter" if player.m_iHealth < 50 => Action::OffHand0 as u32,
+                    "mp_weapon_grenade_sonar" => Action::OffHand0 as u32,
+                    "mp_weapon_grenade_gravity" => Action::OffHand0 as u32,
+                    "mp_weapon_thermite_grenade" => Action::OffHand0 as u32,
+                    "mp_weapon_grenade_emp" => Action::OffHand0 as u32,
+                    _ => 0,
+                }
+                .saturating_mul((time(helper) as u32 % 25 < 3) as u32)
+        } else {
+            0
+        };
+
     if let Some(((target, target_player), should_shoot)) = target {
         if let Some(target) = shared
             .reserved_targets
@@ -241,9 +276,31 @@ pub(crate) fn basic_combat(
             *target = (time(helper), player.pl.index as u32);
         }
 
+        let active_weapon = lookup_ent(player.m_inventory.activeWeapon, helper.sv_funcs)
+            .and_then::<&CWeaponX, _>(|weapon| weapon.dynamic_cast());
+
+        // 0x2c is the offset to weather the weapon can charge or not
+        let (should_charge, charge_weapon) = active_weapon
+            .map(|weapon| {
+                (weapon, unsafe {
+                    *weapon.weaponVars.as_ptr().byte_offset(0x2c).cast::<f32>() != 0.
+                })
+            })
+            .map::<(&CBaseEntity, bool), _>(|x| (x.0, x.1))
+            .map(|(weapon, is_charge)| unsafe {
+                let charge = dbg!((helper.sv_funcs.get_weapon_charge_fraction)(weapon));
+                (
+                    is_charge
+                        && charge < 1.
+                        && !(charge == 0. && helper.globals.frameCount / 2 % 4 != 0),
+                    is_charge,
+                )
+            })
+            .unwrap_or_default();
+
         cmd.buttons |= if should_shoot && is_timedout(local_data.last_shot, helper, 0.8) {
             Action::Zoom as u32
-                | (helper.globals.frameCount / 2 % 4 != 0)
+                | dbg!((!charge_weapon && helper.globals.frameCount / 2 % 4 != 0) || should_charge)
                     .then_some(Action::Attack as u32)
                     .unwrap_or_default()
         } else if should_shoot {
@@ -351,6 +408,19 @@ pub(crate) fn basic_combat(
 
         if is_titan && should_shoot {
             use crate::bots::TitanClass as TC;
+
+            if let TC::Northstar = local_data.titan {
+                if !should_charge {
+                    cmd.buttons |= Action::Zoom as u32;
+                    cmd.buttons |= Action::Attack as u32;
+                    cmd.buttons &=
+                        !(Action::Attack as u32) * (helper.globals.frameCount % 10 < 3) as u32;
+                } else {
+                    cmd.buttons |= Action::Zoom as u32;
+                    cmd.buttons &= !(Action::Attack as u32);
+                }
+            }
+
             cmd.buttons |= match (local_data.counter, local_data.titan) {
                 (_, TC::Scorch) if distance(origin, target) <= 200. => Action::OffHand0 as u32,
                 (0..60, TC::Scorch) => 0,
@@ -375,6 +445,22 @@ pub(crate) fn basic_combat(
         cmd.buttons |= Action::Reload as u32;
 
         cmd.world_view_angles.x = 0.;
+    }
+
+    let actions = [
+        Action::OffHand0,
+        Action::OffHand1,
+        Action::OffHand2,
+        Action::OffHand3,
+        Action::OffHand4,
+        Action::OffhandQuick,
+    ];
+    if actions
+        .into_iter()
+        .map(|action| action as u32)
+        .any(|action| cmd.buttons & action != 0)
+    {
+        cmd.buttons &= !(Action::Attack as u32);
     }
 
     if is_timedout(local_data.next_check, helper, 10f32)
@@ -525,7 +611,7 @@ fn try_refresh_ctf(helper: &CUserCmdHelper) -> EngineToken {
                 ent.as_ref().unwrap_unchecked().m_iTeamNum,
                 (helper.sv_funcs.get_parent)(ent.cast_const())
                     .as_ref()
-                    .and_then(|parent| parent.up_cast())
+                    .and_then::<&CPlayer, _>(|parent| parent.dynamic_cast())
                     .map(|parent| parent.pl.index as u32)
                     .unwrap_or(u32::MAX),
             )

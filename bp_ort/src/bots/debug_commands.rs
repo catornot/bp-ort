@@ -5,7 +5,10 @@ use rrplug::{
 };
 use std::ffi::CStr;
 
-use crate::utils::{get_ents_by_class_name, get_weaponx_name, lookup_ent};
+use crate::{
+    admin_abuse::execute_for_matches,
+    utils::{get_ents_by_class_name, get_weaponx_name, lookup_ent},
+};
 use crate::{
     bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
     // bots::navmesh::get_path,
@@ -72,6 +75,16 @@ pub fn register_debug_concommands(engine: &EngineData, token: EngineToken) {
             "bot_get_weapon_class",
             bot_get_weapon_class,
             "",
+            FCVAR_GAMEDLL as i32,
+            token,
+        )
+        .expect("couldn't register concommand bot_get_weapon_class");
+
+    engine
+        .register_concommand(
+            "bot_run_cmd",
+            bot_run_cmd,
+            "runs a client command on the bot",
             FCVAR_GAMEDLL as i32,
             token,
         )
@@ -242,14 +255,69 @@ pub fn bot_find_ents_by_class(command: CCommandResult) -> Option<()> {
 pub fn bot_get_weapon_class(command: CCommandResult) -> Option<()> {
     let server = SERVER_FUNCTIONS.wait();
     let engine = ENGINE_FUNCTIONS.wait();
+
     let player = crate::admin_abuse::admin_check(&command, engine, server).1?;
-    let ent = lookup_ent(player.m_inventory.activeWeapon, server)?;
+
+    let weapon_id = match command
+        .get_arg(0)
+        .and_then(|index| index.parse::<usize>().ok())
+        .unwrap_or(usize::MAX)
+    {
+        index if matches!(index, 0..4) => player.m_inventory.weapons[index],
+        index if matches!(index, 4..6) => player.m_inventory.offhandWeapons[index - 4],
+        _ => player.m_inventory.activeWeapon,
+    };
+
+    let ent = lookup_ent(weapon_id, server)?;
     let name = ent.m_iClassname as usize as *const i8;
     if !name.is_null() && ent.m_iClassname != 0xffff && ent.m_iClassname != 0xff {
         log::info!("weapon name {}", unsafe {
             rrplug::mid::utils::from_char_ptr(name)
         });
         log::info!("weapon name {}", get_weaponx_name(ent, server, engine)?);
+    }
+
+    None
+}
+
+#[rrplug::concommand]
+pub fn bot_run_cmd(command: CCommandResult) -> Option<()> {
+    let server = SERVER_FUNCTIONS.wait();
+    let engine = ENGINE_FUNCTIONS.wait();
+
+    let sqvm = mid::squirrel::SQVM_SERVER
+        .get(unsafe { EngineToken::new_unchecked() })
+        .borrow();
+    let sqvm = sqvm.as_ref()?;
+
+    let commmand_arg = command.get_arg(1)?;
+    let mut args = vec![commmand_arg.to_owned()];
+    args.extend_from_slice(command.get_args().get(2..).unwrap_or_default());
+
+    let exec = |player: &mut rrplug::bindings::class_types::cplayer::CPlayer| {
+        log::info!(
+            "running {commmand_arg} for {} with {:?}",
+            unsafe { from_char_ptr((server.get_entity_name)(player)) },
+            command.get_args().get(2..).unwrap_or_default()
+        );
+
+        high::squirrel::call_sq_function::<(), _>(
+            *sqvm,
+            SQFUNCTIONS.server.wait(),
+            "CodeCallback_ClientCommand",
+            (unsafe { high::UnsafeHandle::new(&*player) }, args.clone()),
+        )
+        .unwrap_or_default()
+    };
+
+    match command
+        .get_arg(0)?
+        .parse::<usize>()
+        .ok()
+        .and_then(|i| unsafe { (server.get_player_by_index)(i as i32).as_mut() })
+    {
+        None => execute_for_matches(Some(command.get_arg(0)?), exec, false, server, engine),
+        Some(player) => exec(player),
     }
 
     None

@@ -438,6 +438,8 @@ offset_functions! {
         replace_weapon = unsafe extern "C" fn(*const CPlayer, *const c_char, *const c_void, *const c_void) where offset(0xdbae0);
         get_active_weapon = unsafe extern "C" fn(*const CPlayer) -> *const CBaseEntity where offset(0xea4c0);
         weapon_names_string_table = *const c_void where offset(0xbfbcf0);
+        get_weapon_type = unsafe extern "C" fn(*const CBaseEntity) -> u32 where offset(0xf0cd0);
+        get_weapon_charge_fraction = unsafe extern "C" fn(*const CBaseEntity) -> f32 where offset(0x68ea20);
 
         util_trace_line = unsafe extern "C" fn(*const Vector3, *const Vector3, c_char, c_char, i32, i32, i32, *mut TraceResults )  where offset(0x2725c0);
         ctraceengine = *const *const *const fn() where offset(0xbfbdc8);
