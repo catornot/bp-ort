@@ -54,6 +54,7 @@ pub(crate) fn basic_combat(
     let v = &mut v;
     let origin = unsafe { *player.get_origin(v) };
     let team = player.m_iTeamNum;
+    let is_titan = unsafe { (helper.sv_funcs.is_titan)(player) };
 
     let target = unsafe {
         find_player_in_view(
@@ -234,10 +235,9 @@ pub(crate) fn basic_combat(
         _ => {}
     }
 
-    cmd.buttons |=
-        if matches!(target, Some((_, true))) && unsafe { !(helper.sv_funcs.is_titan)(player) } {
-            // pilot abilities TODO: check for cooldown
-            match lookup_ent(player.m_inventory.offhandWeapons[1], helper.sv_funcs)
+    cmd.buttons |= if matches!(target, Some((_, true))) && !is_titan {
+        // pilot abilities TODO: check for cooldown
+        match lookup_ent(player.m_inventory.offhandWeapons[1], helper.sv_funcs)
                 .and_then(|ent| get_weaponx_name(ent, helper.sv_funcs, helper.engine_funcs))
                 .unwrap_or_default()
             {
@@ -263,9 +263,9 @@ pub(crate) fn basic_combat(
                     _ => 0,
                 }
                 .saturating_mul((time(helper) as u32 % 25 < 3) as u32)
-        } else {
-            0
-        };
+    } else {
+        0
+    };
 
     if let Some(((target, target_player), should_shoot)) = target {
         if let Some(target) = shared
@@ -288,7 +288,7 @@ pub(crate) fn basic_combat(
             })
             .map::<(&CBaseEntity, bool), _>(|x| (x.0, x.1))
             .map(|(weapon, is_charge)| unsafe {
-                let charge = dbg!((helper.sv_funcs.get_weapon_charge_fraction)(weapon));
+                let charge = (helper.sv_funcs.get_weapon_charge_fraction)(weapon);
                 (
                     is_charge
                         && charge < 1.
@@ -331,7 +331,6 @@ pub(crate) fn basic_combat(
             };
 
         let enemy_is_titan = unsafe { (helper.sv_funcs.is_titan)(target_player) };
-        let is_titan = unsafe { (helper.sv_funcs.is_titan)(player) };
 
         if should_shoot || sim_type == 5 || sim_type == 4 {
             // for some reason this makes the game freeze later in the frame????
@@ -411,10 +410,11 @@ pub(crate) fn basic_combat(
 
             if let TC::Northstar = local_data.titan {
                 if !should_charge {
+                    // horrible!!!
+                    cmd.buttons &= !(Action::Attack as u32);
+                    cmd.buttons |=
+                        Action::Attack as u32 * (helper.globals.frameCount % 8 >= 4) as u32;
                     cmd.buttons |= Action::Zoom as u32;
-                    cmd.buttons |= Action::Attack as u32;
-                    cmd.buttons &=
-                        !(Action::Attack as u32) * (helper.globals.frameCount % 10 < 3) as u32;
                 } else {
                     cmd.buttons |= Action::Zoom as u32;
                     cmd.buttons &= !(Action::Attack as u32);
@@ -459,6 +459,7 @@ pub(crate) fn basic_combat(
         .into_iter()
         .map(|action| action as u32)
         .any(|action| cmd.buttons & action != 0)
+        && !is_titan
     {
         cmd.buttons &= !(Action::Attack as u32);
     }
