@@ -435,7 +435,7 @@ dependencies = [
 [[package]]
 name = "rrplug"
 version = "4.1.0"
-source = "git+https://github.com/catornot/rrplug.git?branch=dump-crash#d5c547a2bd6263b2db5da20d8e29ab3b2ad409c0"
+source = "git+https://github.com/catornot/rrplug.git?branch=dump-crash#1adab72b699a57b066bf577218cfdc99aad662ff"
 dependencies = [
  "bitflags 2.6.0",
  "log",
@@ -449,7 +449,7 @@ dependencies = [
 [[package]]
 name = "rrplug_proc"
 version = "4.1.0"
-source = "git+https://github.com/catornot/rrplug.git?branch=dump-crash#d5c547a2bd6263b2db5da20d8e29ab3b2ad409c0"
+source = "git+https://github.com/catornot/rrplug.git?branch=dump-crash#1adab72b699a57b066bf577218cfdc99aad662ff"
 dependencies = [
  "proc-macro2",
  "quote",
