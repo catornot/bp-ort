@@ -5,6 +5,8 @@ the main feature of this plugin is ofc the bots which I have a lot on and yet th
 The bots are good enough tho, They work most of the time and in most situations.
 Crashes can still happen but are much rarer now which is good :)
 
+**release date**: before titanfall 3 
+
 most concommands in this plugin have completions to make it easier to use them
 
 Other features that this plugin offers
