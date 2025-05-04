@@ -71,19 +71,31 @@
             cmake
             cmakeCurses
             pkg-config
+
+            zstd
+            libxkbcommon
+            vulkan-loader
+            xorg.libX11
+            xorg.libXcursor
+            xorg.libXi
+            xorg.libXrandr
+            alsa-lib
+            wayland
+            glfw-wayland
           ];
 
           buildInputs = with native-pkgs; [
             libgcc
             glibc.out
+            vulkan-loader
+            alsa-lib
+            udev
           ];
           LD_LIBRARY_PATH = nixpkgs.lib.makeLibraryPath buildInputs;
           PATH = nixpkgs.lib.makeLibraryPath buildInputs;
-          WINEPATH = nixpkgs.lib.makeLibraryPath buildInputs;
 
           # adding the export worked!
           shellHook = ''
-            echo "hi"
             export CC=clang
             export CXX=clang++
             export CMAKE=${native-pkgs.cmake}/bin/cmake
