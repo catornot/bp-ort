@@ -131,6 +131,7 @@ impl Plugin for Bots {
         register_sq_functions(bot_spawn);
 
         let mut bot_names = [
+            "FiveBots",
             "bot",
             "botornot",
             "perhaps_bot",
