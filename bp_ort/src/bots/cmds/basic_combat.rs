@@ -370,16 +370,16 @@ pub(crate) fn basic_combat(
             const CLAMP: f32 = 10.;
 
             cmd.world_view_angles.x = angles.x;
-            cmd.world_view_angles.y = angles
-                .y
-                .is_finite()
-                .then(|| {
+            cmd.world_view_angles.y = if angles.y.is_finite() {
+                {
                     angles.y.clamp(
                         cmd.world_view_angles.y - CLAMP,
                         cmd.world_view_angles.y + CLAMP,
                     )
-                })
-                .unwrap_or(angles.y);
+                }
+            } else {
+                angles.y
+            };
         } else {
             local_data.spread_offset = local_data.spread.len();
         }
