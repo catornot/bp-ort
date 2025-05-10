@@ -1,4 +1,7 @@
-use crate::utils::{from_c_string, set_c_char_array};
+use crate::{
+    utils::{from_c_string, set_c_char_array},
+    PLUGIN,
+};
 use rand::Rng;
 use rrplug::{
     bindings::class_types::client::CClient,
@@ -7,7 +10,7 @@ use rrplug::{
 };
 
 const FUNNY_CLAN_TAGS: &[&str] = &[
-    ">~<", "owo", "uwu", ":o", ":D", "ADV", "CLAN", "HI!", "PETAR", "<3", "BOB", "OV",
+    ">~<", "owo", "uwu", ":o", ":D", "ADV", "CLAN", "HI!", "PETAR", "<3", "BOB",
 ];
 
 use super::UWUFY_CONVAR;
@@ -16,6 +19,19 @@ pub unsafe fn set_stuff_on_join(client: &mut CClient) {
     let name = from_c_string::<String>(&**client.name as *const i8);
     let sqvm = SQVM_SERVER.get(EngineToken::new_unchecked()).borrow();
     let mut rng = rand::thread_rng();
+    let plugin = PLUGIN.wait();
+
+    if let Some((name, tag)) = plugin
+        .bots
+        .player_names
+        .lock()
+        .get(&**client.uid)
+        .filter(|(name, _)| name.is_ascii())
+        .filter(|(_, tag)| tag.is_ascii())
+    {
+        set_c_char_array(&mut client.name, name);
+        set_c_char_array(&mut client.clan_tag, tag);
+    }
 
     if *client.fake_player.get_inner() {
         set_c_char_array(

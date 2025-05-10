@@ -13,7 +13,7 @@ Other features that this plugin offers
 - auto mp_box loading
 - disabling the limit on players in sp maybe?
 - bringing back a less extensive version of r_drawworld
-- name uwufication (by default)
+- name uwufication
 - name changing (maybe sq api at some point)
 - "other testing functionality"
 - admin abuse
@@ -31,12 +31,13 @@ To add new functionallity a simple api could be used to change the behavior of t
 
 ### bots
 
-- `void function BotSetTitan(player bot, string titan)`
-- `void function BotSetTargetPos(player bot, vector target)`
-- `void function BotSetSimulationType(player bot, int sim_type)`
-- `int ornull function BotSpawn(bot_name: String)`
-- `void function AddBotName(bot_name: String)`
+- `void function BotSetTitan(entity bot, string titan)`
+- `void function BotSetTargetPos(entity bot, vector target)`
+- `void function BotSetSimulationType(entity bot, int sim_type)`
+- `int ornull function BotSpawn(string bot_name)`
+- `void function AddBotName(string bot_name)`
 - `void function ClearBotNames()`
+- `void function RememberNameOverride(entity player, String name, String clan_tag)`
 
 ### navigation
 
