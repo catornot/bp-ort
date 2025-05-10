@@ -4,4 +4,4 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-sourcepak = { version = "0.3.0", features = ["revpk"] }
+# sourcepak = { version = "0.3.0", features = ["revpk"] }
