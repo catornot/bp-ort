@@ -38,7 +38,7 @@ rustPlatform.buildRustPackage rec {
   cargoDeps = rustPlatform.importCargoLock {
     lockFile = ./Cargo.lock;
     outputHashes = {
-      "rrplug-4.1.0" = "sha256-MN+paCLoa2IB5CPugUpIlnUd/sTeOd/sX8DPm97gltU=";
+      "rrplug-4.1.0" = "sha256-0qMQf5cVBlc25I032HyWAjs3Q/SkAJ8KJLQKDRFVT6Q=";
     };
   };
 }

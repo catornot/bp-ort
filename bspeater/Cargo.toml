@@ -5,4 +5,4 @@ edition = "2024"
 
 [dependencies]
 # sourcepak = { version = "0.3.0", features = ["revpk"] }
-bevy = "0.15"
+bevy = "0.16"
