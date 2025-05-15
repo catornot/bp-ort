@@ -10,7 +10,7 @@ trait SeekRead: Seek + Read {}
 impl<T: Seek + Read> SeekRead for T {}
 
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)]
-enum LumpType {
+enum LumpIds {
     ENTITIES = 0x0000,
     PLANES = 0x0001,
     TEXTURE_DATA = 0x0002,
@@ -141,6 +141,61 @@ enum LumpType {
     SHADOW_MESHES = 0x007F,
 }
 
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
+enum Contents {
+    // r1/scripts/vscripts/_consts.nut:1159
+    EMPTY = 0x00,
+    SOLID = 0x01,
+    WINDOW = 0x02, // bulletproof glass etc. (transparent but solid)
+    AUX = 0x04,    // unused ?
+    GRATE = 0x08,  // allows bullets & vis
+    SLIME = 0x10,
+    WATER = 0x20,
+    WINDOW_NO_COLLIDE = 0x40,
+    ISOPAQUE = 0x80,         // blocks AI Line Of Sight, may be non - solid
+    TEST_FOG_VOLUME = 0x100, // cannot be seen through, but may be non - solid
+    UNUSED_1 = 0x200,
+    BLOCK_LIGHT = 0x400,
+    TEAM_1 = 0x800,
+    TEAM_2 = 0x1000,
+    IGNORE_NODRAW_OPAQUE = 0x2000, // ignore opaque if Surface.NO_DRAW
+    MOVEABLE = 0x4000,
+    PLAYER_CLIP = 0x10000, // blocks human players
+    MONSTER_CLIP = 0x20000,
+    BRUSH_PAINT = 0x40000,
+    BLOCK_LOS = 0x80000, // block AI line of sight
+    NO_CLIMB = 0x100000,
+    TITAN_CLIP = 0x200000, // blocks titan players
+    BULLET_CLIP = 0x400000,
+    UNUSED_5 = 0x800000,
+    ORIGIN = 0x1000000,  // removed before bsping an entity
+    MONSTER = 0x2000000, // should never be on a brush, only in game
+    DEBRIS = 0x4000000,
+    DETAIL = 0x8000000,       // brushes to be added after vis leafs
+    TRANSLUCENT = 0x10000000, // auto set if any surface has trans
+    LADDER = 0x20000000,
+    HITBOX = 0x40000000, // use accurate hitboxes on trace
+}
+
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
+enum MeshFlags {
+    // source.Surface (source.TextureInfo rolled into titanfall.TextureData?)
+    SKY_2D = 0x0002, // TODO: test overriding sky with this in-game
+    SKY = 0x0004,
+    WARP = 0x0008,        // Quake water surface ?
+    TRANSLUCENT = 0x0010, // decals & atmo ?
+    // titanfall.Mesh.flags
+    VERTEX_LIT_FLAT = 0x000, // VERTEX_RESERVED_1
+    VERTEX_LIT_BUMP = 0x200, // VERTEX_RESERVED_2
+    VERTEX_UNLIT = 0x400,    // VERTEX_RESERVED_0
+    // VERTEX_UNLIT_TS = 0x600, // VERTEX_RESERVED_3
+    // VERTEX_BLINN_PHONG = 0x ? ? ? # VERTEX_RESERVED_4
+    SKIP = 0x20000,    // 0x200 in valve.source.Surface(<< 8 ? )
+    TRIGGER = 0x40000, // guessing
+    // masks
+    MASK_VERTEX = 0x600,
+}
+
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 struct BSPHeader {
@@ -148,12 +203,12 @@ struct BSPHeader {
     pub version: i32,
     pub map_revisions: i32,
     pub _127: i32,
-    pub lumps: [Lump; 128],
+    pub lumps: [LumpHeader; 128],
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct Lump {
+struct LumpHeader {
     pub fileofs: i32, // offset into file (bytes)
     pub filelen: i32, // length of lump (bytes)
     pub version: i32, // lump format version
@@ -162,36 +217,90 @@ struct Lump {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct Brush {
-    pub origin: Vec3,
-    pub num_non_axial_no_discard: i32, // number of BrushSideProperties after the axial 6 w/ no DISCARD flag set
-    pub num_plane_offsets: i32,        // number of BrushSideX in this brush
-    pub index: i32, // index of this Brush; makes calculating BrushSideX indices easier
-    pub extents: Vec3,
-    pub brush_side_offset: i32, // alternatively, num_prior_non_axial
+struct CMGrid {
+    cell_size: f32,
+    cell_org: [i32; 2],
+    cell_count: [i32; 2],
+    straddle_group_count: i32,
+    base_plane_offset: i32,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct BspMesh {
+    first_mesh_index: u32,
+    num_triangles: u16,
+    first_vertex: u16,
+    num_vertices: u16,
+    vertex_type: u16,
+    styles: [u8; 4],
+    luxel_origin: [u16; 2],
+    luxel_offset_max: [u8; 2],
+    material_sort: u16,
+    mesh_flags: u32,
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 struct TricollHeader {
-    flags: i32,         // always 0?
-    texture_flags: i32, // copy of texture_data.flags
-    texture_data: i32,  // probably for surfaceproperties & decals
-    num_vertices: i32,  // Vertices indexed by TricollTriangles
-    num_triangles: i32, // number of TricollTriangles in this TricollHeader
+    flags: i16,         // always 0?
+    texture_flags: i16, // copy of texture_data.flags
+    texture_data: i16,  // probably for surfaceproperties & decals
+    num_vertices: i16,  // Vertices indexed by TricollTriangles
+    num_triangles: u16, // number of TricollTriangles in this TricollHeader
     // num_nodes is derived from the following formula
     // 2 * (num_triangles - (num_triangles + 3) % 6 + 3) // 3
-    num_bevel_indices: i32,
-    first_vertex: i32, // index into Vertices, added as an offset to TricollTriangles
-    first_triangle: i32, // index into TricollTriangles;
+    num_bevel_indices: u16,
+    first_vertex: u32, // index into Vertices, added as an offset to TricollTriangles
+    first_triangle: u32, // index into TricollTriangles;
     first_node: i32,   // index into TricollNodes
-    first_bevel_index: i32, // index into TricollBevelIndices?
+    first_bevel_index: u32, // index into TricollBevelIndices?
     origin: Vec3,      // true origin is -(origin / scale)
     scale: f32,        // 0.0 for patches
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct TricollModel {}
+struct GridCell {
+    geo_set_start: i16,
+    geo_set_count: i16,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct GeoSet {
+    straddle_group: i16,
+    prim_count: i16,
+    prim_start: u32,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct GeoSetBounds {
+    origin: [i16; 3],
+    cos: i16,
+    extends: [i16; 3],
+    sin: i16,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+enum PrimitiveType {
+    Brush = 0,
+    Ticoll = 2,
+    Prop = 3,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct Brush {
+    origin: Vec3,
+    num_non_axial_do_discard: u8,
+    num_plane_offsets: u8,
+    index: i16,
+    extends: Vec3,
+    brush_side_offset: i32,
+}
 
 fn read_i32(reader: &mut dyn SeekRead) -> Result<i32, io::Error> {
     let mut int = [0; size_of::<i32>()];
@@ -213,8 +322,8 @@ fn read_vec3(reader: &mut dyn SeekRead) -> Result<Vec3, io::Error> {
     ))
 }
 
-fn read_lump(reader: &mut dyn SeekRead) -> Result<Lump, io::Error> {
-    Ok(Lump {
+fn read_lump(reader: &mut dyn SeekRead) -> Result<LumpHeader, io::Error> {
+    Ok(LumpHeader {
         fileofs: read_i32(reader)?,
         filelen: read_i32(reader)?,
         version: read_i32(reader)?,
@@ -248,19 +357,20 @@ fn read_bspheader(reader: &mut dyn SeekRead) -> Result<BSPHeader, io::Error> {
 fn read_brush(reader: &mut dyn SeekRead) -> Result<Brush, io::Error> {
     Ok(Brush {
         origin: todo!(),
-        num_non_axial_no_discard: todo!(),
+        num_non_axial_do_discard: todo!(),
         num_plane_offsets: todo!(),
         index: todo!(),
-        extents: todo!(),
+        extends: todo!(),
         brush_side_offset: todo!(),
     })
 }
 
-fn read_tricoll_headers(
+fn read_lump_data<T>(
     reader: &mut dyn SeekRead,
     header: &BSPHeader,
-) -> Result<Vec<TricollHeader>, io::Error> {
-    let lump = get_lump(header, LumpType::TRICOLL_HEADERS);
+    id: LumpIds,
+) -> Result<Vec<T>, io::Error> {
+    let lump = get_lump(header, id);
     let size = std::mem::size_of::<TricollHeader>();
 
     reader.seek(SeekFrom::Start(lump.fileofs as u64));
@@ -269,10 +379,8 @@ fn read_tricoll_headers(
 
     reader.read_exact(&mut buf)?;
 
-    dbg!(&buf);
-
     let tricoll = unsafe {
-        Vec::<TricollHeader>::from_raw_parts(
+        Vec::<T>::from_raw_parts(
             buf.as_ptr().cast_mut().cast(),
             buf.len() / size,
             buf.capacity() / size,
@@ -283,11 +391,8 @@ fn read_tricoll_headers(
 
     Ok(tricoll)
 }
-fn read_tricoll_model(reader: &mut dyn SeekRead) -> Result<TricollModel, io::Error> {
-    Ok(TricollModel {})
-}
 
-fn get_lump(header: &BSPHeader, lump: LumpType) -> &Lump {
+fn get_lump(header: &BSPHeader, lump: LumpIds) -> &LumpHeader {
     &header.lumps[lump as usize]
 }
 
@@ -309,10 +414,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut bsp = File::open(format!("{}/maps/mp_lf_uma.bsp", UNPACK))?;
 
     let header = read_bspheader(&mut bsp)?;
+    let vertices = read_lump_data::<Vec3>(&mut bsp, &header, LumpIds::VERTICES)?;
+    let normals = read_lump_data::<Vec3>(&mut bsp, &header, LumpIds::VERTEX_NORMALS)?;
+    let mesh_indices = read_lump_data::<u16>(&mut bsp, &header, LumpIds::MESH_INDICES)?;
+    let bspmesh = read_lump_data::<BspMesh>(&mut bsp, &header, LumpIds::MESHES)?;
 
     println!("header {:#?}", header);
 
-    println!("tricol {:#?}", read_tricoll_headers(&mut bsp, &header)?);
+    println!(
+        "tricol {:#?}",
+        read_lump_data::<TricollHeader>(&mut bsp, &header, LumpIds::TRICOLL_HEADERS)?
+    );
+    println!("vertices {:#?}", vertices.len());
+    println!("normals {:#?}", normals.len());
 
     Ok(())
 }
