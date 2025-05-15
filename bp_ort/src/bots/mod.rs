@@ -17,6 +17,7 @@ use rrplug::{
 };
 use std::{
     cell::RefCell,
+    collections::HashMap,
     ops::Not,
     sync::atomic::{AtomicI32, AtomicU32, Ordering},
 };
@@ -118,6 +119,7 @@ pub struct Bots {
     pub next_bot_names: Mutex<Vec<String>>,
     pub max_players: AtomicU32,
     pub max_teams: AtomicU32,
+    pub player_names: Mutex<HashMap<[i8; 32], (String, String)>>,
 }
 
 impl Plugin for Bots {
@@ -131,6 +133,7 @@ impl Plugin for Bots {
         register_sq_functions(bot_spawn);
 
         let mut bot_names = [
+            "FiveBots",
             "bot",
             "botornot",
             "perhaps_bot",
@@ -194,6 +197,7 @@ impl Plugin for Bots {
             generic_bot_names: Mutex::new(bot_names),
             max_players: AtomicU32::new(32),
             max_teams: AtomicU32::new(2),
+            player_names: Mutex::new(HashMap::new()),
         }
     }
 
@@ -316,7 +320,7 @@ impl Plugin for Bots {
             ConVarStruct::try_new(
                 &ConVarRegister::new(
                     "bot_uwufy",
-                    "1",
+                    "0",
                     FCVAR_GAMEDLL as i32,
                     "decides weather connecting player should haev their name uwufyied",
                 ),
@@ -522,7 +526,7 @@ fn choose_team_normal() -> i32 {
 
 fn choose_team_ffa(max_teams: u32) -> i32 {
     let server_functions = SERVER_FUNCTIONS.wait();
-    let teams = Vec::from_iter((0..=max_teams + 2).map(|_| 0));
+    let teams = Vec::from_iter((2..=max_teams + 2).map(|_| 0));
 
     (1..=PLUGIN.wait().bots.max_players.load(Ordering::Acquire) as i32)
         .filter_map(|i| unsafe { (server_functions.get_player_by_index)(i).as_ref() })
@@ -648,7 +652,27 @@ fn clear_bot_names() {
 }
 
 #[rrplug::sqfunction(VM = "Server", ExportName = "RememberNameOverride")]
-fn remember_name_override(player: Option<&mut CPlayer>, name: String, clan_tag: String) {
-    _ = (player, name, clan_tag);
-    todo!()
+fn remember_name_override(
+    player: Option<&mut CPlayer>,
+    name: String,
+    clan_tag: String,
+) -> Option<()> {
+    let engine = ENGINE_FUNCTIONS.get()?;
+    let client = unsafe {
+        std::slice::from_raw_parts(
+            engine.client_array,
+            engine.globals.as_ref()?.maxClients as usize,
+        )
+        .get(player?.pl.index as usize)?
+    };
+
+    *PLUGIN
+        .wait()
+        .bots
+        .player_names
+        .lock()
+        .entry(unsafe { **client.uid })
+        .or_default() = (name, clan_tag);
+
+    None
 }

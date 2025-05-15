@@ -116,6 +116,8 @@ pub fn filter_target(filter: Option<&str>, player: &CPlayer, name: &str) -> bool
     }
 }
 
+// clippy just doesn't get it
+#[allow(clippy::mut_from_ref)]
 pub fn admin_check<'a, 'b>(
     command: &'a CCommandResult,
     engine_funcs: &'b EngineFunctions,

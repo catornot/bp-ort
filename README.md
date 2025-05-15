@@ -5,13 +5,15 @@ the main feature of this plugin is ofc the bots which I have a lot on and yet th
 The bots are good enough tho, They work most of the time and in most situations.
 Crashes can still happen but are much rarer now which is good :)
 
+**release date**: before titanfall 3 
+
 most concommands in this plugin have completions to make it easier to use them
 
 Other features that this plugin offers
 - auto mp_box loading
 - disabling the limit on players in sp maybe?
 - bringing back a less extensive version of r_drawworld
-- name uwufication (by default)
+- name uwufication
 - name changing (maybe sq api at some point)
 - "other testing functionality"
 - admin abuse
@@ -29,12 +31,13 @@ To add new functionallity a simple api could be used to change the behavior of t
 
 ### bots
 
-- `void function BotSetTitan(player bot, string titan)`
-- `void function BotSetTargetPos(player bot, vector target)`
-- `void function BotSetSimulationType(player bot, int sim_type)`
-- `int ornull function BotSpawn(bot_name: String)`
-- `void function AddBotName(bot_name: String)`
+- `void function BotSetTitan(entity bot, string titan)`
+- `void function BotSetTargetPos(entity bot, vector target)`
+- `void function BotSetSimulationType(entity bot, int sim_type)`
+- `int ornull function BotSpawn(string bot_name)`
+- `void function AddBotName(string bot_name)`
 - `void function ClearBotNames()`
+- `void function RememberNameOverride(entity player, String name, String clan_tag)`
 
 ### navigation
 

@@ -141,6 +141,8 @@ pub fn is_timedout(last_time: f32, helper: &CUserCmdHelper<'_>, time_elasped: f3
     last_time + time_elasped <= time(helper)
 }
 
+// same here
+#[allow(clippy::mut_from_ref)]
 pub unsafe fn find_player_in_view<'a>(
     pos: Vector3,
     view: Option<Vector3>,
@@ -179,11 +181,10 @@ pub unsafe fn find_player_in_view<'a>(
             })
             .find_map(|(target, player, _)| {
                 Some(view_rate(helper, pos, target, player, false)).and_then(|(fraction, ent)| {
-                    (fraction == 1.0 || ent as usize == player as *const CPlayer as usize)
+                    (fraction == 1.0 || std::ptr::addr_eq(ent, player))
                         .then(|| view_rate(helper, pos, target, player, true))
                         .and_then(|(fraction, ent)| {
-                            (fraction == 1.0 || ent as usize == player as *const CPlayer as usize)
-                                .then_some(player)
+                            (fraction == 1.0 || std::ptr::addr_eq(ent, player)).then_some(player)
                         })
                 })
             })

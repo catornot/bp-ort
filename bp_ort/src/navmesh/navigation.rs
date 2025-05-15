@@ -105,16 +105,15 @@ impl Navigation {
         self.end_point = None;
 
         let status = unsafe {
-            (dt_funcs.dtNavMeshQuery__findNearestPoly)(
+            if (dt_funcs.dtNavMeshQuery__findNearestPoly)(
                 &mut self.query,
                 &start_point,
                 self.extents,
                 &self.filter,
                 &mut ref_start,
                 &mut start,
-            )
-            .eq(&0x40000000)
-            .then(|| {
+            ) == 0x40000000
+            {
                 (dt_funcs.dtNavMeshQuery__findNearestPoly)(
                     &mut self.query,
                     &end_point,
@@ -122,10 +121,10 @@ impl Navigation {
                     &self.filter,
                     &mut ref_end,
                     &mut end,
-                )
-                .eq(&0x40000000)
-            })
-            .unwrap_or(false)
+                ) == 0x40000000
+            } else {
+                false
+            }
         };
 
         if !status || ref_end == 0 || ref_start == 0 {

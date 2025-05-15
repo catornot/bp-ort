@@ -438,6 +438,8 @@ offset_functions! {
         replace_weapon = unsafe extern "C" fn(*const CPlayer, *const c_char, *const c_void, *const c_void) where offset(0xdbae0);
         get_active_weapon = unsafe extern "C" fn(*const CPlayer) -> *const CBaseEntity where offset(0xea4c0);
         weapon_names_string_table = *const c_void where offset(0xbfbcf0);
+        get_weapon_type = unsafe extern "C" fn(*const CBaseEntity) -> u32 where offset(0xf0cd0);
+        get_weapon_charge_fraction = unsafe extern "C" fn(*const CBaseEntity) -> f32 where offset(0x68ea20);
 
         util_trace_line = unsafe extern "C" fn(*const Vector3, *const Vector3, c_char, c_char, i32, i32, i32, *mut TraceResults )  where offset(0x2725c0);
         ctraceengine = *const *const *const fn() where offset(0xbfbdc8);
@@ -446,9 +448,9 @@ offset_functions! {
 
         draw_debug_line = unsafe extern "C" fn(point1: *const Vector3, point2: *const Vector3, r: i32, g: i32, b: i32, throught_walls: bool, time: f32) where offset(0x001ccf40);
 
-        ent_fire = unsafe extern "C" fn(entityInstance: *mut CBaseEntity, inputName: *const c_char, args: *const c_void, delay: f32, otherEntity: *mut CBaseEntity, unkOrNull: *const c_void, unk:c_char ) where offset(0x29ea70);
+        ent_fire = unsafe extern "C" fn(entity_instance: *mut CBaseEntity,input_namee: *const c_char, args: *const c_void, delay: f32, other_entity: *mut CBaseEntity, unk_or_null: *const c_void, unk:c_char ) where offset(0x29ea70);
 
-        register_con_command = unsafe extern "C" fn(concommand: *mut ConCommand,name: *const c_char, callback: FnCommandCallback_t, helpString: *const c_char,flags: i32, completion: unsafe extern "C-unwind" fn(arg1: *const ::std::os::raw::c_char, arg2: *mut [::std::os::raw::c_char; 128usize]) -> ::std::os::raw::c_int) -> *mut ConCommand where offset(0x723fa0);
+        register_con_command = unsafe extern "C" fn(concommand: *mut ConCommand,name: *const c_char, callback: FnCommandCallback_t, help_string: *const c_char,flags: i32, completion: unsafe extern "C-unwind" fn(arg1: *const ::std::os::raw::c_char, arg2: *mut [::std::os::raw::c_char; 128usize]) -> ::std::os::raw::c_int) -> *mut ConCommand where offset(0x723fa0);
 
         get_pet_titan = unsafe extern "C" fn(*const CPlayer) -> *const CBaseEntity where offset(0x5dd940);
 
