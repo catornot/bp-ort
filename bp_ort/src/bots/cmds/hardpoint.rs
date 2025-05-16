@@ -34,7 +34,7 @@ pub fn reset_hardpoint(bot: Option<&CPlayer>, local_data: Option<&mut BotData>) 
                 .position(|index| *index == bot.pl.index)
                 .map(|i| hardpoint_players.swap_remove(i))
         }),
-        (None, Some(data)) => data.claimed.clear(),
+        (Option::None, Some(data)) => data.claimed.clear(),
         _ => {}
     }
 
@@ -93,8 +93,8 @@ pub fn basic_cap_holding(
                     .nav_query
                     .as_mut()
                     .and_then(|nav| nav.random_point_around(hardpoint, APROCHE_DISTANCE))
-                    .unwrap_or_else(|| hardpoint + Vector3::new(0., 50., 50.)))
-            };
+                    .unwrap_or_else(|| hardpoint + Vector3::new(0., 50., 50.))
+            });
             local_data.patrol_target = Some(patrol_target);
 
             if distance(patrol_target, origin) <= 50.
