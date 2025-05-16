@@ -243,7 +243,7 @@ impl Navigation {
         let funcs = RECAST_DETOUR.wait();
 
         let len = MAX_RANDOM_POINTS.min(self.straigth_path_points.capacity());
-        if dbg!(unsafe {
+        if unsafe {
             (funcs.dtFreeNavMeshQuery_findRandomPointsAroundCircle)(
                 &mut self.query,
                 &point,
@@ -256,16 +256,16 @@ impl Navigation {
                 len as u32,
                 self.straigth_path_points.as_mut_ptr(),
             )
-        }) == 0x40000000
+        } == 0x40000000
         {
             // SAFETY: the function should have filled every point
             unsafe {
                 self.straigth_path_points.set_len(len);
             }
             self.straigth_path_points
-                .get(dbg!(
+                .get(
                     rand::thread_rng().gen_range(0..self.straigth_path_points.len())
-                ))
+                )
                 .copied()
         } else {
             None

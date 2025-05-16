@@ -300,7 +300,7 @@ pub(crate) fn basic_combat(
 
         cmd.buttons |= if should_shoot && is_timedout(local_data.last_shot, helper, 0.8) {
             Action::Zoom as u32
-                | dbg!((!charge_weapon && helper.globals.frameCount / 2 % 4 != 0) || should_charge)
+                | ((!charge_weapon && helper.globals.frameCount / 2 % 4 != 0) || should_charge)
                     .then_some(Action::Attack as u32)
                     .unwrap_or_default()
         } else if should_shoot {

@@ -89,12 +89,12 @@ pub fn basic_cap_holding(
         if distance3(hardpoint, origin) <= APROCHE_DISTANCE {
             claim_hardpoint(hardpoint, player);
             let patrol_target = local_data.patrol_target.unwrap_or_else(|| {
-                dbg!(local_data
+                local_data
                     .nav_query
                     .as_mut()
                     .and_then(|nav| nav.random_point_around(hardpoint, APROCHE_DISTANCE))
                     .unwrap_or_else(|| hardpoint + Vector3::new(0., 50., 50.)))
-            });
+            };
             local_data.patrol_target = Some(patrol_target);
 
             if distance(patrol_target, origin) <= 50.
