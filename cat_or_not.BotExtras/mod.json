@@ -35,6 +35,13 @@
         "After": "init_Hooks"
       }
     },
+    {
+      "Path": "bot_tictactoe.gnut",
+      "RunOn": "SERVER && MP",
+      "ServerCallback": {
+        "After": "Init_botTicTacToe"
+      }
+    },
   ],
   "PluginDependencies": [
     "RRPLUG_TEST",

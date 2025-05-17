@@ -267,6 +267,39 @@ pub(super) fn get_cmd(
             cmd
         }
         20 => slide_hopper::slide_hopper(&helper, player, local_data),
+        21 => {
+            let mut cmd = CUserCmd::new_empty(&helper);
+            let origin = unsafe { *player.get_origin(&mut v) };
+
+            local_data.approach_range = Some(1.);
+            _ = path_to_target(
+                &mut cmd,
+                local_data,
+                origin,
+                local_data.target_pos,
+                local_data.should_recaculate_path,
+                &helper,
+            );
+
+            local_data.should_recaculate_path = false;
+
+            cmd
+        }
+        22 => {
+            local_data.approach_range = None;
+            local_data.target_pos = Vector3::new(10000., 10000., 10000.);
+
+            CUserCmd::new_empty(&helper)
+        }
+
+        23 => {
+            let mut cmd = CUserCmd::new_empty(&helper);
+            let origin = unsafe { *player.get_origin(&mut v) };
+
+            cmd.world_view_angles = look_at(origin, local_data.target_pos);
+
+            cmd
+        }
         30 => CUserCmd::new_basic_move(Vector3::ZERO, Action::OffHand0 as u32, &helper),
         31 => CUserCmd::new_basic_move(Vector3::ZERO, Action::OffHand1 as u32, &helper),
         32 => CUserCmd::new_basic_move(Vector3::ZERO, Action::OffHand2 as u32, &helper),
