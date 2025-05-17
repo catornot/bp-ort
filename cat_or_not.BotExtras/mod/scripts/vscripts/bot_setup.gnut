@@ -53,6 +53,9 @@ void function SelectCmdType() {
 		case "cp":
 			aiType = 10;
 			break
+		case "hh":
+			aiType = 8;
+			break
 	}
 
 	SetConVarInt("bot_cmds_type", aiType)

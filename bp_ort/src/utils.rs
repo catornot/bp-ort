@@ -128,7 +128,7 @@ pub(crate) fn send_client_print(player: &CPlayer, msg: &str) -> Option<()> {
     let client = unsafe {
         engine
             .client_array
-            .add(player.pl.index as usize - 1)
+            .add((player.pl.index as usize).checked_sub(1)?)
             .as_ref()?
     };
     let msg = try_cstring(msg).ok()?;
