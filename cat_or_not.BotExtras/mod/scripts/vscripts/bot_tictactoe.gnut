@@ -1,6 +1,4 @@
 global function Init_botTicTacToe
-#if BP_ORT
-#endif
 
 const asset Palet = $"models/containers/plastic_pallet_01.mdl"
 
@@ -36,7 +34,7 @@ struct {
 
 void function Init_botTicTacToe()
 {
-    #if BP_ORT
+    #if BP_ORT && CAT_OR_NOT_UTILS
 	AddClientCommandCallback("ttt_start", ClientCommand_StartGame)
 	AddCallback_OnClientConnected( ClientConnected )
     #endif
@@ -44,7 +42,7 @@ void function Init_botTicTacToe()
 	file.board = [[null, null, null], [null, null, null], [null, null, null]]
 }
 
-#if BP_ORT
+#if BP_ORT && CAT_OR_NOT_UTILS
 void function ClientConnected(entity player) {
 	if (player.IsBot())
 		file.connected++

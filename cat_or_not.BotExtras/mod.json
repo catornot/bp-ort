@@ -48,4 +48,7 @@
     "BP_ORT",
     "SQHOOK"
   ],
+	"Dependencies": {
+		"CAT_OR_NOT_UTILS": "cat_or_not's Utils"
+	},
 }
