@@ -7,7 +7,7 @@ let
 in
 pkgs.stdenv.mkDerivation rec {
   pname = "bp_ort";
-  version = "0.1.3";
+  version = "0.1.4";
 
   manifest = pkgs.writeText "manifest.json" ''
     {
