@@ -71,7 +71,9 @@
             cmake
             cmakeCurses
             pkg-config
+          ];
 
+          buildInputs = with native-pkgs; [
             zstd
             libxkbcommon
             vulkan-loader
@@ -82,23 +84,33 @@
             alsa-lib
             wayland
             glfw-wayland
+            udev
           ];
 
-          buildInputs = with native-pkgs; [
+          runtimeDependencies = with native-pkgs; [
+            libxkbcommon
             libgcc
             glibc.out
             vulkan-loader
             alsa-lib
             udev
+            xorg.libX11
+            xorg.libXcursor
+            xorg.libXi
+            xorg.libXrandr
+            wayland
+            glfw-wayland
           ];
-          LD_LIBRARY_PATH = nixpkgs.lib.makeLibraryPath buildInputs;
-          PATH = nixpkgs.lib.makeLibraryPath buildInputs;
+
+          LD_LIBRARY_PATH = nixpkgs.lib.makeLibraryPath runtimeDependencies;
+          PATH = nixpkgs.lib.makeLibraryPath runtimeDependencies;
 
           # adding the export worked!
           shellHook = ''
             export CC=clang
             export CXX=clang++
             export CMAKE=${native-pkgs.cmake}/bin/cmake
+            export WGPU_ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER=1
           '';
         };
 

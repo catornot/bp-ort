@@ -1,5 +1,11 @@
 #![allow(dead_code, unused)]
-use bevy::prelude::*;
+use bevy::{
+    asset::RenderAssetUsages,
+    pbr::wireframe::{WireframeConfig, WireframePlugin},
+    prelude::*,
+};
+use bevy_fly_camera::{FlyCamera, FlyCameraPlugin};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::{
     fs::File,
     io::{self, Read, Seek, SeekFrom, Write},
@@ -10,6 +16,7 @@ trait SeekRead: Seek + Read {}
 impl<T: Seek + Read> SeekRead for T {}
 
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)]
+#[derive(Clone, Copy, Debug)]
 enum LumpIds {
     ENTITIES = 0x0000,
     PLANES = 0x0001,
@@ -188,11 +195,15 @@ enum MeshFlags {
     VERTEX_LIT_FLAT = 0x000, // VERTEX_RESERVED_1
     VERTEX_LIT_BUMP = 0x200, // VERTEX_RESERVED_2
     VERTEX_UNLIT = 0x400,    // VERTEX_RESERVED_0
-    // VERTEX_UNLIT_TS = 0x600, // VERTEX_RESERVED_3
+    VERTEX_UNLIT_TS = 0x600, // VERTEX_RESERVED_3
     // VERTEX_BLINN_PHONG = 0x ? ? ? # VERTEX_RESERVED_4
-    SKIP = 0x20000,    // 0x200 in valve.source.Surface(<< 8 ? )
+    SKIP = 0x20000, // 0x200 in valve.source.Surface(<< 8 ? )
     TRIGGER = 0x40000, // guessing
-    // masks
+                    // masks
+}
+
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
+enum MeshMasks {
     MASK_VERTEX = 0x600,
 }
 
@@ -293,6 +304,58 @@ enum PrimitiveType {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
+struct VertexUnlit {
+    vertex_index: i32,
+    normal_index: i32,
+    albedo_uv: Vec2,
+    color: u32,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct VertexLitFlat {
+    vertex_index: u32,
+    normal_index: u32,
+    albedo_uv: Vec2,
+    color: u32,
+    light_map_uv: [f32; 2],
+    light_map_xy: [f32; 2],
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct VertexLitBump {
+    vertex_index: i32,
+    normal_index: i32,
+    albedo_uv: Vec2,
+    color: u32,
+    light_map_uv: [f32; 2],
+    light_map_xy: [f32; 2],
+    tangent: [i32; 2],
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct VertexUnlitTS {
+    vertex_index: i32,
+    normal_index: i32,
+    albedo_uv: Vec2,
+    color: u32,
+    unk: [u32; 2],
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct VertexBlinnPhong {
+    vertex_index: i32,
+    normal_index: i32,
+    color: u32,
+    uv: [f32; 4],
+    tangent: [f32; 16],
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
 struct Brush {
     origin: Vec3,
     num_non_axial_do_discard: u8,
@@ -300,6 +363,16 @@ struct Brush {
     index: i16,
     extends: Vec3,
     brush_side_offset: i32,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct MaterialSort {
+    texture_data: i16,
+    light_map_header: i16,
+    cubemap: i16,
+    last_vertex: i16,
+    vertex_offset: i32,
 }
 
 fn read_i32(reader: &mut dyn SeekRead) -> Result<i32, io::Error> {
@@ -350,7 +423,7 @@ fn read_bspheader(reader: &mut dyn SeekRead) -> Result<BSPHeader, io::Error> {
             .map(|_| read_lump(reader))
             .collect::<Result<Vec<_>, _>>()?
             .try_into()
-            .map_err(|_| io::Error::new(io::ErrorKind::Other, "incorrect size for lumps how!"))?,
+            .map_err(|_| io::Error::other("incorrect size for lumps how!"))?,
     })
 }
 
@@ -371,13 +444,16 @@ fn read_lump_data<T>(
     id: LumpIds,
 ) -> Result<Vec<T>, io::Error> {
     let lump = get_lump(header, id);
-    let size = std::mem::size_of::<TricollHeader>();
+    let size = std::mem::size_of::<T>();
 
     reader.seek(SeekFrom::Start(lump.fileofs as u64));
 
     let mut buf = vec![0; lump.filelen as usize];
 
     reader.read_exact(&mut buf)?;
+
+    assert!(buf.len() % size == 0, "lump {id:?}");
+    assert!(buf.capacity() % size == 0, "lump {id:?}");
 
     let tricoll = unsafe {
         Vec::<T>::from_raw_parts(
@@ -411,22 +487,178 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .spawn()?
         .wait_with_output()?;
 
-    let mut bsp = File::open(format!("{}/maps/mp_lf_uma.bsp", UNPACK))?;
+    let mut bsp = File::open(format!("{UNPACK}/maps/mp_lf_uma.bsp"))?;
+
+    assert!(std::mem::size_of::<Vec3>() == std::mem::size_of::<f32>() * 3);
 
     let header = read_bspheader(&mut bsp)?;
     let vertices = read_lump_data::<Vec3>(&mut bsp, &header, LumpIds::VERTICES)?;
     let normals = read_lump_data::<Vec3>(&mut bsp, &header, LumpIds::VERTEX_NORMALS)?;
     let mesh_indices = read_lump_data::<u16>(&mut bsp, &header, LumpIds::MESH_INDICES)?;
-    let bspmesh = read_lump_data::<BspMesh>(&mut bsp, &header, LumpIds::MESHES)?;
+    let bspmeshes = read_lump_data::<BspMesh>(&mut bsp, &header, LumpIds::MESHES)?;
+    let materialsorts = read_lump_data::<MaterialSort>(&mut bsp, &header, LumpIds::MATERIAL_SORTS)?;
+    let vertex_unlit = read_lump_data::<VertexUnlit>(&mut bsp, &header, LumpIds::VERTEX_UNLIT)?;
+    let vertex_lit_flat =
+        read_lump_data::<VertexLitFlat>(&mut bsp, &header, LumpIds::VERTEX_LIT_FLAT)?;
+    let vertex_lit_bump =
+        read_lump_data::<VertexLitBump>(&mut bsp, &header, LumpIds::VERTEX_LIT_BUMP)?;
+    let vertex_unlit_ts =
+        read_lump_data::<VertexUnlitTS>(&mut bsp, &header, LumpIds::VERTEX_UNLIT_TS)?;
 
-    println!("header {:#?}", header);
-
-    println!(
-        "tricol {:#?}",
-        read_lump_data::<TricollHeader>(&mut bsp, &header, LumpIds::TRICOLL_HEADERS)?
-    );
+    // println!(
+    //     "tricol {:#?}",
+    //     read_lump_data::<TricollHeader>(&mut bsp, &header, LumpIds::TRICOLL_HEADERS)?
+    // );
     println!("vertices {:#?}", vertices.len());
     println!("normals {:#?}", normals.len());
 
+    let meshes = bspmeshes
+        .into_par_iter()
+        .filter_map(|bspmesh| {
+            #[allow(clippy::eq_op)]
+            let flag = MeshFlags::TRIGGER as u32 | MeshFlags::TRIGGER as u32;
+            if (bspmesh.mesh_flags & flag) != 0 {
+                return None;
+            };
+
+            let vertex_offset = materialsorts[bspmesh.material_sort as usize].vertex_offset;
+            let vertex_offset2 = bspmesh.first_vertex;
+            let mut vertexes: Vec<Vec3> = Vec::new();
+            let mut indices = Vec::new();
+            let mut uvs: Vec<Vec2> = Vec::new();
+
+            for i in 0..bspmesh.num_triangles as usize * 3 {
+                let vertex_index = (mesh_indices[i + bspmesh.first_mesh_index as usize] as usize
+                    + vertex_offset as usize);
+                let (vert_pos, vert_uv) =
+                    match MeshFlags::try_from(bspmesh.mesh_flags & MeshMasks::MASK_VERTEX as u32)
+                        .expect("not a mesh flag uh")
+                    {
+                        MeshFlags::VERTEX_LIT_FLAT => {
+                            let vert = vertex_lit_flat[vertex_index];
+                            (
+                                vertices[vert.vertex_index as usize & 0x7FFFFFFF],
+                                vert.albedo_uv,
+                            )
+                        }
+                        MeshFlags::VERTEX_LIT_BUMP => {
+                            let vert = vertex_lit_bump[vertex_index];
+                            (
+                                vertices[vert.vertex_index as usize & 0x7FFFFFFF],
+                                vert.albedo_uv,
+                            )
+                        }
+                        MeshFlags::VERTEX_UNLIT => {
+                            let vert = vertex_unlit[vertex_index];
+                            (
+                                vertices[vert.vertex_index as usize & 0x7FFFFFFF],
+                                vert.albedo_uv,
+                            )
+                        }
+                        MeshFlags::VERTEX_UNLIT_TS => {
+                            let vert = vertex_unlit_ts[vertex_index];
+                            (
+                                vertices[vert.vertex_index as usize & 0x7FFFFFFF],
+                                vert.albedo_uv,
+                            )
+                        }
+                        MeshFlags::SKY_2D
+                        | MeshFlags::SKY
+                        | MeshFlags::WARP
+                        | MeshFlags::TRANSLUCENT
+                        | MeshFlags::SKIP
+                        | MeshFlags::TRIGGER => panic!("uh hu mesh flags"),
+                    };
+
+                vertexes.push(vert_pos);
+                uvs.push(vert_uv);
+
+                indices.push(
+                    vertexes
+                        .iter()
+                        .zip([vert_pos].iter().cycle())
+                        .position(|(other, cmp)| other == cmp)
+                        .unwrap_or(vertexes.len() - 1) as u32,
+                )
+            }
+
+            Some(
+                Mesh::new(
+                    bevy::render::mesh::PrimitiveTopology::TriangleList,
+                    RenderAssetUsages::all(),
+                )
+                .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vertexes)
+                .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
+                .with_inserted_indices(bevy::render::mesh::Indices::U32(indices)),
+            )
+        })
+        .collect::<Vec<Mesh>>();
+
+    let mut app = App::new();
+    app.add_plugins((DefaultPlugins, FlyCameraPlugin, WireframePlugin::default()))
+        .add_systems(Startup, setup);
+
+    let materials = {
+        let mut mat = app
+            .world_mut()
+            .get_resource_mut::<Assets<StandardMaterial>>()
+            .expect("this should exist probably");
+        [
+            mat.add(StandardMaterial::from_color(Color::srgba_u8(
+                100, 0, 0, 255,
+            ))),
+            mat.add(StandardMaterial::from_color(Color::srgba_u8(0, 100, 0, 0))),
+            mat.add(StandardMaterial::from_color(Color::srgba_u8(
+                0, 0, 100, 255,
+            ))),
+        ]
+    };
+
+    for mesh in meshes
+        .into_iter()
+        .enumerate()
+        .map(|(i, mesh)| {
+            (
+                Mesh3d(
+                    app.world_mut()
+                        .get_resource_mut::<Assets<Mesh>>()
+                        .expect("this should exist probably")
+                        .add(mesh),
+                ),
+                MeshMaterial3d(materials[i % 3].clone()),
+            )
+        })
+        .collect::<Vec<_>>()
+    {
+        app.world_mut().spawn(mesh);
+    }
+
+    app.run();
+
     Ok(())
+}
+
+fn setup(mut commands: Commands, mut wireframe_config: ResMut<WireframeConfig>) {
+    commands.spawn((Camera3d::default(), FlyCamera::default()));
+    wireframe_config.global = true;
+}
+
+impl TryFrom<u32> for MeshFlags {
+    type Error = u32;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        Ok(match value {
+            0x0002 => MeshFlags::SKY_2D,
+            0x0004 => MeshFlags::SKY,
+            0x0008 => MeshFlags::WARP,
+            0x0010 => MeshFlags::TRANSLUCENT,
+            0x000 => MeshFlags::VERTEX_LIT_FLAT,
+            0x200 => MeshFlags::VERTEX_LIT_BUMP,
+            0x400 => MeshFlags::VERTEX_UNLIT,
+            0x600 => MeshFlags::VERTEX_UNLIT_TS,
+            0x20000 => MeshFlags::SKIP,
+            0x40000 => MeshFlags::TRIGGER,
+            value => return Err(value),
+        })
+    }
 }
