@@ -179,7 +179,7 @@ void function GameRun(entity player, entity vrag)
 		else if (winc != 0 && winc == 2)
 			state = eTicState.LOSE		
 		else if (isADraw())
-			state = eTicState.Draw	
+			state = eTicState.DRAW	
 
 		switch(state)
 		{
