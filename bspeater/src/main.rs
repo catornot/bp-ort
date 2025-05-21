@@ -517,7 +517,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter_map(|bspmesh| {
             #[allow(clippy::eq_op)]
             let flag = MeshFlags::TRIGGER as u32 | MeshFlags::TRIGGER as u32;
-            if (bspmesh.mesh_flags & flag) != 0 {
+            if (bspmesh.mesh_flags & flag) != 0
+                || bspmesh.mesh_flags & MeshFlags::TRANSLUCENT as u32 != 0
+            {
                 return None;
             };
 
@@ -569,6 +571,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         | MeshFlags::SKIP
                         | MeshFlags::TRIGGER => panic!("uh hu mesh flags"),
                     };
+                let vert_pos = vert_pos.xzy();
 
                 vertexes.push(vert_pos);
                 uvs.push(vert_uv);
@@ -589,7 +592,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 )
                 .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vertexes)
                 .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
-                .with_inserted_indices(bevy::render::mesh::Indices::U32(indices)),
+                .with_inserted_indices(bevy::render::mesh::Indices::U32(
+                    indices, // indices.into_iter().rev().collect(),
+                )),
             )
         })
         .collect::<Vec<Mesh>>();
@@ -607,7 +612,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             mat.add(StandardMaterial::from_color(Color::srgba_u8(
                 100, 0, 0, 255,
             ))),
-            mat.add(StandardMaterial::from_color(Color::srgba_u8(0, 100, 0, 0))),
+            mat.add(StandardMaterial::from_color(Color::srgba_u8(
+                0, 100, 0, 255,
+            ))),
             mat.add(StandardMaterial::from_color(Color::srgba_u8(
                 0, 0, 100, 255,
             ))),
@@ -639,7 +646,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn setup(mut commands: Commands, mut wireframe_config: ResMut<WireframeConfig>) {
-    commands.spawn((Camera3d::default(), FlyCamera::default()));
+    commands.spawn((
+        Camera3d::default(),
+        FlyCamera {
+            max_speed: 50.,
+            accel: 49.,
+            friction: 40.,
+            ..default()
+        },
+    ));
     wireframe_config.global = true;
 }
 
