@@ -2,15 +2,19 @@
 use avian3d::prelude::*;
 use bevy::{
     asset::RenderAssetUsages,
+    math::bounding::Aabb3d,
     pbr::wireframe::{WireframeConfig, WireframePlugin},
     prelude::*,
 };
 use bevy_fly_camera::{FlyCamera, FlyCameraPlugin};
+use bincode::{Decode, Encode};
+use oktree::{prelude::*, tree::Octree};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
-    io::{self, Read, Seek, SeekFrom, Write},
-    ops::Div,
+    io::{self, BufWriter, Read, Seek, SeekFrom, Write},
+    ops::{Div, Sub},
     process::Command,
 };
 
@@ -603,14 +607,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         DefaultPlugins,
         FlyCameraPlugin,
         PhysicsPlugins::default(),
-        // Physicsugin::default(),
+        PhysicsDebugPlugin::default(),
         // WireframePlugin::default(),
     ))
     .init_resource::<WireframeConfig>()
+    .init_resource::<ChunkCellVec>()
     .add_systems(Startup, setup)
     .insert_resource(WorldName(map_name.to_owned()))
     .init_state::<ProcessingStep>();
 
+    const BASE: u8 = 200;
     let materials = {
         let mut mat = app
             .world_mut()
@@ -618,13 +624,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .expect("this should exist probably");
         [
             mat.add(StandardMaterial::from_color(Color::srgba_u8(
-                100, 0, 0, 255,
+                BASE, 0, 0, 255,
             ))),
             mat.add(StandardMaterial::from_color(Color::srgba_u8(
-                0, 100, 0, 255,
+                0, BASE, 0, 255,
             ))),
             mat.add(StandardMaterial::from_color(Color::srgba_u8(
-                0, 0, 100, 255,
+                0, 0, BASE, 255,
             ))),
         ]
     };
@@ -654,8 +660,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add_systems(
             Update,
             (
-                spawn_world_raycast.run_if(in_state(ProcessingStep::RayCasting)),
-                raycast_world.run_if(in_state(ProcessingStep::Cleanup)),
+                // (spawn_world_raycast, raycast_world).run_if(in_state(ProcessingStep::RayCasting)),
+                // raycast_world.run_if(in_state(ProcessingStep::Cleanup)),
+                raycast_world_better.run_if(in_state(ProcessingStep::RayCasting)),
+                save_navmesh.run_if(in_state(ProcessingStep::Saving)),
                 debug_world,
             ),
         )
@@ -730,46 +738,60 @@ fn calc_extents(
             |current, cmp| (current.0.min(cmp.0), current.1.max(cmp.1)),
         );
 
-    commands.insert_resource(WorlExtents(min, max));
+    let reduce = Vec3::splat(1.);
+    commands.insert_resource(WorlExtents(min * reduce, max * reduce));
     next_state.set(ProcessingStep::RayCasting);
 }
 
-const CELL_SIZE: f32 = 50.;
+const CELL_SIZE: f32 = 25.;
 fn spawn_world_raycast(
     mut commands: Commands,
     extends: Res<WorlExtents>,
+    mut positions: Local<Option<Vec<IVec3>>>,
     mut next_state: ResMut<NextState<ProcessingStep>>,
 ) {
     dbg!("spawn_world_raycast");
     let extends = *extends;
     let commands = &mut commands;
 
-    let mut spawns = (extends.0.x.div(CELL_SIZE) as i32..extends.1.x.div(CELL_SIZE) as i32)
-        .flat_map(|x| {
-            (extends.0.y.div(CELL_SIZE) as i32..extends.1.y.div(CELL_SIZE) as i32).flat_map(
-                move |y| {
-                    (extends.0.z.div(CELL_SIZE) as i32..extends.1.z.div(CELL_SIZE) as i32).map(
-                        move |z| {
-                            let origin = Vec3::new(
-                                x as f32 * CELL_SIZE,
-                                y as f32 * CELL_SIZE,
-                                z as f32 * CELL_SIZE,
-                            );
-                            (
-                                GridPos(IVec3::new(x, y, z)),
-                                Transform::from_translation(origin),
-                                avian3d::spatial_query::ShapeCaster::new(
-                                    Collider::cuboid(CELL_SIZE, CELL_SIZE, CELL_SIZE),
-                                    origin.with_y(y as f32 * CELL_SIZE + CELL_SIZE),
-                                    Quat::default(),
-                                    Dir3::NEG_Y,
-                                )
-                                .with_compute_contact_on_penetration(false)
-                                .with_max_distance(0.),
-                            )
-                        },
-                    )
-                },
+    if positions.is_none() {
+        positions.replace(
+            (extends.0.x.div(CELL_SIZE) as i32..=extends.1.x.div(CELL_SIZE) as i32)
+                .flat_map(move |x| {
+                    (extends.0.y.div(CELL_SIZE) as i32..=extends.1.y.div(CELL_SIZE) as i32)
+                        .flat_map(move |y| {
+                            (extends.0.z.div(CELL_SIZE) as i32..=extends.1.z.div(CELL_SIZE) as i32)
+                                .map(move |z| IVec3::new(x, y, z))
+                        })
+                })
+                .collect(),
+        );
+
+        dbg!(positions.as_ref().unwrap().len());
+    }
+
+    let len = positions.as_ref().unwrap().len();
+    let mut spawns = positions
+        .as_mut()
+        .unwrap()
+        .drain(0..1_000_000.min(len))
+        .map(|IVec3 { x, y, z }| {
+            let origin = Vec3::new(
+                x as f32 * CELL_SIZE,
+                y as f32 * CELL_SIZE,
+                z as f32 * CELL_SIZE,
+            );
+            (
+                GridPos(IVec3::new(x, y, z)),
+                Transform::from_translation(origin),
+                avian3d::spatial_query::ShapeCaster::new(
+                    Collider::cuboid(CELL_SIZE * 2., CELL_SIZE * 2., CELL_SIZE * 2.),
+                    origin,
+                    Quat::default(),
+                    Dir3::NEG_Y,
+                )
+                .with_compute_contact_on_penetration(false)
+                .with_max_distance(0.),
             )
         })
         .collect::<Vec<_>>();
@@ -791,17 +813,20 @@ fn spawn_world_raycast(
     // }
 
     commands.spawn_batch(spawns);
-    next_state.set(ProcessingStep::Cleanup);
+    if len == 0 {
+        next_state.set(ProcessingStep::Cleanup);
+    }
 }
 
 fn raycast_world(
     mut commands: Commands,
     ray_casts: Query<(Entity, &ShapeCaster, Option<&ShapeHits>, &GridPos)>,
+    state: Res<State<ProcessingStep>>,
     mut next_state: ResMut<NextState<ProcessingStep>>,
 ) {
-    if !ray_casts.iter().any(|(_, _, hits, _)| hits.is_some()) {
-        return;
-    }
+    // if !ray_casts.iter().any(|(_, _, hits, _)| hits.is_some()) {
+    //     return;
+    // }
 
     dbg!("raycast_world");
     dbg!(ray_casts.iter().count());
@@ -819,30 +844,164 @@ fn raycast_world(
             .insert(WireMe);
     });
 
-    if ray_casts.is_empty() {
+    if ray_casts.is_empty() && *state.get() == ProcessingStep::Cleanup {
         next_state.set(ProcessingStep::Saving);
     }
 }
 
-fn save_navmesh(meshes: Query<(&GridPos, Option<&HitStuff>)>, mut gizmos: Gizmos) {
-    // dbg!(ray_casts.iter().count());
+fn raycast_world_better(
+    mut commands: Commands,
+    ray_cast: SpatialQuery,
+    extends: Res<WorlExtents>,
+    mut next_state: ResMut<NextState<ProcessingStep>>,
+) {
+    let shape_config: ShapeCastConfig = ShapeCastConfig {
+        max_distance: 0.,
+        compute_contact_on_penetration: false,
+        ..default()
+    };
+    let offset = i32::MAX / 2;
+    let extends = *extends;
+    let cuboid = Collider::cuboid(CELL_SIZE * 2., CELL_SIZE * 2., CELL_SIZE * 2.);
+    let mut scale_cuboid = cuboid.clone();
+    scale_cuboid.scale_by(extends.0, 1);
+
+    if ray_cast
+        .cast_shape(
+            &scale_cuboid,
+            Vec3::new(0., 0., extends.1.z),
+            Quat::default(),
+            Dir3::NEG_Y,
+            &shape_config,
+            &SpatialQueryFilter::DEFAULT,
+        )
+        .is_none()
+    {
+        return;
+    }
+
+    let mut buffer: Octree<u32, ChunkCell> = Octree::with_capacity(100000);
+    let vec = (extends.0.x.div(CELL_SIZE) as i32..=extends.1.x.div(CELL_SIZE) as i32)
+        .flat_map(move |x| {
+            (extends.0.y.div(CELL_SIZE) as i32..=extends.1.y.div(CELL_SIZE) as i32).flat_map(
+                move |y| {
+                    (extends.0.z.div(CELL_SIZE) as i32..=extends.1.z.div(CELL_SIZE) as i32)
+                        .map(move |z| IVec3::new(x, y, z))
+                },
+            )
+        })
+        .collect::<Vec<_>>()
+        .into_par_iter()
+        .map(|vec| {
+            let origin = vec.as_vec3() * Vec3::splat(CELL_SIZE);
+            (
+                vec.to_array(),
+                ray_cast
+                    .cast_shape(
+                        &cuboid,
+                        origin,
+                        Quat::default(),
+                        Dir3::NEG_Y,
+                        &shape_config,
+                        &SpatialQueryFilter::DEFAULT,
+                    )
+                    .is_some(),
+            )
+        })
+        .map(move |([x, y, z], hit)| ChunkCell {
+            cord: [x + offset, y + offset, z + offset].map(|v| v as u32),
+            toggled: hit,
+        })
+        .filter(|cell| cell.toggled)
+        .collect::<Vec<ChunkCell>>();
+    for cell in vec.iter().cloned() {
+        buffer.insert(cell);
+    }
+
+    commands.remove_resource::<ChunkCellVec>();
+    commands.insert_resource(ChunkCellVec { tree: buffer, vec });
+    next_state.set(ProcessingStep::Done);
+}
+
+#[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, Encode, Decode)]
+struct ChunkCell {
+    cord: [u32; 3],
+    toggled: bool,
+}
+
+#[derive(Resource, Default, Debug, Clone)]
+struct ChunkCellVec {
+    tree: Octree<u32, ChunkCell>,
+    vec: Vec<ChunkCell>,
+}
+
+impl oktree::Position for ChunkCell {
+    type U = u32;
+
+    fn position(&self) -> oktree::prelude::TUVec3<Self::U> {
+        TUVec3::new(self.cord[0], self.cord[1], self.cord[2])
+    }
+}
+
+fn save_navmesh(
+    mut commands: Commands,
+    checks: Query<(&GridPos, Option<&HitStuff>)>,
+    map_name: Res<WorldName>,
+    mut gizmos: Gizmos,
+    mut next_state: ResMut<NextState<ProcessingStep>>,
+) {
+    println!(
+        "non hit {} hit {}",
+        checks.iter().filter(|c| matches!(c, (_, None))).count(),
+        checks.iter().filter(|c| matches!(c, (_, Some(_)))).count()
+    );
+
+    // let mut buffer = Vec::with_capacity(checks.iter().count());
+
+    // buffer.extend(checks.iter().map(|(pos, hit)| ChunkCell {
+    //     cord: pos.0.to_array(),
+    //     toggled: hit.is_some(),
+    // }));
+
+    // let mut writer = std::fs::File::create(format!("target/{}", map_name.0)).expect("huh");
+
+    // bincode::encode_into_std_write(buffer, &mut writer, bincode::config::standard());
+
+    next_state.set(ProcessingStep::Done);
 }
 
 fn debug_world(
     meshes: Query<&GridPos, (With<HitStuff>, With<WireMe>, Without<FlyCamera>)>,
     camera: Query<&Transform, (With<FlyCamera>, Without<WireMe>)>,
+    cells: Res<ChunkCellVec>,
     mut gizmos: Gizmos,
 ) -> Result<(), BevyError> {
-    dbg!(meshes.iter().count());
+    // dbg!(meshes.iter().count());
     let origin = camera.single()?.translation;
+    let offset = i32::MAX / 2;
 
     for origin in meshes
         .iter()
-        .map(|pos| pos.0.as_vec3() * Vec3::splat(CELL_SIZE))
+        .map(|pos| pos.0.as_vec3() * Vec3::splat(CELL_SIZE * 2.))
         .filter(|translation| translation.distance(origin) < 1000.)
     {
         gizmos.cuboid(
-            Transform::from_translation(origin).with_scale(Vec3::splat(50.)),
+            Transform::from_translation(origin).with_scale(Vec3::splat(CELL_SIZE * 2.)),
+            Color::srgba_u8(255, 0, 0, 255),
+        );
+    }
+
+    for pos in cells
+        .vec
+        .iter()
+        .map(|inter| {
+            (UVec3::from_array(inter.cord).as_ivec3() - IVec3::splat(offset)).as_vec3()
+                * Vec3::splat(CELL_SIZE)
+        })
+        .filter(|pos| pos.distance(origin) < 500.)
+    {
+        gizmos.cuboid(
+            Transform::from_translation(pos).with_scale(Vec3::splat(CELL_SIZE)),
             Color::srgba_u8(255, 0, 0, 255),
         );
     }
