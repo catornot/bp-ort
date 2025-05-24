@@ -74,19 +74,43 @@
           ];
 
           buildInputs = with native-pkgs; [
+            zstd
+            libxkbcommon
+            vulkan-loader
+            xorg.libX11
+            xorg.libXcursor
+            xorg.libXi
+            xorg.libXrandr
+            alsa-lib
+            wayland
+            glfw-wayland
+            udev
+          ];
+
+          runtimeDependencies = with native-pkgs; [
+            libxkbcommon
             libgcc
             glibc.out
+            vulkan-loader
+            alsa-lib
+            udev
+            xorg.libX11
+            xorg.libXcursor
+            xorg.libXi
+            xorg.libXrandr
+            wayland
+            glfw-wayland
           ];
-          LD_LIBRARY_PATH = nixpkgs.lib.makeLibraryPath buildInputs;
-          PATH = nixpkgs.lib.makeLibraryPath buildInputs;
-          WINEPATH = nixpkgs.lib.makeLibraryPath buildInputs;
+
+          LD_LIBRARY_PATH = nixpkgs.lib.makeLibraryPath runtimeDependencies;
+          PATH = nixpkgs.lib.makeLibraryPath runtimeDependencies;
 
           # adding the export worked!
           shellHook = ''
-            echo "hi"
             export CC=clang
             export CXX=clang++
             export CMAKE=${native-pkgs.cmake}/bin/cmake
+            export WGPU_ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER=1
           '';
         };
 
