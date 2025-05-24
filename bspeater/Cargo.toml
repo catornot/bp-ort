@@ -4,7 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+avian3d = { version = "0.3.0", features = ["simd", "debug-plugin"] }
 # sourcepak = { version = "0.3.0", features = ["revpk"] }
 bevy = { version = "0.16.*", features = ["wayland"] }
 bevy_fly_camera = "0.16.*"
+bincode = { version = "2.0.1", features = ["serde"] }
 rayon = "1.*"
+serde = { version = "1.0.219", features = ["derive"] }
+spatialtree = { version = "0.1.3", default-features = false }

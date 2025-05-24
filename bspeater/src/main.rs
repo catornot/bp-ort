@@ -1,14 +1,16 @@
-#![allow(dead_code, unused)]
+#![allow(dead_code, unused, clippy::type_complexity)]
+use avian3d::prelude::*;
 use bevy::{
     asset::RenderAssetUsages,
     pbr::wireframe::{WireframeConfig, WireframePlugin},
     prelude::*,
 };
 use bevy_fly_camera::{FlyCamera, FlyCameraPlugin};
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::{
     fs::File,
     io::{self, Read, Seek, SeekFrom, Write},
+    ops::Div,
     process::Command,
 };
 
@@ -473,8 +475,9 @@ fn get_lump(header: &BSPHeader, lump: LumpIds) -> &LumpHeader {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let map_name = "mp_lf_uma";
     const PATH: &str = "/home/catornot/.local/share/Steam/steamapps/common/Titanfall2/vpk/";
-    const NAME: &str = "englishclient_mp_lf_uma.bsp.pak000_dir.vpk";
+    let name = format!("englishclient_{map_name}.bsp.pak000_dir.vpk");
     const UNPACK: &str = "target/vpk";
 
     Command::new("tf2-vpkunpack")
@@ -483,11 +486,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .arg("--include")
         .arg("maps")
         .arg(UNPACK)
-        .arg(format!("{PATH}{NAME}"))
+        .arg(format!("{PATH}{name}"))
         .spawn()?
         .wait_with_output()?;
 
-    let mut bsp = File::open(format!("{UNPACK}/maps/mp_lf_uma.bsp"))?;
+    let mut bsp = File::open(format!("{UNPACK}/maps/{map_name}.bsp"))?;
 
     assert!(std::mem::size_of::<Vec3>() == std::mem::size_of::<f32>() * 3);
 
@@ -505,10 +508,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let vertex_unlit_ts =
         read_lump_data::<VertexUnlitTS>(&mut bsp, &header, LumpIds::VERTEX_UNLIT_TS)?;
 
-    // println!(
-    //     "tricol {:#?}",
-    //     read_lump_data::<TricollHeader>(&mut bsp, &header, LumpIds::TRICOLL_HEADERS)?
-    // );
     println!("vertices {:#?}", vertices.len());
     println!("normals {:#?}", normals.len());
 
@@ -600,8 +599,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .collect::<Vec<Mesh>>();
 
     let mut app = App::new();
-    app.add_plugins((DefaultPlugins, FlyCameraPlugin, WireframePlugin::default()))
-        .add_systems(Startup, setup);
+    app.add_plugins((
+        DefaultPlugins,
+        FlyCameraPlugin,
+        PhysicsPlugins::default(),
+        // Physicsugin::default(),
+        // WireframePlugin::default(),
+    ))
+    .init_resource::<WireframeConfig>()
+    .add_systems(Startup, setup)
+    .insert_resource(WorldName(map_name.to_owned()))
+    .init_state::<ProcessingStep>();
 
     let materials = {
         let mut mat = app
@@ -626,6 +634,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .enumerate()
         .map(|(i, mesh)| {
             (
+                Collider::trimesh_from_mesh(&mesh).expect("huh"),
+                RigidBody::Static,
                 Mesh3d(
                     app.world_mut()
                         .get_resource_mut::<Assets<Mesh>>()
@@ -640,9 +650,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         app.world_mut().spawn(mesh);
     }
 
-    app.run();
+    app.add_systems(Startup, calc_extents)
+        .add_systems(
+            Update,
+            (
+                spawn_world_raycast.run_if(in_state(ProcessingStep::RayCasting)),
+                raycast_world.run_if(in_state(ProcessingStep::Cleanup)),
+                debug_world,
+            ),
+        )
+        .run();
 
     Ok(())
+}
+
+#[derive(Resource, Clone, Copy, PartialEq)]
+struct WorlExtents(Vec3, Vec3);
+
+#[derive(Resource, Clone, PartialEq)]
+struct WorldName(String);
+
+#[derive(Component, Clone, Copy, PartialEq)]
+struct WireMe;
+
+#[derive(Component, Clone, Copy, PartialEq)]
+struct GridPos(IVec3);
+
+#[derive(Component, Clone, Copy, PartialEq)]
+struct HitStuff;
+
+#[derive(Debug, States, Hash, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+enum ProcessingStep {
+    #[default]
+    Startup,
+    RayCasting,
+    Cleanup,
+    Saving,
+    Done,
 }
 
 fn setup(mut commands: Commands, mut wireframe_config: ResMut<WireframeConfig>) {
@@ -656,6 +700,154 @@ fn setup(mut commands: Commands, mut wireframe_config: ResMut<WireframeConfig>) 
         },
     ));
     wireframe_config.global = true;
+}
+
+fn calc_extents(
+    mut commands: Commands,
+    meshes: Query<&Mesh3d>,
+    assets: Res<Assets<Mesh>>,
+    mut next_state: ResMut<NextState<ProcessingStep>>,
+) {
+    let (min, max) = meshes
+        .iter()
+        .collect::<Vec<_>>()
+        .into_par_iter()
+        .filter_map(|mesh| assets.get(&mesh.0))
+        .filter_map(|mesh| {
+            mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+                .map(|pos| match pos {
+                    bevy::render::mesh::VertexAttributeValues::Float32x3(vertexes) => vertexes
+                        .iter()
+                        .map(|pos| Vec3::from_array(*pos))
+                        .fold((Vec3::ZERO, Vec3::ZERO), |current, cmp| {
+                            (current.0.min(cmp), current.1.max(cmp))
+                        }),
+                    _ => panic!("vertex is not vertex"),
+                })
+        })
+        .reduce(
+            || (Vec3::ZERO, Vec3::ZERO),
+            |current, cmp| (current.0.min(cmp.0), current.1.max(cmp.1)),
+        );
+
+    commands.insert_resource(WorlExtents(min, max));
+    next_state.set(ProcessingStep::RayCasting);
+}
+
+const CELL_SIZE: f32 = 50.;
+fn spawn_world_raycast(
+    mut commands: Commands,
+    extends: Res<WorlExtents>,
+    mut next_state: ResMut<NextState<ProcessingStep>>,
+) {
+    dbg!("spawn_world_raycast");
+    let extends = *extends;
+    let commands = &mut commands;
+
+    let mut spawns = (extends.0.x.div(CELL_SIZE) as i32..extends.1.x.div(CELL_SIZE) as i32)
+        .flat_map(|x| {
+            (extends.0.y.div(CELL_SIZE) as i32..extends.1.y.div(CELL_SIZE) as i32).flat_map(
+                move |y| {
+                    (extends.0.z.div(CELL_SIZE) as i32..extends.1.z.div(CELL_SIZE) as i32).map(
+                        move |z| {
+                            let origin = Vec3::new(
+                                x as f32 * CELL_SIZE,
+                                y as f32 * CELL_SIZE,
+                                z as f32 * CELL_SIZE,
+                            );
+                            (
+                                GridPos(IVec3::new(x, y, z)),
+                                Transform::from_translation(origin),
+                                avian3d::spatial_query::ShapeCaster::new(
+                                    Collider::cuboid(CELL_SIZE, CELL_SIZE, CELL_SIZE),
+                                    origin.with_y(y as f32 * CELL_SIZE + CELL_SIZE),
+                                    Quat::default(),
+                                    Dir3::NEG_Y,
+                                )
+                                .with_compute_contact_on_penetration(false)
+                                .with_max_distance(0.),
+                            )
+                        },
+                    )
+                },
+            )
+        })
+        .collect::<Vec<_>>();
+
+    // {
+    //     let origin = Vec3::new(0., 0., 0.);
+    //     spawns.push((
+    //         GridPos(IVec3::new(0, 0, 0)),
+    //         Transform::from_translation(origin),
+    //         avian3d::spatial_query::ShapeCaster::new(
+    //             Collider::cuboid(CELL_SIZE, CELL_SIZE, CELL_SIZE),
+    //             origin,
+    //             Quat::default(),
+    //             Dir3::NEG_Y,
+    //         )
+    //         .with_compute_contact_on_penetration(false)
+    //         .with_max_distance(CELL_SIZE),
+    //     ));
+    // }
+
+    commands.spawn_batch(spawns);
+    next_state.set(ProcessingStep::Cleanup);
+}
+
+fn raycast_world(
+    mut commands: Commands,
+    ray_casts: Query<(Entity, &ShapeCaster, Option<&ShapeHits>, &GridPos)>,
+    mut next_state: ResMut<NextState<ProcessingStep>>,
+) {
+    if !ray_casts.iter().any(|(_, _, hits, _)| hits.is_some()) {
+        return;
+    }
+
+    dbg!("raycast_world");
+    dbg!(ray_casts.iter().count());
+    ray_casts.iter().for_each(|(ent, _, hits, _)| {
+        commands
+            .entity(ent)
+            .remove::<ShapeCaster>()
+            .remove::<ShapeHits>()
+            .insert_if(HitStuff, || {
+                hits.into_iter()
+                    .flat_map(|hits| hits.iter())
+                    .next()
+                    .is_some()
+            })
+            .insert(WireMe);
+    });
+
+    if ray_casts.is_empty() {
+        next_state.set(ProcessingStep::Saving);
+    }
+}
+
+fn save_navmesh(meshes: Query<(&GridPos, Option<&HitStuff>)>, mut gizmos: Gizmos) {
+    // dbg!(ray_casts.iter().count());
+}
+
+fn debug_world(
+    meshes: Query<&GridPos, (With<HitStuff>, With<WireMe>, Without<FlyCamera>)>,
+    camera: Query<&Transform, (With<FlyCamera>, Without<WireMe>)>,
+    mut gizmos: Gizmos,
+) -> Result<(), BevyError> {
+    dbg!(meshes.iter().count());
+    let origin = camera.single()?.translation;
+
+    for origin in meshes
+        .iter()
+        .map(|pos| pos.0.as_vec3() * Vec3::splat(CELL_SIZE))
+        .filter(|translation| translation.distance(origin) < 1000.)
+    {
+        gizmos.cuboid(
+            Transform::from_translation(origin).with_scale(Vec3::splat(50.)),
+            Color::srgba_u8(255, 0, 0, 255),
+        );
+    }
+
+    Ok(())
 }
 
 impl TryFrom<u32> for MeshFlags {
