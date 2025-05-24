@@ -480,6 +480,7 @@ fn get_lump(header: &BSPHeader, lump: LumpIds) -> &LumpHeader {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let map_name = "mp_lf_uma";
+    // let map_name = "mp_glitch";
     const PATH: &str = "/home/catornot/.local/share/Steam/steamapps/common/Titanfall2/vpk/";
     let name = format!("englishclient_{map_name}.bsp.pak000_dir.vpk");
     const UNPACK: &str = "target/vpk";
@@ -611,7 +612,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // WireframePlugin::default(),
     ))
     .init_resource::<WireframeConfig>()
-    .init_resource::<ChunkCellVec>()
+    .init_resource::<ChunkCells>()
     .add_systems(Startup, setup)
     .insert_resource(WorldName(map_name.to_owned()))
     .init_state::<ProcessingStep>();
@@ -660,9 +661,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add_systems(
             Update,
             (
-                // (spawn_world_raycast, raycast_world).run_if(in_state(ProcessingStep::RayCasting)),
-                // raycast_world.run_if(in_state(ProcessingStep::Cleanup)),
-                raycast_world_better.run_if(in_state(ProcessingStep::RayCasting)),
+                raycast_world.run_if(in_state(ProcessingStep::RayCasting)),
                 save_navmesh.run_if(in_state(ProcessingStep::Saving)),
                 debug_world,
             ),
@@ -744,112 +743,7 @@ fn calc_extents(
 }
 
 const CELL_SIZE: f32 = 25.;
-fn spawn_world_raycast(
-    mut commands: Commands,
-    extends: Res<WorlExtents>,
-    mut positions: Local<Option<Vec<IVec3>>>,
-    mut next_state: ResMut<NextState<ProcessingStep>>,
-) {
-    dbg!("spawn_world_raycast");
-    let extends = *extends;
-    let commands = &mut commands;
-
-    if positions.is_none() {
-        positions.replace(
-            (extends.0.x.div(CELL_SIZE) as i32..=extends.1.x.div(CELL_SIZE) as i32)
-                .flat_map(move |x| {
-                    (extends.0.y.div(CELL_SIZE) as i32..=extends.1.y.div(CELL_SIZE) as i32)
-                        .flat_map(move |y| {
-                            (extends.0.z.div(CELL_SIZE) as i32..=extends.1.z.div(CELL_SIZE) as i32)
-                                .map(move |z| IVec3::new(x, y, z))
-                        })
-                })
-                .collect(),
-        );
-
-        dbg!(positions.as_ref().unwrap().len());
-    }
-
-    let len = positions.as_ref().unwrap().len();
-    let mut spawns = positions
-        .as_mut()
-        .unwrap()
-        .drain(0..1_000_000.min(len))
-        .map(|IVec3 { x, y, z }| {
-            let origin = Vec3::new(
-                x as f32 * CELL_SIZE,
-                y as f32 * CELL_SIZE,
-                z as f32 * CELL_SIZE,
-            );
-            (
-                GridPos(IVec3::new(x, y, z)),
-                Transform::from_translation(origin),
-                avian3d::spatial_query::ShapeCaster::new(
-                    Collider::cuboid(CELL_SIZE * 2., CELL_SIZE * 2., CELL_SIZE * 2.),
-                    origin,
-                    Quat::default(),
-                    Dir3::NEG_Y,
-                )
-                .with_compute_contact_on_penetration(false)
-                .with_max_distance(0.),
-            )
-        })
-        .collect::<Vec<_>>();
-
-    // {
-    //     let origin = Vec3::new(0., 0., 0.);
-    //     spawns.push((
-    //         GridPos(IVec3::new(0, 0, 0)),
-    //         Transform::from_translation(origin),
-    //         avian3d::spatial_query::ShapeCaster::new(
-    //             Collider::cuboid(CELL_SIZE, CELL_SIZE, CELL_SIZE),
-    //             origin,
-    //             Quat::default(),
-    //             Dir3::NEG_Y,
-    //         )
-    //         .with_compute_contact_on_penetration(false)
-    //         .with_max_distance(CELL_SIZE),
-    //     ));
-    // }
-
-    commands.spawn_batch(spawns);
-    if len == 0 {
-        next_state.set(ProcessingStep::Cleanup);
-    }
-}
-
 fn raycast_world(
-    mut commands: Commands,
-    ray_casts: Query<(Entity, &ShapeCaster, Option<&ShapeHits>, &GridPos)>,
-    state: Res<State<ProcessingStep>>,
-    mut next_state: ResMut<NextState<ProcessingStep>>,
-) {
-    // if !ray_casts.iter().any(|(_, _, hits, _)| hits.is_some()) {
-    //     return;
-    // }
-
-    dbg!("raycast_world");
-    dbg!(ray_casts.iter().count());
-    ray_casts.iter().for_each(|(ent, _, hits, _)| {
-        commands
-            .entity(ent)
-            .remove::<ShapeCaster>()
-            .remove::<ShapeHits>()
-            .insert_if(HitStuff, || {
-                hits.into_iter()
-                    .flat_map(|hits| hits.iter())
-                    .next()
-                    .is_some()
-            })
-            .insert(WireMe);
-    });
-
-    if ray_casts.is_empty() && *state.get() == ProcessingStep::Cleanup {
-        next_state.set(ProcessingStep::Saving);
-    }
-}
-
-fn raycast_world_better(
     mut commands: Commands,
     ray_cast: SpatialQuery,
     extends: Res<WorlExtents>,
@@ -862,10 +756,11 @@ fn raycast_world_better(
     };
     let offset = i32::MAX / 2;
     let extends = *extends;
-    let cuboid = Collider::cuboid(CELL_SIZE * 2., CELL_SIZE * 2., CELL_SIZE * 2.);
+    let cuboid = Collider::cuboid(CELL_SIZE, CELL_SIZE, CELL_SIZE);
     let mut scale_cuboid = cuboid.clone();
     scale_cuboid.scale_by(extends.0, 1);
 
+    // cast a shap cast over the whole world because it takes a few frames for avian get collisions up and running
     if ray_cast
         .cast_shape(
             &scale_cuboid,
@@ -881,8 +776,9 @@ fn raycast_world_better(
     }
 
     let mut buffer: Octree<u32, ChunkCell> = Octree::with_capacity(100000);
-    let vec = (extends.0.x.div(CELL_SIZE) as i32..=extends.1.x.div(CELL_SIZE) as i32)
-        .flat_map(move |x| {
+    let full_vec = (extends.0.x.div(CELL_SIZE) as i32..=extends.1.x.div(CELL_SIZE) as i32)
+        .into_par_iter()
+        .flat_map_iter(move |x| {
             (extends.0.y.div(CELL_SIZE) as i32..=extends.1.y.div(CELL_SIZE) as i32).flat_map(
                 move |y| {
                     (extends.0.z.div(CELL_SIZE) as i32..=extends.1.z.div(CELL_SIZE) as i32)
@@ -890,8 +786,6 @@ fn raycast_world_better(
                 },
             )
         })
-        .collect::<Vec<_>>()
-        .into_par_iter()
         .map(|vec| {
             let origin = vec.as_vec3() * Vec3::splat(CELL_SIZE);
             (
@@ -914,12 +808,20 @@ fn raycast_world_better(
         })
         .filter(|cell| cell.toggled)
         .collect::<Vec<ChunkCell>>();
-    for cell in vec.iter().cloned() {
+    for cell in full_vec.iter().filter(|cell| cell.toggled).cloned() {
         buffer.insert(cell);
     }
 
-    commands.remove_resource::<ChunkCellVec>();
-    commands.insert_resource(ChunkCellVec { tree: buffer, vec });
+    commands.remove_resource::<ChunkCells>();
+    commands.insert_resource(ChunkCells {
+        tree: buffer,
+        collied_vec: full_vec
+            .iter()
+            .cloned()
+            .filter(|cell| cell.toggled)
+            .collect(),
+        full_vec,
+    });
     next_state.set(ProcessingStep::Done);
 }
 
@@ -930,9 +832,10 @@ struct ChunkCell {
 }
 
 #[derive(Resource, Default, Debug, Clone)]
-struct ChunkCellVec {
+struct ChunkCells {
     tree: Octree<u32, ChunkCell>,
-    vec: Vec<ChunkCell>,
+    full_vec: Vec<ChunkCell>,
+    collied_vec: Vec<ChunkCell>,
 }
 
 impl oktree::Position for ChunkCell {
@@ -971,28 +874,15 @@ fn save_navmesh(
 }
 
 fn debug_world(
-    meshes: Query<&GridPos, (With<HitStuff>, With<WireMe>, Without<FlyCamera>)>,
     camera: Query<&Transform, (With<FlyCamera>, Without<WireMe>)>,
-    cells: Res<ChunkCellVec>,
+    cells: Res<ChunkCells>,
     mut gizmos: Gizmos,
 ) -> Result<(), BevyError> {
-    // dbg!(meshes.iter().count());
     let origin = camera.single()?.translation;
     let offset = i32::MAX / 2;
 
-    for origin in meshes
-        .iter()
-        .map(|pos| pos.0.as_vec3() * Vec3::splat(CELL_SIZE * 2.))
-        .filter(|translation| translation.distance(origin) < 1000.)
-    {
-        gizmos.cuboid(
-            Transform::from_translation(origin).with_scale(Vec3::splat(CELL_SIZE * 2.)),
-            Color::srgba_u8(255, 0, 0, 255),
-        );
-    }
-
     for pos in cells
-        .vec
+        .collied_vec
         .iter()
         .map(|inter| {
             (UVec3::from_array(inter.cord).as_ivec3() - IVec3::splat(offset)).as_vec3()
