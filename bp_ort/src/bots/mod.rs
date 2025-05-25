@@ -102,12 +102,14 @@ pub(super) struct BotData {
 #[derive(Debug)]
 pub(super) struct BotShared {
     reserved_targets: [(f32, u32); 64],
+    claimed_hardpoints: HashMap<Vector3, usize>,
 }
 
 impl Default for BotShared {
     fn default() -> Self {
         Self {
             reserved_targets: std::array::from_fn(|_| Default::default()),
+            claimed_hardpoints: HashMap::new(),
         }
     }
 }
@@ -403,6 +405,19 @@ fn spawn_fake_player(
             )))
         }
     );
+
+    let mut shared_data = SHARED_BOT_DATA.get(token).borrow_mut();
+    if let Some(hardpoint) = shared_data
+        .claimed_hardpoints
+        .iter()
+        .find(|(_, index)| **index == edict as usize)
+        .map(|(v, _)| v)
+        .cloned()
+    {
+        _ = shared_data
+            .claimed_hardpoints
+            .extract_if(|v, _| *v == hardpoint);
+    }
 
     *BOT_DATA_MAP
         .get(token)

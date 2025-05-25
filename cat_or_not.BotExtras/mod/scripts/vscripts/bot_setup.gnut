@@ -25,6 +25,7 @@ void function Init_botSetup()
 	AddCallback_OnPilotBecomesTitan( BotBecameTitan )
 
 	AddClientCommandCallback( "test_script_navs", TestScriptNavs )
+	AddClientCommandCallback( "test_script_navs_random", TestScriptNavsRandom )
 	AddClientCommandCallback( "bot_task", NewTask )
 	AddClientCommandCallback( "bump", BumpEveryone )
 
@@ -261,6 +262,22 @@ bool function TestScriptNavs(entity player, array<string> args) {
 			DebugDrawLine(prevPoint, point, 0, 255, 0, true, 1000)
 			prevPoint = point
 		}
+
+		return true
+	}
+	catch (error) {
+		
+	}
+
+	return true
+}
+
+bool function TestScriptNavsRandom(entity player, array<string> args) {
+	try {
+		var navs = NavigationCreate(HULL_HUMAN);
+		vector point = expect vector(NavigationRandomPoint(navs, GetPlayerCrosshairOrigin( player ), 500.));
+
+		DebugDrawLine(point, GetPlayerCrosshairOrigin( player ), 0, 255, 0, true, 1000)
 
 		return true
 	}

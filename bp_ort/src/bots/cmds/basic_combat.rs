@@ -48,7 +48,7 @@ pub(crate) fn basic_combat(
     helper: &CUserCmdHelper,
     sim_type: i32,
     local_data: &mut BotData,
-    shared: &mut BotShared,
+    shared_data: &mut BotShared,
 ) -> CUserCmd {
     let mut v = Vector3::ZERO;
     let v = &mut v;
@@ -268,7 +268,7 @@ pub(crate) fn basic_combat(
     };
 
     if let Some(((target, target_player), should_shoot)) = target {
-        if let Some(target) = shared
+        if let Some(target) = shared_data
             .reserved_targets
             .get_mut(target_player.pl.index as usize)
         {
@@ -300,9 +300,11 @@ pub(crate) fn basic_combat(
 
         cmd.buttons |= if should_shoot && is_timedout(local_data.last_shot, helper, 0.8) {
             Action::Zoom as u32
-                | ((!charge_weapon && helper.globals.frameCount / 2 % 4 != 0) || should_charge)
-                    .then_some(Action::Attack as u32)
-                    .unwrap_or_default()
+                | if (!charge_weapon && helper.globals.frameCount / 2 % 4 != 0) || should_charge {
+                    Action::Attack as u32
+                } else {
+                    Default::default()
+                }
         } else if should_shoot {
             0
         } else {

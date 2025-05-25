@@ -238,7 +238,12 @@ impl Navigation {
         self.path_points.pop()
     }
 
-    pub fn random_point_around(&mut self, point: Vector3, radius: f32) -> Option<Vector3> {
+    pub fn random_point_around(
+        &mut self,
+        point: Vector3,
+        radius: f32,
+        min_radius: Option<f32>,
+    ) -> Option<Vector3> {
         const MAX_RANDOM_POINTS: usize = 65; // the game uses this amount
         let funcs = RECAST_DETOUR.wait();
 
@@ -247,7 +252,7 @@ impl Navigation {
             (funcs.dtFreeNavMeshQuery_findRandomPointsAroundCircle)(
                 &mut self.query,
                 &point,
-                50f32.min(radius),
+                min_radius.unwrap_or(100f32).min(radius),
                 radius,
                 &self.filter,
                 funcs.some_non_function_function,
@@ -263,9 +268,7 @@ impl Navigation {
                 self.straigth_path_points.set_len(len);
             }
             self.straigth_path_points
-                .get(
-                    rand::thread_rng().gen_range(0..self.straigth_path_points.len())
-                )
+                .get(rand::thread_rng().gen_range(0..self.straigth_path_points.len()))
                 .copied()
         } else {
             None
