@@ -4,17 +4,20 @@ use bevy::{
     asset::RenderAssetUsages,
     math::bounding::Aabb3d,
     pbr::wireframe::{WireframeConfig, WireframePlugin},
+    platform::collections::HashSet,
     prelude::*,
+    render::mesh::MeshVertexAttributeId,
 };
 use bevy_fly_camera::{FlyCamera, FlyCameraPlugin};
 use bincode::{Decode, Encode};
+use itertools::Itertools;
 use oktree::{prelude::*, tree::Octree};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
     io::{self, BufWriter, Read, Seek, SeekFrom, Write},
-    ops::{Div, Sub},
+    ops::{Div, Not, Sub},
     process::Command,
 };
 
@@ -301,10 +304,10 @@ struct GeoSetBounds {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Ord, Hash, Eq)]
 enum PrimitiveType {
     Brush = 0,
-    Ticoll = 2,
+    Tricoll = 2,
     Prop = 3,
 }
 
@@ -379,6 +382,64 @@ struct MaterialSort {
     cubemap: i16,
     last_vertex: i16,
     vertex_offset: i32,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct TricollNode {
+    vals: [i16; 8], //just a guess because 16bit intrinics are used on this at engine.dll + 0x1D1B10
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct TricollTri {
+    data: u32, //bitpacked
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct TricollBevelStart {
+    val: u16,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct TricollBevelIndex {
+    gap_0: [u8; 4],
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct ColBrush {
+    gap_0: [u8; 32],
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct CollPrimitive {
+    val: u32,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct Dtexdata {
+    reflectivity: Vec3,
+    name_string_table_id: i32,
+    width: i32,
+    height: i32,
+    view_width: i32,
+    view_height: i32,
+    flags: u32,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct DCollbrush {
+    origin: Vec3,               // size: 12
+    non_axial_count: [u8; 2],   // size: 2
+    prior_brush_count: i16,     // size: 2
+    extent: Vec3,               // size: 12
+    prior_non_axial_count: i32, // size: 4
 }
 
 fn read_i32(reader: &mut dyn SeekRead) -> Result<i32, io::Error> {
@@ -479,11 +540,23 @@ fn get_lump(header: &BSPHeader, lump: LumpIds) -> &LumpHeader {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    const UNPACK: &str = "target/vpk";
+    const PATH: &str = "/home/catornot/.local/share/Steam/steamapps/common/Titanfall2/vpk/";
+
     let map_name = "mp_lf_uma";
     // let map_name = "mp_glitch";
-    const PATH: &str = "/home/catornot/.local/share/Steam/steamapps/common/Titanfall2/vpk/";
     let name = format!("englishclient_{map_name}.bsp.pak000_dir.vpk");
-    const UNPACK: &str = "target/vpk";
+    let vpk_name_magic = format!("{UNPACK}/current_vpk");
+
+    // put a file to indicate what vpk is open then clean the vpk dir if we are opening another vpk
+    {
+        std::fs::create_dir_all(UNPACK)?;
+        _ = File::create_new(&vpk_name_magic);
+
+        if std::fs::read_to_string(&vpk_name_magic)? != map_name {
+            std::fs::remove_dir_all(UNPACK)?;
+        }
+    }
 
     Command::new("tf2-vpkunpack")
         .arg("--exclude")
@@ -496,6 +569,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .wait_with_output()?;
 
     let mut bsp = File::open(format!("{UNPACK}/maps/{map_name}.bsp"))?;
+
+    {
+        let mut current_vpk = File::create(&vpk_name_magic)?;
+        _ = current_vpk.write(map_name.as_bytes())?;
+    }
 
     assert!(std::mem::size_of::<Vec3>() == std::mem::size_of::<f32>() * 3);
 
@@ -513,95 +591,179 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let vertex_unlit_ts =
         read_lump_data::<VertexUnlitTS>(&mut bsp, &header, LumpIds::VERTEX_UNLIT_TS)?;
 
+    let tricoll_headers =
+        read_lump_data::<TricollHeader>(&mut bsp, &header, LumpIds::TRICOLL_HEADERS)?;
+    let tricoll_triangles =
+        read_lump_data::<TricollTri>(&mut bsp, &header, LumpIds::TRICOLL_TRIANGLES)?;
+    let texture_data = read_lump_data::<Dtexdata>(&mut bsp, &header, LumpIds::TEXTURE_DATA)?;
+    let geo_sets = read_lump_data::<GeoSet>(&mut bsp, &header, LumpIds::CM_GEO_SETS)?;
+    let col_primatives =
+        read_lump_data::<CollPrimitive>(&mut bsp, &header, LumpIds::CM_PRIMITIVES)?;
+    let unique_contents = read_lump_data::<i32>(&mut bsp, &header, LumpIds::CM_UNIQUE_CONTENTS)?;
+
+    let brushes = read_lump_data::<Brush>(&mut bsp, &header, LumpIds::CM_BRUSHES)?;
+    let brush_side_plane_offsets =
+        read_lump_data::<u16>(&mut bsp, &header, LumpIds::CM_BRUSH_SIDE_PLANE_OFFSETS)?;
+    let brush_planes = read_lump_data::<Vec4>(&mut bsp, &header, LumpIds::PLANES)?;
+    let grid = read_lump_data::<CMGrid>(&mut bsp, &header, LumpIds::CM_GRID)?
+        .first()
+        .cloned()
+        .ok_or("isn't there supposed to be only one grid thing")?;
+
     println!("vertices {:#?}", vertices.len());
     println!("normals {:#?}", normals.len());
 
-    let meshes = bspmeshes
-        .into_par_iter()
-        .filter_map(|bspmesh| {
-            #[allow(clippy::eq_op)]
-            let flag = MeshFlags::TRIGGER as u32 | MeshFlags::TRIGGER as u32;
-            if (bspmesh.mesh_flags & flag) != 0
-                || bspmesh.mesh_flags & MeshFlags::TRANSLUCENT as u32 != 0
-            {
-                return None;
-            };
-
-            let vertex_offset = materialsorts[bspmesh.material_sort as usize].vertex_offset;
-            let vertex_offset2 = bspmesh.first_vertex;
-            let mut vertexes: Vec<Vec3> = Vec::new();
+    let meshes = geo_sets
+        .into_iter()
+        .flat_map(|geoset| {
+            col_primatives
+                .get(((geoset.prim_start >> 8) & 0x1FFFFF) as usize..)
+                .unwrap_or(&[])
+                .iter()
+                .take((geoset.prim_count.eq(&1).not() as usize) * geoset.prim_count as usize)
+                .map(|col_primative| col_primative.val)
+                .chain(geoset.prim_count.eq(&1).then_some(geoset.prim_start))
+        })
+        .filter_map(|primative| {
+            let flag = Contents::SOLID as i32 | Contents::PLAYER_CLIP as i32;
+            // if it doesn't containt any
+            if (unique_contents[primative as usize & 0xFF] & flag == 0) {
+                None
+            } else {
+                Some((
+                    PrimitiveType::try_from((primative >> 29) & 0x7)
+                        .expect("invalid primative type"),
+                    ((primative >> 8) & 0x1FFFFF) as usize,
+                ))
+            }
+        })
+        .collect::<std::collections::HashSet<(PrimitiveType, usize)>>()
+        .into_iter()
+        .map(|(ty, index)| {
+            let mut pushing_vertecies: Vec<Vec3> = Vec::new();
             let mut indices = Vec::new();
-            let mut uvs: Vec<Vec2> = Vec::new();
 
-            for i in 0..bspmesh.num_triangles as usize * 3 {
-                let vertex_index = (mesh_indices[i + bspmesh.first_mesh_index as usize] as usize
-                    + vertex_offset as usize);
-                let (vert_pos, vert_uv) =
-                    match MeshFlags::try_from(bspmesh.mesh_flags & MeshMasks::MASK_VERTEX as u32)
-                        .expect("not a mesh flag uh")
-                    {
-                        MeshFlags::VERTEX_LIT_FLAT => {
-                            let vert = vertex_lit_flat[vertex_index];
-                            (
-                                vertices[vert.vertex_index as usize & 0x7FFFFFFF],
-                                vert.albedo_uv,
-                            )
-                        }
-                        MeshFlags::VERTEX_LIT_BUMP => {
-                            let vert = vertex_lit_bump[vertex_index];
-                            (
-                                vertices[vert.vertex_index as usize & 0x7FFFFFFF],
-                                vert.albedo_uv,
-                            )
-                        }
-                        MeshFlags::VERTEX_UNLIT => {
-                            let vert = vertex_unlit[vertex_index];
-                            (
-                                vertices[vert.vertex_index as usize & 0x7FFFFFFF],
-                                vert.albedo_uv,
-                            )
-                        }
-                        MeshFlags::VERTEX_UNLIT_TS => {
-                            let vert = vertex_unlit_ts[vertex_index];
-                            (
-                                vertices[vert.vertex_index as usize & 0x7FFFFFFF],
-                                vert.albedo_uv,
-                            )
-                        }
-                        MeshFlags::SKY_2D
-                        | MeshFlags::SKY
-                        | MeshFlags::WARP
-                        | MeshFlags::TRANSLUCENT
-                        | MeshFlags::SKIP
-                        | MeshFlags::TRIGGER => panic!("uh hu mesh flags"),
-                    };
-                let vert_pos = vert_pos.xzy();
+            match ty {
+                PrimitiveType::Tricoll => {
+                    let tricoll_header = &tricoll_headers[index];
 
-                vertexes.push(vert_pos);
-                uvs.push(vert_uv);
-
-                indices.push(
-                    vertexes
+                    let verts = &vertices[tricoll_header.first_vertex as usize..];
+                    let triangles_base =
+                        &tricoll_triangles[tricoll_header.first_triangle as usize..];
+                    let texture_data = texture_data[tricoll_header.texture_data as usize];
+                    for triangle in triangles_base
                         .iter()
-                        .zip([vert_pos].iter().cycle())
-                        .position(|(other, cmp)| other == cmp)
-                        .unwrap_or(vertexes.len() - 1) as u32,
-                )
+                        .take(tricoll_header.num_triangles as usize)
+                        .map(|triangle| triangle.data)
+                    {
+                        let vert0 = triangle & 0x3FF;
+                        let vert1 = vert0 + ((triangle >> 10) & 0x7F);
+                        let vert2 = vert0 + ((triangle >> 17) & 0x7F);
+
+                        for vert_pos in [vert0, vert1, vert2].map(|vert| verts[vert as usize].xzy())
+                        {
+                            pushing_vertecies.push(vert_pos);
+
+                            indices.push(
+                                pushing_vertecies
+                                    .iter()
+                                    .zip([vert_pos].iter().cycle())
+                                    .position(|(other, cmp)| other == cmp)
+                                    .unwrap_or(pushing_vertecies.len() - 1)
+                                    as u32,
+                            )
+                        }
+                    }
+                }
+                PrimitiveType::Brush => {
+                    use bevy::math::DVec3;
+
+                    let brush = brushes[index];
+                    fn contains_point(planes: &[Vec4], point: DVec3) -> bool {
+                        planes.iter().all(|plane| {
+                            plane.xyz().as_dvec3().dot(point) + plane.as_dvec4().w < 0.000001f64
+                        })
+                    }
+
+                    fn calculate_intersection_point(planes: [&Vec4; 3]) -> Option<DVec3> {
+                        let [p1, p2, p3] = planes.map(|p| p.as_dvec4());
+                        let m1 = DVec3::new(p1.x, p2.x, p3.x);
+                        let m2 = DVec3::new(p1.y, p2.y, p3.y);
+                        let m3 = DVec3::new(p1.z, p2.z, p3.z);
+                        let d = -DVec3::new(p1.w, p2.w, p3.w);
+
+                        let u = m2.cross(m3);
+                        let v = m1.cross(d);
+
+                        let denom = m1.dot(u);
+
+                        // Check for parallel planes or if planes do not intersect
+                        if denom.abs() < f64::EPSILON {
+                            return None;
+                        }
+
+                        Some(DVec3::new(d.dot(u), m3.dot(v), -m2.dot(v)) / denom)
+                    }
+
+                    let mut planes = (0..brush.num_plane_offsets as usize)
+                        .map(|i| {
+                            grid.base_plane_offset as usize + i + brush.brush_side_offset as usize
+                                - brush_side_plane_offsets[brush.brush_side_offset as usize + i]
+                                    as usize
+                        })
+                        .map(|index| brush_planes[index])
+                        .collect::<Vec<_>>();
+
+                    // planes.extend_from_slice(&[
+                    //     Vec4::new(1., 0., 0., brush.extends.x),
+                    //     Vec4::new(-1., 0., 0., -brush.extends.x),
+                    //     Vec4::new(0., 1., 0., brush.extends.y),
+                    //     Vec4::new(0., -1., 0., -brush.extends.y),
+                    //     Vec4::new(0., 0., 1., brush.extends.z),
+                    //     Vec4::new(0., 0., -1., -brush.extends.z),
+                    // ]);
+
+                    let points = &planes
+                        .iter()
+                        .tuple_combinations()
+                        .flat_map(|((p1), (p2), (p3))| {
+                            let intersection = calculate_intersection_point([p1, p2, p3])?;
+                            // If the intersection does not exist within the bounds the hull, discard it
+                            if !contains_point(&planes, intersection) {
+                                return None;
+                            }
+
+                            Some(intersection)
+                        })
+                        .map(|v| (v.as_vec3() + brush.origin))
+                        .map(|v| v.into())
+                        .collect::<Vec<_>>();
+
+                    println!(
+                        "points {} planes {:?} {}",
+                        points.len(),
+                        planes,
+                        planes.len()
+                    );
+
+                    let (vertices, pindices) = avian3d::parry::transformation::convex_hull(points);
+
+                    pushing_vertecies.extend(vertices.iter().map(|v| Vec3::new(v.x, v.y, v.z)));
+                    indices.extend(pindices.iter().flatten());
+                }
+                PrimitiveType::Prop => {}
             }
 
-            Some(
-                Mesh::new(
-                    bevy::render::mesh::PrimitiveTopology::TriangleList,
-                    RenderAssetUsages::all(),
-                )
-                .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vertexes)
-                .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
-                .with_inserted_indices(bevy::render::mesh::Indices::U32(
-                    indices, // indices.into_iter().rev().collect(),
-                )),
+            Mesh::new(
+                bevy::render::mesh::PrimitiveTopology::TriangleList,
+                RenderAssetUsages::all(),
             )
+            .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pushing_vertecies)
+            .with_inserted_indices(bevy::render::mesh::Indices::U32(indices))
         })
         .collect::<Vec<Mesh>>();
+
+    dbg!();
 
     let mut app = App::new();
     app.add_plugins((
@@ -639,9 +801,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for mesh in meshes
         .into_iter()
         .enumerate()
-        .map(|(i, mesh)| {
-            (
-                Collider::trimesh_from_mesh(&mesh).expect("huh"),
+        .filter_map(|(i, mesh)| {
+            Some((
+                // Collider::trimesh_from_mesh(&mesh)?,
                 RigidBody::Static,
                 Mesh3d(
                     app.world_mut()
@@ -650,7 +812,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .add(mesh),
                 ),
                 MeshMaterial3d(materials[i % 3].clone()),
-            )
+            ))
         })
         .collect::<Vec<_>>()
     {
@@ -914,6 +1076,19 @@ impl TryFrom<u32> for MeshFlags {
             0x600 => MeshFlags::VERTEX_UNLIT_TS,
             0x20000 => MeshFlags::SKIP,
             0x40000 => MeshFlags::TRIGGER,
+            value => return Err(value),
+        })
+    }
+}
+
+impl TryFrom<u32> for PrimitiveType {
+    type Error = u32;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        Ok(match value {
+            0 => Self::Brush,
+            2 => Self::Tricoll,
+            3 => Self::Prop,
             value => return Err(value),
         })
     }
