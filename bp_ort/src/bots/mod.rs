@@ -12,9 +12,13 @@ use rrplug::{
         cvar::convar::FCVAR_GAMEDLL,
     },
     exports::OnceCell,
-    mid::utils::{str_from_char_ptr, try_cstring},
+    mid::{
+        squirrel::SQVM_SERVER,
+        utils::{str_from_char_ptr, try_cstring},
+    },
     prelude::*,
 };
+use simple_bot_manager::ManagerData;
 use std::{
     cell::RefCell,
     collections::HashMap,
@@ -44,6 +48,7 @@ mod debug_commands;
 mod detour;
 mod netvars;
 mod set_on_join;
+mod simple_bot_manager;
 
 pub const DEFAULT_SIMULATE_TYPE: i32 = 6;
 
@@ -122,6 +127,7 @@ pub struct Bots {
     pub max_players: AtomicU32,
     pub max_teams: AtomicU32,
     pub player_names: Mutex<HashMap<[i8; 32], (String, String)>>,
+    pub manager_data: Mutex<simple_bot_manager::ManagerData>,
 }
 
 impl Plugin for Bots {
@@ -133,6 +139,7 @@ impl Plugin for Bots {
         register_sq_functions(bot_set_target_pos);
         register_sq_functions(bot_set_sim_type);
         register_sq_functions(bot_spawn);
+        simple_bot_manager::register_manager_sq_functions();
 
         let mut bot_names = [
             "FiveBots",
@@ -200,6 +207,7 @@ impl Plugin for Bots {
             max_players: AtomicU32::new(32),
             max_teams: AtomicU32::new(2),
             player_names: Mutex::new(HashMap::new()),
+            manager_data: Mutex::new(ManagerData::default()),
         }
     }
 
@@ -212,6 +220,8 @@ impl Plugin for Bots {
         cmds::reset_on_new_game();
 
         SHARED_BOT_DATA.get(token).replace(BotShared::default());
+
+        self.next_bot_names.lock().clear();
 
         let max_players: u32 = unsafe {
             from_char_ptr((ENGINE_FUNCTIONS.wait().get_current_playlist_var)(
@@ -262,7 +272,7 @@ impl Plugin for Bots {
                         (engine_functions.cclient_disconnect)(
                             (client as *const CClient).cast_mut(),
                             1,
-                            "no reason\0" as *const _ as *const i8,
+                            c"no reason".as_ptr().cast(),
                         )
                     });
             }
@@ -342,6 +352,22 @@ impl Plugin for Bots {
 
         register_required_convars(engine, token);
         register_debug_concommands(engine, token);
+        simple_bot_manager::register_manager_vars(engine, token);
+    }
+
+    fn runframe(&self, engine_token: EngineToken) {
+        if self.manager_data.lock().enabled
+            && SQVM_SERVER
+                .get(engine_token)
+                .try_borrow()
+                .ok()
+                .filter(|sqvm| sqvm.is_some())
+                .is_some()
+        {
+            if let Err(err) = simple_bot_manager::check_player_amount(self, engine_token) {
+                log::error!("bot manager: {err}");
+            }
+        }
     }
 }
 

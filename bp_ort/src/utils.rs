@@ -106,6 +106,11 @@ pub(crate) unsafe fn set_c_char_array<const U: usize>(buf: &mut [c_char; U], new
 }
 
 #[inline]
+pub(crate) fn get_c_char_array<const U: usize>(buf: &[c_char; U]) -> String {
+    String::from_utf8_lossy(buf.map(|i| i as u8).as_slice()).to_string()
+}
+
+#[inline]
 pub(crate) unsafe fn from_c_string<T: From<String>>(ptr: *const c_char) -> T {
     CStr::from_ptr(ptr).to_string_lossy().to_string().into()
 }
