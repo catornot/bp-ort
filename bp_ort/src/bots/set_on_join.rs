@@ -26,9 +26,20 @@ pub unsafe fn set_stuff_on_join(client: &mut CClient) {
         .player_names
         .lock()
         .get(&**client.uid)
+        .filter(|_| !client.fake_player.copy_inner()) // do not allow fake players to use this sytem since they all have the the uid
         .filter(|(name, _)| name.is_ascii())
         .filter(|(_, tag)| tag.is_ascii())
     {
+        log::info!(
+            "found {name} and {tag} for {}",
+            client
+                .uid
+                .as_slice()
+                .iter()
+                .filter_map(|i| char::from_u32(*i as u32))
+                .filter(|c| *c != '\0')
+                .collect::<String>()
+        );
         set_c_char_array(&mut client.name, name);
         set_c_char_array(&mut client.clan_tag, tag);
     }
@@ -67,6 +78,7 @@ pub unsafe fn set_stuff_on_join(client: &mut CClient) {
         )
         .map_err(|err| err.log())
         .ok()
+        .filter(|name| name.is_ascii())
     }) {
         set_c_char_array(&mut client.name, new_name.as_str());
     }
@@ -81,6 +93,7 @@ pub unsafe fn set_stuff_on_join(client: &mut CClient) {
         .map_err(|err| err.log())
         .ok()
         .and_then(|tag| if tag.len() < 12 { Some(tag) } else { None })
+        .filter(|name| name.is_ascii())
     }) {
         set_c_char_array(&mut client.clan_tag, new_tag.as_str());
     }

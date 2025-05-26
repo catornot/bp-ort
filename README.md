@@ -37,7 +37,6 @@ To add new functionallity a simple api could be used to change the behavior of t
 - `int ornull function BotSpawn(string bot_name)`
 - `void function AddBotName(string bot_name)`
 - `void function ClearBotNames()`
-- `void function RememberNameOverride(entity player, String name, String clan_tag)`
 
 ### navigation
 
@@ -103,19 +102,33 @@ it's a general purpose routine for the bots to follow.
 it's just shoot anything or walk to the closest enemy.
 it does support all facets of titanfall 2 gameplay (titan calling, embarking titans, using titans, pilot combat, etc) but it's very basic.
 it also has a feature to actually make them a bit fair where they will get more aim spread the faster the target moves (only for pilots).
-the derivations like the headhunter ai try to play the objective of the gamemode but they are not auto activated and have to manually set via the `bot_cmds_type` cvar.
+the derivations like the headhunter ai try to play the objective of the gamemode ~~but they are not auto activated and have to be manually set via the `bot_cmds_type` cvar~~
+auto activation is controlled is controlled by `auto_select_gamemode` in the mod.
 
 # other features
 
 ## admin abuse (incomplete) with auto completion!!!
-some of the commands from script admin abuse are included
+some of the commands from script admin abuse are included in this plugin
 
-## name renaming
-contact cat_or_not for this
+## name overriding
+Name overrides currently only affects players after a map reload or if it's overridden when they join
 
-the cvar `bot_uwufy` controls if connecting players will get their name uwufied (on by default)
+**Code Callback** - the plugin attemps to call the following functions when the player connects which are not defined anywhere (aka you can define them)
+
+- `string function CodeCallBack_CanChangeName(string name)`
+- `string function CodeCallBack_CanChangeClangTag(string clan_tag)`
+
+**API**
 
 - `void function RememberNameOverride(entity player, string name string clan_tag)`
+
+the plugin stores a name and clan tag for a player internally and will set them for the player on their next connection attempt
+
+- `void function RememberNameOverrideUid(string uid, string name string clan_tag)`
+
+like the one before it but it now accepts a uid so that it can be set before anyone joins
+
+btw the cvar `bot_uwufy` controls if connecting players will get their name uwufied (it's disabled by default now)
 
 # BotExtras
 this a optinal but recommend to have script mod for this plugin. it adds extra features on top of the plugin that are simply easier to implement in scripts.

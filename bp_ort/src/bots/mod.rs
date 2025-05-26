@@ -139,6 +139,8 @@ impl Plugin for Bots {
         register_sq_functions(bot_set_target_pos);
         register_sq_functions(bot_set_sim_type);
         register_sq_functions(bot_spawn);
+        register_sq_functions(remember_name_override);
+        register_sq_functions(remember_name_override_uid);
         simple_bot_manager::register_manager_sq_functions();
 
         let mut bot_names = [
@@ -712,7 +714,22 @@ fn remember_name_override(
         .bots
         .player_names
         .lock()
-        .entry(unsafe { **client.uid })
+        .entry(dbg!(unsafe { **client.uid }))
+        .or_default() = (name, clan_tag);
+
+    None
+}
+
+#[rrplug::sqfunction(VM = "Server", ExportName = "RememberNameOverrideUid")]
+fn remember_name_override_uid(uid: String, name: String, clan_tag: String) -> Option<()> {
+    *PLUGIN
+        .wait()
+        .bots
+        .player_names
+        .lock()
+        .entry(std::array::from_fn(|i| {
+            uid.as_bytes().get(i).copied().unwrap_or(0) as i8
+        }))
         .or_default() = (name, clan_tag);
 
     None
