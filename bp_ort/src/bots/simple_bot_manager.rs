@@ -123,9 +123,22 @@ pub fn check_player_amount(plugin: &super::Bots, token: EngineToken) -> Result<(
         .ok_or("failed to get server functions")?;
     let mut manager_data = plugin.manager_data.lock();
 
+    // fix any issues with max and target begin higher
+    manager_data.max = manager_data.max.max(manager_data.target);
+
+    // if anyone isn't fully connected don't run the manager
+    if unsafe {
+        !iterate_c_array_sized::<_, 32>(engine_funcs.client_array.into()).all(|client| {
+            client.signon.copy_inner() == SignonState::FULL
+                || client.signon.copy_inner() == SignonState::NONE
+        })
+    } {
+        return Ok(());
+    }
+
     let (real_players, fake_playes) = unsafe {
         iterate_c_array_sized::<_, 32>(engine_funcs.client_array.into())
-            .filter(|client| client.signon.copy_inner() >= SignonState::CONNECTED)
+            .filter(|client| client.signon.copy_inner() == SignonState::FULL)
             .fold((0u32, 0u32), |(real_players, fake_players), client| {
                 (
                     real_players + client.fake_player.not() as u32,
@@ -135,7 +148,9 @@ pub fn check_player_amount(plugin: &super::Bots, token: EngineToken) -> Result<(
     };
     let total_players = real_players + fake_playes;
 
-    manager_data.bots_to_spawn = if total_players < manager_data.target {
+    manager_data.bots_to_spawn = if real_players == 0 {
+        0
+    } else if total_players < manager_data.target {
         manager_data.target - total_players
     } else if real_players >= manager_data.target
         && total_players < manager_data.max
@@ -145,7 +160,9 @@ pub fn check_player_amount(plugin: &super::Bots, token: EngineToken) -> Result<(
     } else {
         0
     };
-    manager_data.bots_to_remove = total_players.saturating_sub(manager_data.max);
+    manager_data.bots_to_remove = total_players
+        .saturating_sub(manager_data.max)
+        .max((real_players == 0) as u32 * fake_playes);
 
     match (manager_data.bots_to_spawn, manager_data.bots_to_remove) {
         (1.., _) => {
