@@ -218,17 +218,22 @@ pub fn test_net_int(command: CCommandResult) -> Option<()> {
 #[rrplug::concommand]
 pub fn bot_list_player_indicies() {
     let engine_funcs = ENGINE_FUNCTIONS.wait();
-    for (index, player) in (0..32).filter_map(|index| {
-        Some((index, unsafe {
+    for (index, player, signon) in (0..32).filter_map(|index| unsafe {
+        Some((
+            index,
             from_char_ptr(
                 (engine_funcs.client_array.add(index))
                     .as_ref()?
                     .name
                     .as_ptr(),
-            )
-        }))
+            ),
+            (engine_funcs.client_array.add(index))
+                .as_ref()?
+                .signon
+                .copy_inner(),
+        ))
     }) {
-        log::info!("{index}: {player}");
+        log::info!("{index}: {player}, {signon:?}");
     }
 }
 
