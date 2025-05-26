@@ -39,15 +39,15 @@ pub fn run_bots_cmds(_paused: bool) {
     for (player, edict) in unsafe {
         iterate_c_array_sized::<_, 32>(engine_functions.client_array.into())
             .enumerate()
-            .filter(|(_, client)| **client.signon == SignonState::FULL)
-            .filter(|(_, client)| **client.fake_player)
+            .filter(|(_, client)| client.m_nSignonState == SignonState::FULL)
+            .filter(|(_, client)| client.m_bFakePlayer)
             .filter_map(|(i, client)| {
                 let bot_player = player_by_index((i + 1) as i32).as_mut()?;
-                let edict = **client.edict as usize;
+                let handle = client.m_nHandle as usize;
 
                 (server_functions.calc_origin)(bot_player, &std::ptr::from_ref(bot_player), 0, 0);
 
-                Some((bot_player, edict))
+                Some((bot_player, handle))
             })
     } {
         let mut cmd = {

@@ -8,10 +8,11 @@ use rrplug::{
 };
 
 use crate::admin_abuse::parse_admins;
+use crate::utils::get_c_char_array_lossy;
 use crate::{
     admin_abuse::{admin_check, execute_for_matches, forward_to_server},
     bindings::{EngineFunctions, ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
-    utils::{from_c_string, iterate_c_array_sized},
+    utils::iterate_c_array_sized,
 };
 
 pub fn register_grant_admin_command(engine_data: &EngineData, token: EngineToken) {
@@ -65,7 +66,7 @@ fn add_admin(player: &CPlayer, engine_funcs: &EngineFunctions, token: EngineToke
             .client_array
             .add(player.pl.index as usize - 1)
             .as_ref()?;
-        let uid = client.uid.as_ptr();
+        let uid = client.m_UID.as_ptr();
         str_from_char_ptr(uid)?
     };
 
@@ -79,8 +80,8 @@ fn add_admin(player: &CPlayer, engine_funcs: &EngineFunctions, token: EngineToke
 #[rrplug::completion]
 fn grant_admin_completion(current: CurrentCommand, suggestions: CommandCompletion) -> i32 {
     unsafe { iterate_c_array_sized::<_, 32>(ENGINE_FUNCTIONS.wait().client_array.into()) }
-        .filter(|client| unsafe { *client.signon.get_inner() } == SignonState::FULL)
-        .map(|client| unsafe { from_c_string::<String>(client.name.get_inner().as_ptr()) })
+        .filter(|client| client.m_nSignonState == SignonState::FULL)
+        .map(|client| get_c_char_array_lossy(&client.m_szServerName))
         .filter(|name| name.starts_with(current.partial))
         .for_each(|name| _ = suggestions.push(&format!("{} {}", current.cmd, name)));
 

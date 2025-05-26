@@ -106,8 +106,22 @@ pub(crate) unsafe fn set_c_char_array<const U: usize>(buf: &mut [c_char; U], new
 }
 
 #[inline]
-pub(crate) fn get_c_char_array<const U: usize>(buf: &[c_char; U]) -> String {
-    String::from_utf8_lossy(buf.map(|i| i as u8).as_slice()).to_string()
+pub(crate) fn get_c_char_array_lossy<const U: usize>(buf: &[c_char; U]) -> String {
+    let index = buf
+        .iter()
+        .position(|c| *c == b'\0' as i8)
+        .unwrap_or(buf.len());
+    String::from_utf8_lossy(&buf.map(|i| i as u8)[0..index]).to_string()
+}
+
+#[inline]
+pub(crate) fn get_c_char_array<const U: usize>(buf: &[i8; U]) -> Option<&str> {
+    let index = buf
+        .iter()
+        .position(|c| *c == b'\0' as i8)
+        .unwrap_or(buf.len());
+    // SAFETY: an i8 is a valid u8
+    str::from_utf8(&(unsafe { std::mem::transmute::<&[i8; U], &[u8; U]>(buf) })[0..index]).ok()
 }
 
 #[inline]

@@ -12,10 +12,7 @@ use rrplug::{
         cvar::convar::FCVAR_GAMEDLL,
     },
     exports::OnceCell,
-    mid::{
-        squirrel::SQVM_SERVER,
-        utils::{str_from_char_ptr, try_cstring},
-    },
+    mid::{squirrel::SQVM_SERVER, utils::try_cstring},
     prelude::*,
 };
 use simple_bot_manager::ManagerData;
@@ -35,7 +32,7 @@ use crate::{
     },
     interfaces::ENGINE_INTERFACES,
     navmesh::{navigation::Navigation, Hull},
-    utils::iterate_c_array_sized,
+    utils::{get_c_char_array, iterate_c_array_sized},
     PLUGIN,
 };
 
@@ -269,7 +266,9 @@ impl Plugin for Bots {
             let engine_functions = ENGINE_FUNCTIONS.wait();
             unsafe {
                 iterate_c_array_sized::<_, 32>(engine_functions.client_array.into())
-                    .filter(|client| **client.signon == SignonState::FULL && **client.fake_player)
+                    .filter(|client| {
+                        client.m_nSignonState == SignonState::FULL && client.m_bFakePlayer
+                    })
                     .for_each(|client| {
                         (engine_functions.cclient_disconnect)(
                             (client as *const CClient).cast_mut(),
@@ -384,7 +383,7 @@ fn spawn_fake_player(
     let plugin = PLUGIN.wait();
     let engine_server = ENGINE_INTERFACES.wait().engine_server;
     let players = unsafe { iterate_c_array_sized::<_, 32>(engine_funcs.client_array.into()) }
-        .filter(|c| unsafe { c.signon.get_inner() } >= &SignonState::CONNECTED)
+        .filter(|c| c.m_nSignonState >= SignonState::CONNECTED)
         .count() as u32;
     let max_players = plugin.bots.max_players.load(Ordering::Acquire);
     if players >= max_players {
@@ -418,18 +417,18 @@ fn spawn_fake_player(
         }
     };
 
-    let edict = unsafe { **client.edict };
-    unsafe { (server_funcs.client_fully_connected)(std::ptr::null(), edict, true) };
+    let handle = client.m_nHandle;
+    unsafe { (server_funcs.client_fully_connected)(std::ptr::null(), handle, true) };
 
     unsafe { engine_server.LockNetworkStringTables(false) };
 
     log::info!(
-        "spawned a bot : {} with edict {edict} {}",
-        unsafe { str_from_char_ptr(client.name.as_ptr()) }.unwrap_or("UNK"),
+        "spawned a bot : {} with handle {handle} {}",
+        get_c_char_array(&client.m_szServerName).unwrap_or("UNK"),
         unsafe {
             from_char_ptr((server_funcs.get_entity_name)((server_funcs
                 .get_player_by_index)(
-                edict as i32 + 1
+                handle as i32 + 1
             )))
         }
     );
@@ -438,7 +437,7 @@ fn spawn_fake_player(
     if let Some(hardpoint) = shared_data
         .claimed_hardpoints
         .iter()
-        .find(|(_, index)| **index == edict as usize)
+        .find(|(_, index)| **index == handle as usize)
         .map(|(v, _)| v)
         .cloned()
     {
@@ -450,14 +449,14 @@ fn spawn_fake_player(
     *BOT_DATA_MAP
         .get(token)
         .borrow_mut()
-        .get_mut(edict as usize)
+        .get_mut(handle as usize)
         .expect("tried to get an invalid edict") = BotData {
         sim_type,
         nav_query: Navigation::new(Hull::Human),
         ..Default::default()
     };
 
-    Some(edict as i32)
+    Some(handle as i32)
 }
 
 fn get_bot_name() -> String {
@@ -547,7 +546,7 @@ fn choose_team_normal() -> i32 {
     let team_2_count =
         unsafe { iterate_c_array_sized::<_, 32>(ENGINE_FUNCTIONS.wait().client_array.into()) }
             .enumerate()
-            .filter(|(_, c)| unsafe { c.signon.get_inner() } >= &SignonState::CONNECTED)
+            .filter(|(_, c)| c.m_nSignonState >= SignonState::CONNECTED)
             .inspect(|_| total_players += 1)
             .filter_map::<i32, _>(|(index, _)| {
                 Some(unsafe {
@@ -714,7 +713,7 @@ fn remember_name_override(
         .bots
         .player_names
         .lock()
-        .entry(dbg!(unsafe { **client.uid }))
+        .entry(client.m_UID)
         .or_default() = (name, clan_tag);
 
     None

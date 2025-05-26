@@ -127,25 +127,21 @@ pub fn check_player_amount(plugin: &super::Bots, token: EngineToken) -> Result<(
     manager_data.max = manager_data.max.max(manager_data.target);
 
     // if anyone isn't fully connected don't run the manager
-    if unsafe {
-        !iterate_c_array_sized::<_, 32>(engine_funcs.client_array.into()).all(|client| {
-            client.signon.copy_inner() == SignonState::FULL
-                || client.signon.copy_inner() == SignonState::NONE
-        })
-    } {
+    if !unsafe { iterate_c_array_sized::<_, 32>(engine_funcs.client_array.into()) }.all(|client| {
+        client.m_nSignonState == SignonState::FULL || client.m_nSignonState == SignonState::NONE
+    }) {
         return Ok(());
     }
 
-    let (real_players, fake_playes) = unsafe {
-        iterate_c_array_sized::<_, 32>(engine_funcs.client_array.into())
-            .filter(|client| client.signon.copy_inner() == SignonState::FULL)
+    let (real_players, fake_playes) =
+        unsafe { iterate_c_array_sized::<_, 32>(engine_funcs.client_array.into()) }
+            .filter(|client| client.m_nSignonState == SignonState::FULL)
             .fold((0u32, 0u32), |(real_players, fake_players), client| {
                 (
-                    real_players + client.fake_player.not() as u32,
-                    fake_players + client.fake_player.copy_inner() as u32,
+                    real_players + client.m_bFakePlayer.not() as u32,
+                    fake_players + client.m_bFakePlayer as u32,
                 )
-            })
-    };
+            });
     let total_players = real_players + fake_playes;
 
     manager_data.bots_to_spawn = if real_players == 0 {
@@ -183,8 +179,9 @@ pub fn check_player_amount(plugin: &super::Bots, token: EngineToken) -> Result<(
             unsafe { engine_server.LockNetworkStringTables(true) };
 
             unsafe {
-                iterate_c_array_sized::<_, 32>(engine_funcs.client_array.into())
-                    .filter(|client| **client.signon == SignonState::FULL && **client.fake_player)
+                iterate_c_array_sized::<_, 32>(engine_funcs.client_array.into()).filter(|client| {
+                    client.m_nSignonState == SignonState::FULL && client.m_bFakePlayer
+                })
             }
             .take(r as usize)
             .for_each(|client| unsafe {

@@ -115,7 +115,7 @@ pub(super) fn get_cmd(
                         .engine_funcs
                         .client_array
                         .as_mut()
-                        .map(|client| !**client.fake_player)
+                        .map(|client| client.m_bFakePlayer)
                         .unwrap_or_default() =>
                 {
                     *player.get_origin(&mut v)

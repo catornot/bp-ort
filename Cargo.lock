@@ -399,7 +399,7 @@ dependencies = [
 [[package]]
 name = "rrplug"
 version = "4.1.0"
-source = "git+https://github.com/catornot/rrplug.git#f029690b4db011a58a8b9c5620a6f3fb70d148a4"
+source = "git+https://github.com/catornot/rrplug.git#251bfad69865dc2041865362a6d8a0d121fe0a56"
 dependencies = [
  "bitflags 2.6.0",
  "log",
@@ -413,7 +413,7 @@ dependencies = [
 [[package]]
 name = "rrplug_proc"
 version = "4.1.0"
-source = "git+https://github.com/catornot/rrplug.git#f029690b4db011a58a8b9c5620a6f3fb70d148a4"
+source = "git+https://github.com/catornot/rrplug.git#251bfad69865dc2041865362a6d8a0d121fe0a56"
 dependencies = [
  "proc-macro2",
  "quote",

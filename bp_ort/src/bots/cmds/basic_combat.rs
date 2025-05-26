@@ -281,11 +281,7 @@ pub(crate) fn basic_combat(
 
         // 0x2c is the offset to weather the weapon can charge or not
         let (should_charge, charge_weapon) = active_weapon
-            .map(|weapon| {
-                (weapon, unsafe {
-                    *weapon.weaponVars.as_ptr().byte_offset(0x2c).cast::<f32>() != 0.
-                })
-            })
+            .map(|weapon| (weapon, weapon.m_lastChargeFrac != 0.))
             .map::<(&CBaseEntity, bool), _>(|x| (x.0, x.1))
             .map(|(weapon, is_charge)| unsafe {
                 let charge = (helper.sv_funcs.get_weapon_charge_fraction)(weapon);

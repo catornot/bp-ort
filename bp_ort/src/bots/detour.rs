@@ -262,7 +262,7 @@ pub fn other_subfunc_cclient_disconnect_hook(unk1: *mut c_void) {
 
     log::info!(
         "client leaving {:?}",
-        client.map(|client| crate::utils::get_c_char_array(unsafe { &client.name }))
+        client.map(|client| crate::utils::get_c_char_array_lossy(&client.m_szServerName))
     );
 
     unsafe { SomeFuncOtherInDisconnectProcedure.call(unk1) }

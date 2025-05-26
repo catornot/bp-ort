@@ -10,6 +10,7 @@ use rrplug::{
 };
 
 use crate::bindings::CLIENT_FUNCTIONS;
+use crate::utils::get_c_char_array_lossy;
 use crate::{
     admin_abuse::{admin_check, execute_for_matches, forward_to_server},
     bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
@@ -73,11 +74,11 @@ fn teleport_server_command(command: CCommandResult) -> Option<()> {
     let mut v = Vector3::ZERO;
     let tp_location = unsafe { iterate_c_array_sized::<_, 32>(engine.client_array.into()) }
         .enumerate()
-        .filter(|(_, client)| unsafe { *client.signon.get_inner() } == SignonState::FULL)
+        .filter(|(_, client)| client.m_nSignonState == SignonState::FULL)
         .filter_map(|(e, client)| unsafe {
             Some((
                 (funcs.get_player_by_index)(e as i32 + 1).as_mut()?,
-                from_char_ptr(client.name.get_inner().as_ptr()),
+                get_c_char_array_lossy(&client.m_szServerName),
             ))
         })
         .find_map(|(player, name)| {
@@ -118,16 +119,16 @@ fn teleport_completion(current: CurrentCommand, suggestions: CommandCompletion) 
         }
 
         unsafe { iterate_c_array_sized::<_, 32>(ENGINE_FUNCTIONS.wait().client_array.into()) }
-            .filter(|client| unsafe { *client.signon.get_inner() } == SignonState::FULL)
-            .map(|client| unsafe { from_c_string::<String>(client.name.get_inner().as_ptr()) })
+            .filter(|client| client.m_nSignonState == SignonState::FULL)
+            .map(|client| get_c_char_array_lossy(&client.m_szServerName))
             .filter(|name| name.starts_with(current.partial))
             .for_each(|name| _ = suggestions.push(&format!("{} {}", current.cmd, name)));
         return;
     };
 
     unsafe { iterate_c_array_sized::<_, 32>(ENGINE_FUNCTIONS.wait().client_array.into()) }
-        .filter(|client| unsafe { *client.signon.get_inner() } == SignonState::FULL)
-        .map(|client| unsafe { from_c_string::<String>(client.name.get_inner().as_ptr()) })
+        .filter(|client| client.m_nSignonState == SignonState::FULL)
+        .map(|client| get_c_char_array_lossy(&client.m_szServerName))
         .filter(|name| name.starts_with(next))
         .for_each(|name| _ = suggestions.push(&format!("{} {} {}", current.cmd, prev, name)));
 }
