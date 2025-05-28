@@ -145,9 +145,9 @@ impl Plugin for Bots {
             "bot",
             "botornot",
             "perhaps_bot",
-            "sybotn",
+            "synbotli",
             "thx_bob",
-            "PetarBot",
+            "Botar",
             "hOlOB0t",
             "ctalover",
             "Bot3000",
@@ -172,6 +172,7 @@ impl Plugin for Bots {
             "GeckoBot",
             "FrontierBotter",
             "UniBot",
+            "Bolf109909",
         ]
         .into_iter()
         .map(str::to_string)
