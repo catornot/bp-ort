@@ -1,5 +1,8 @@
 #![allow(dead_code, unused, clippy::type_complexity)]
-use avian3d::prelude::*;
+use avian3d::{
+    parry::na::{Matrix4xX, SMatrix},
+    prelude::*,
+};
 use bevy::{
     asset::RenderAssetUsages,
     math::bounding::Aabb3d,
@@ -374,6 +377,8 @@ struct Brush {
     brush_side_offset: i32,
 }
 
+static ASSERT: () = assert!(std::mem::size_of::<Brush>() == 0x20);
+
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 struct MaterialSort {
@@ -639,7 +644,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .collect::<std::collections::HashSet<(PrimitiveType, usize)>>()
         .into_iter()
-        .map(|(ty, index)| {
+        .filter_map(|(ty, index)| {
             let mut pushing_vertecies: Vec<Vec3> = Vec::new();
             let mut indices = Vec::new();
 
@@ -680,9 +685,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     let brush = brushes[index];
                     fn contains_point(planes: &[Vec4], point: DVec3) -> bool {
-                        planes.iter().all(|plane| {
-                            plane.xyz().as_dvec3().dot(point) + plane.as_dvec4().w < 0.000001f64
-                        })
+                        planes
+                            .iter()
+                            .map(|v| v.as_dvec4())
+                            .all(|plane| plane.xyz().dot(point) - plane.w < 0.000001f64)
                     }
 
                     fn calculate_intersection_point(planes: [&Vec4; 3]) -> Option<DVec3> {
@@ -714,14 +720,55 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .map(|index| brush_planes[index])
                         .collect::<Vec<_>>();
 
-                    // planes.extend_from_slice(&[
-                    //     Vec4::new(1., 0., 0., brush.extends.x),
-                    //     Vec4::new(-1., 0., 0., -brush.extends.x),
-                    //     Vec4::new(0., 1., 0., brush.extends.y),
-                    //     Vec4::new(0., -1., 0., -brush.extends.y),
-                    //     Vec4::new(0., 0., 1., brush.extends.z),
-                    //     Vec4::new(0., 0., -1., -brush.extends.z),
-                    // ]);
+                    #[rustfmt::skip] let extend_planes =[
+                        Vec4::new(1., 0., 0., brush.extends.x.abs()),
+                        Vec4::new(-1., 0., 0., brush.extends.x.abs()),
+                        Vec4::new(0., 1., 0., brush.extends.y.abs()),
+                        Vec4::new(0., -1., 0., brush.extends.y.abs()),
+                        Vec4::new(0., 0., 1., brush.extends.z.abs()),
+                        Vec4::new(0., 0., -1., brush.extends.z.abs()),
+                    ];
+
+                    let [x, y, z] = brush.origin.to_array();
+                    #[rustfmt::skip] let mut transform = SMatrix::<_, 4, 4>::new(
+                        1., 0., 0., x,
+                        0., 1., 0., y,
+                        0., 0., 1., z,
+                        0., 0., 0., 1.
+                    );
+                    let org_transform = transform;
+                    transform.try_inverse_mut();
+                    transform.transpose_mut();
+                    planes.extend(
+                        extend_planes
+                            .into_iter()
+                            .map(|p| {
+                                (
+                                    SMatrix::<_, 4, 1>::new(p.x * p.w, p.y * p.w, p.z * p.w, 1.),
+                                    SMatrix::<_, 4, 1>::new(p.x, p.y, p.z, 0.),
+                                    SMatrix::<_, 4, 1>::zeros(),
+                                )
+                            })
+                            .map(|(org, normal, mut out)| {
+                                org_transform.mul_to(&org, &mut out);
+                                (out, normal, org)
+                            })
+                            .map(|(org, normal, mut out)| {
+                                transform.mul_to(&normal, &mut out);
+                                Vec4::new(
+                                    out.x,
+                                    out.y,
+                                    out.z,
+                                    Vec3::new(out.x, out.y, out.z)
+                                        .dot(Vec3::new(org.x, org.y, org.z)),
+                                )
+                            }),
+                    ); // transpose(inverse(M))*p
+
+                    planes
+                        .iter()
+                        .inspect(|v| println!("({}x)+({}y)+({}z)+({})=0", v.x, v.y, v.z, v.w))
+                        .count();
 
                     let points = &planes
                         .iter()
@@ -730,12 +777,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             let intersection = calculate_intersection_point([p1, p2, p3])?;
                             // If the intersection does not exist within the bounds the hull, discard it
                             if !contains_point(&planes, intersection) {
+                                println!(
+                                    "({}, {}, {})",
+                                    intersection.x, intersection.y, intersection.z
+                                );
                                 return None;
                             }
 
                             Some(intersection)
                         })
-                        .map(|v| (v.as_vec3() + brush.origin))
+                        .inspect(|v| println!("({}, {}, {})", v.x, v.y, v.z))
+                        .map(|v| (v.as_vec3() + brush.origin).xzy())
                         .map(|v| v.into())
                         .collect::<Vec<_>>();
 
@@ -745,21 +797,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         planes,
                         planes.len()
                     );
-
+                    return None;
                     let (vertices, pindices) = avian3d::parry::transformation::convex_hull(points);
 
                     pushing_vertecies.extend(vertices.iter().map(|v| Vec3::new(v.x, v.y, v.z)));
                     indices.extend(pindices.iter().flatten());
                 }
-                PrimitiveType::Prop => {}
+                PrimitiveType::Prop => {
+                    return None;
+                }
             }
 
-            Mesh::new(
-                bevy::render::mesh::PrimitiveTopology::TriangleList,
-                RenderAssetUsages::all(),
+            Some(
+                Mesh::new(
+                    bevy::render::mesh::PrimitiveTopology::TriangleList,
+                    RenderAssetUsages::all(),
+                )
+                .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pushing_vertecies)
+                .with_inserted_indices(bevy::render::mesh::Indices::U32(indices)),
             )
-            .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pushing_vertecies)
-            .with_inserted_indices(bevy::render::mesh::Indices::U32(indices))
         })
         .collect::<Vec<Mesh>>();
 
@@ -803,7 +859,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .enumerate()
         .filter_map(|(i, mesh)| {
             Some((
-                // Collider::trimesh_from_mesh(&mesh)?,
+                Collider::trimesh_from_mesh(&mesh)?,
                 RigidBody::Static,
                 Mesh3d(
                     app.world_mut()
