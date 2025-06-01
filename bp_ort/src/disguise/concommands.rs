@@ -69,7 +69,8 @@ pub fn disguise_name(command: CCommandResult) -> Option<()> {
         unsafe { (SERVER_FUNCTIONS.wait().get_player_by_index)(index as i32 + 1).as_mut()? };
 
     unsafe {
-        set_c_char_array(&mut client.name, name);
+        set_c_char_array(&mut client.m_szServerName, name);
+        set_c_char_array(&mut client.m_szClientName, name);
         set_c_char_array(&mut player.m_title, name);
         set_c_char_array(&mut player.m_communityName, name);
     }
@@ -88,7 +89,7 @@ pub fn disguise_tag(command: CCommandResult) -> Option<()> {
         unsafe { (SERVER_FUNCTIONS.wait().get_player_by_index)(index as i32 + 1).as_mut()? };
 
     unsafe {
-        set_c_char_array(&mut client.clan_tag, tag);
+        set_c_char_array(&mut client.m_szClanTag, tag);
         set_c_char_array(&mut player.m_communityClanTag, tag);
     }
 
@@ -118,11 +119,11 @@ pub fn disguise_edict(command: CCommandResult) -> Option<()> {
 
         let client = ENGINE_FUNCTIONS.wait().client_array.add(index).as_mut()?;
 
-        log::info!("client.edict {}", *client.edict);
+        log::info!("client.handle {}", client.m_nHandle);
 
         let edict: u16 = command.get_arg(0)?.parse().ok()?;
 
-        **client.edict = edict;
+        client.m_nHandle = edict;
     }
     None
 }

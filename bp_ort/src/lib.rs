@@ -133,6 +133,7 @@ impl Plugin for HooksPlugin {
     fn runframe(&self, token: EngineToken) {
         self.interfaces.runframe(token);
         self.devtoys.runframe(token);
+        self.bots.runframe(token);
     }
 }
 

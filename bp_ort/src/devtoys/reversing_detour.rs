@@ -35,7 +35,6 @@ fn hook_trace_line(
         TraceLineSimple.call(v1, v2, unk1, unk2, unk3, unk4, unk5, trace);
 
         log::info!("trace result : {:?}", *trace);
-        // dbg!(trace);
     }
 }
 

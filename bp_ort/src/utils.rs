@@ -106,6 +106,25 @@ pub(crate) unsafe fn set_c_char_array<const U: usize>(buf: &mut [c_char; U], new
 }
 
 #[inline]
+pub(crate) fn get_c_char_array_lossy<const U: usize>(buf: &[c_char; U]) -> String {
+    let index = buf
+        .iter()
+        .position(|c| *c == b'\0' as i8)
+        .unwrap_or(buf.len());
+    String::from_utf8_lossy(&buf.map(|i| i as u8)[0..index]).to_string()
+}
+
+#[inline]
+pub(crate) fn get_c_char_array<const U: usize>(buf: &[i8; U]) -> Option<&str> {
+    let index = buf
+        .iter()
+        .position(|c| *c == b'\0' as i8)
+        .unwrap_or(buf.len());
+    // SAFETY: an i8 is a valid u8
+    str::from_utf8(&(unsafe { std::mem::transmute::<&[i8; U], &[u8; U]>(buf) })[0..index]).ok()
+}
+
+#[inline]
 pub(crate) unsafe fn from_c_string<T: From<String>>(ptr: *const c_char) -> T {
     CStr::from_ptr(ptr).to_string_lossy().to_string().into()
 }
@@ -128,7 +147,7 @@ pub(crate) fn send_client_print(player: &CPlayer, msg: &str) -> Option<()> {
     let client = unsafe {
         engine
             .client_array
-            .add(player.pl.index as usize - 1)
+            .add((player.pl.index as usize).checked_sub(1)?)
             .as_ref()?
     };
     let msg = try_cstring(msg).ok()?;

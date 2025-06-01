@@ -1,13 +1,12 @@
 use parking_lot::{RwLock, RwLockReadGuard};
 use rrplug::{
     bindings::class_types::{client::SignonState, cplayer::CPlayer},
-    mid::utils::from_char_ptr,
     prelude::*,
 };
 
 use crate::{
     bindings::{EngineFunctions, ServerFunctions, ENGINE_FUNCTIONS},
-    utils::{from_c_string, iterate_c_array_sized, send_client_print},
+    utils::{from_c_string, get_c_char_array_lossy, iterate_c_array_sized, send_client_print},
 };
 
 use self::{
@@ -132,7 +131,7 @@ pub fn admin_check<'a, 'b>(
                 .client_array
                 .add(caller_player.pl.index.saturating_sub(1) as usize)
                 .as_ref()
-                .map(|c| from_c_string::<String>(c.uid.as_ptr()))
+                .map(|c| from_c_string::<String>(c.m_UID.as_ptr()))
         })
         .map(|uid| get_admins().iter().any(|admin| admin.as_ref() == uid))
         .unwrap_or(true);
@@ -185,11 +184,11 @@ pub fn execute_for_matches(
 ) {
     unsafe { iterate_c_array_sized::<_, 32>(engine_funcs.client_array.into()) }
         .enumerate()
-        .filter(|(_, client)| unsafe { *client.signon.get_inner() } == SignonState::FULL)
+        .filter(|(_, client)| client.m_nSignonState == SignonState::FULL)
         .filter_map(|(e, client)| unsafe {
             Some((
                 (server_funcs.get_player_by_index)(e as i32 + 1).as_mut()?,
-                from_char_ptr(client.name.get_inner().as_ptr()),
+                get_c_char_array_lossy(&client.m_szServerName),
             ))
         })
         .filter(|(player, _)| unsafe { !should_live || (server_funcs.is_alive)(*player) != 0 })

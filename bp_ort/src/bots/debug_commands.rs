@@ -3,11 +3,10 @@ use rrplug::{
     mid::utils::{from_char_ptr, to_cstring, try_cstring},
     prelude::*,
 };
-use std::ffi::CStr;
 
 use crate::{
     admin_abuse::execute_for_matches,
-    utils::{get_ents_by_class_name, get_weaponx_name, lookup_ent},
+    utils::{get_c_char_array_lossy, get_ents_by_class_name, get_weaponx_name, lookup_ent},
 };
 use crate::{
     bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
@@ -100,11 +99,7 @@ pub fn bot_find(command: CCommandResult) {
 
     let found_client = unsafe {
         iterate_c_array_sized::<_, 32>(ENGINE_FUNCTIONS.wait().client_array.into())
-            .map(|c| {
-                CStr::from_ptr(c.name.as_ref() as *const [i8] as *const i8)
-                    .to_string_lossy()
-                    .to_string()
-            })
+            .map(|c| get_c_char_array_lossy(&c.m_szServerName))
             .find(|n| n == name)
     };
 
@@ -126,7 +121,7 @@ pub fn bot_dump_players() {
         })
         .filter_map(|(player, client)| unsafe { Some((player.as_ref()?, client.as_ref()?)) })
     {
-        if unsafe { client.fake_player.copy_inner() } {
+        if client.m_bFakePlayer {
             let data = super::BOT_DATA_MAP.get(engine_token).try_borrow().ok();
             log::info!(
                 "{}: {} on team {} with sim_type {} with titan {:?}",
@@ -134,15 +129,10 @@ pub fn bot_dump_players() {
                 player.pl.index,
                 player.m_iTeamNum,
                 data.as_ref()
-                    .and_then(|data| data
-                        .get(unsafe { client.edict.copy_inner() as usize })?
-                        .sim_type)
+                    .and_then(|data| data.get(client.m_nHandle as usize)?.sim_type)
                     .unwrap_or(-1),
-                data.and_then(|data| Some(
-                    data.get(unsafe { client.edict.copy_inner() as usize })?
-                        .titan
-                ))
-                .unwrap_or_default(),
+                data.and_then(|data| Some(data.get(client.m_nHandle as usize)?.titan))
+                    .unwrap_or_default(),
             );
         } else {
             log::info!(
@@ -218,17 +208,20 @@ pub fn test_net_int(command: CCommandResult) -> Option<()> {
 #[rrplug::concommand]
 pub fn bot_list_player_indicies() {
     let engine_funcs = ENGINE_FUNCTIONS.wait();
-    for (index, player) in (0..32).filter_map(|index| {
-        Some((index, unsafe {
-            from_char_ptr(
-                (engine_funcs.client_array.add(index))
+    for (index, player, signon) in (0..32).filter_map(|index| unsafe {
+        Some((
+            index,
+            get_c_char_array_lossy(
+                &(engine_funcs.client_array.add(index))
                     .as_ref()?
-                    .name
-                    .as_ptr(),
-            )
-        }))
+                    .m_szServerName,
+            ),
+            (engine_funcs.client_array.add(index))
+                .as_ref()?
+                .m_nSignonState,
+        ))
     }) {
-        log::info!("{index}: {player}");
+        log::info!("{index}: {player}, {signon:?}");
     }
 }
 

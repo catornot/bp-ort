@@ -4611,10 +4611,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "wasm-bindgen-backend"
-version = "0.2.100"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f0a0651a5c2bc21487bde11ee802ccaf4c51935d0d3d42a6101f98161700bc6"
+name = "rrplug"
+version = "4.1.0"
+source = "git+https://github.com/catornot/rrplug.git#251bfad69865dc2041865362a6d8a0d121fe0a56"
 dependencies = [
  "bumpalo",
  "log",
@@ -4646,12 +4645,9 @@ dependencies = [
  "quote",
  "wasm-bindgen-macro-support",
 ]
-
-[[package]]
-name = "wasm-bindgen-macro-support"
-version = "0.2.100"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ae87ea40c9f689fc23f209965b6fb8a99ad69aeeb0231408be24920604395de"
+name = "rrplug_proc"
+version = "4.1.0"
+source = "git+https://github.com/catornot/rrplug.git#251bfad69865dc2041865362a6d8a0d121fe0a56"
 dependencies = [
  "proc-macro2",
  "quote",

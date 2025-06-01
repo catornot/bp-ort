@@ -12,9 +12,10 @@ use rrplug::{
         cvar::convar::FCVAR_GAMEDLL,
     },
     exports::OnceCell,
-    mid::utils::{str_from_char_ptr, try_cstring},
+    mid::{squirrel::SQVM_SERVER, utils::try_cstring},
     prelude::*,
 };
+use simple_bot_manager::ManagerData;
 use std::{
     cell::RefCell,
     collections::HashMap,
@@ -31,7 +32,7 @@ use crate::{
     },
     interfaces::ENGINE_INTERFACES,
     navmesh::{navigation::Navigation, Hull},
-    utils::iterate_c_array_sized,
+    utils::{get_c_char_array, iterate_c_array_sized},
     PLUGIN,
 };
 
@@ -44,6 +45,7 @@ mod debug_commands;
 mod detour;
 mod netvars;
 mod set_on_join;
+mod simple_bot_manager;
 
 pub const DEFAULT_SIMULATE_TYPE: i32 = 6;
 
@@ -102,12 +104,14 @@ pub(super) struct BotData {
 #[derive(Debug)]
 pub(super) struct BotShared {
     reserved_targets: [(f32, u32); 64],
+    claimed_hardpoints: HashMap<Vector3, usize>,
 }
 
 impl Default for BotShared {
     fn default() -> Self {
         Self {
             reserved_targets: std::array::from_fn(|_| Default::default()),
+            claimed_hardpoints: HashMap::new(),
         }
     }
 }
@@ -120,6 +124,7 @@ pub struct Bots {
     pub max_players: AtomicU32,
     pub max_teams: AtomicU32,
     pub player_names: Mutex<HashMap<[i8; 32], (String, String)>>,
+    pub manager_data: Mutex<simple_bot_manager::ManagerData>,
 }
 
 impl Plugin for Bots {
@@ -131,15 +136,18 @@ impl Plugin for Bots {
         register_sq_functions(bot_set_target_pos);
         register_sq_functions(bot_set_sim_type);
         register_sq_functions(bot_spawn);
+        register_sq_functions(remember_name_override);
+        register_sq_functions(remember_name_override_uid);
+        simple_bot_manager::register_manager_sq_functions();
 
         let mut bot_names = [
             "FiveBots",
             "bot",
             "botornot",
             "perhaps_bot",
-            "sybotn",
+            "synbotli",
             "thx_bob",
-            "PetarBot",
+            "Botar",
             "hOlOB0t",
             "ctalover",
             "Bot3000",
@@ -164,6 +172,7 @@ impl Plugin for Bots {
             "GeckoBot",
             "FrontierBotter",
             "UniBot",
+            "Bolf109909",
         ]
         .into_iter()
         .map(str::to_string)
@@ -198,6 +207,7 @@ impl Plugin for Bots {
             max_players: AtomicU32::new(32),
             max_teams: AtomicU32::new(2),
             player_names: Mutex::new(HashMap::new()),
+            manager_data: Mutex::new(ManagerData::default()),
         }
     }
 
@@ -210,6 +220,8 @@ impl Plugin for Bots {
         cmds::reset_on_new_game();
 
         SHARED_BOT_DATA.get(token).replace(BotShared::default());
+
+        self.next_bot_names.lock().clear();
 
         let max_players: u32 = unsafe {
             from_char_ptr((ENGINE_FUNCTIONS.wait().get_current_playlist_var)(
@@ -255,12 +267,14 @@ impl Plugin for Bots {
             let engine_functions = ENGINE_FUNCTIONS.wait();
             unsafe {
                 iterate_c_array_sized::<_, 32>(engine_functions.client_array.into())
-                    .filter(|client| **client.signon == SignonState::FULL && **client.fake_player)
+                    .filter(|client| {
+                        client.m_nSignonState == SignonState::FULL && client.m_bFakePlayer
+                    })
                     .for_each(|client| {
                         (engine_functions.cclient_disconnect)(
                             (client as *const CClient).cast_mut(),
                             1,
-                            "no reason\0" as *const _ as *const i8,
+                            c"no reason".as_ptr().cast(),
                         )
                     });
             }
@@ -340,6 +354,22 @@ impl Plugin for Bots {
 
         register_required_convars(engine, token);
         register_debug_concommands(engine, token);
+        simple_bot_manager::register_manager_vars(engine, token);
+    }
+
+    fn runframe(&self, engine_token: EngineToken) {
+        if self.manager_data.lock().enabled
+            && SQVM_SERVER
+                .get(engine_token)
+                .try_borrow()
+                .ok()
+                .filter(|sqvm| sqvm.is_some())
+                .is_some()
+        {
+            if let Err(err) = simple_bot_manager::check_player_amount(self, engine_token) {
+                log::error!("bot manager: {err}");
+            }
+        }
     }
 }
 
@@ -354,7 +384,7 @@ fn spawn_fake_player(
     let plugin = PLUGIN.wait();
     let engine_server = ENGINE_INTERFACES.wait().engine_server;
     let players = unsafe { iterate_c_array_sized::<_, 32>(engine_funcs.client_array.into()) }
-        .filter(|c| unsafe { c.signon.get_inner() } >= &SignonState::CONNECTED)
+        .filter(|c| c.m_nSignonState >= SignonState::CONNECTED)
         .count() as u32;
     let max_players = plugin.bots.max_players.load(Ordering::Acquire);
     if players >= max_players {
@@ -388,33 +418,46 @@ fn spawn_fake_player(
         }
     };
 
-    let edict = unsafe { **client.edict };
-    unsafe { (server_funcs.client_fully_connected)(std::ptr::null(), edict, true) };
+    let handle = client.m_nHandle;
+    unsafe { (server_funcs.client_fully_connected)(std::ptr::null(), handle, true) };
 
     unsafe { engine_server.LockNetworkStringTables(false) };
 
     log::info!(
-        "spawned a bot : {} with edict {edict} {}",
-        unsafe { str_from_char_ptr(client.name.as_ptr()) }.unwrap_or("UNK"),
+        "spawned a bot : {} with handle {handle} {}",
+        get_c_char_array(&client.m_szServerName).unwrap_or("UNK"),
         unsafe {
             from_char_ptr((server_funcs.get_entity_name)((server_funcs
                 .get_player_by_index)(
-                edict as i32 + 1
+                handle as i32 + 1
             )))
         }
     );
 
+    let mut shared_data = SHARED_BOT_DATA.get(token).borrow_mut();
+    if let Some(hardpoint) = shared_data
+        .claimed_hardpoints
+        .iter()
+        .find(|(_, index)| **index == handle as usize)
+        .map(|(v, _)| v)
+        .cloned()
+    {
+        _ = shared_data
+            .claimed_hardpoints
+            .extract_if(|v, _| *v == hardpoint);
+    }
+
     *BOT_DATA_MAP
         .get(token)
         .borrow_mut()
-        .get_mut(edict as usize)
+        .get_mut(handle as usize)
         .expect("tried to get an invalid edict") = BotData {
         sim_type,
         nav_query: Navigation::new(Hull::Human),
         ..Default::default()
     };
 
-    Some(edict as i32)
+    Some(handle as i32)
 }
 
 fn get_bot_name() -> String {
@@ -504,7 +547,7 @@ fn choose_team_normal() -> i32 {
     let team_2_count =
         unsafe { iterate_c_array_sized::<_, 32>(ENGINE_FUNCTIONS.wait().client_array.into()) }
             .enumerate()
-            .filter(|(_, c)| unsafe { c.signon.get_inner() } >= &SignonState::CONNECTED)
+            .filter(|(_, c)| c.m_nSignonState >= SignonState::CONNECTED)
             .inspect(|_| total_players += 1)
             .filter_map::<i32, _>(|(index, _)| {
                 Some(unsafe {
@@ -671,7 +714,22 @@ fn remember_name_override(
         .bots
         .player_names
         .lock()
-        .entry(unsafe { **client.uid })
+        .entry(client.m_UID)
+        .or_default() = (name, clan_tag);
+
+    None
+}
+
+#[rrplug::sqfunction(VM = "Server", ExportName = "RememberNameOverrideUid")]
+fn remember_name_override_uid(uid: String, name: String, clan_tag: String) -> Option<()> {
+    *PLUGIN
+        .wait()
+        .bots
+        .player_names
+        .lock()
+        .entry(std::array::from_fn(|i| {
+            uid.as_bytes().get(i).copied().unwrap_or(0) as i8
+        }))
         .or_default() = (name, clan_tag);
 
     None
