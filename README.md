@@ -158,3 +158,6 @@ usage:
 sv_cheats 1
 script thread SpawnNBots(32)
 ```
+
+
+# you should make the bot miss a portion of their mag instead random spread
