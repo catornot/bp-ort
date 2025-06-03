@@ -26,6 +26,15 @@ use std::{
     process::Command,
 };
 
+mod geoset_loader;
+mod mdl_loader;
+
+pub const UNPACK: &str = "target/vpk";
+pub const UNPACK_MERGED: &str = "target/vpk_merged";
+pub const UNPACK_COMMON: &str = "target/common_vpk";
+
+const PATH: &str = "/home/catornot/.local/share/Steam/steamapps/common/Titanfall2/vpk/";
+
 trait SeekRead: Seek + Read {}
 impl<T: Seek + Read> SeekRead for T {}
 
@@ -223,7 +232,7 @@ enum MeshMasks {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct BSPHeader {
+pub struct BSPHeader {
     pub filemagic: [u8; 4],
     pub version: i32,
     pub map_revisions: i32,
@@ -233,7 +242,7 @@ struct BSPHeader {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct LumpHeader {
+pub struct LumpHeader {
     pub fileofs: i32, // offset into file (bytes)
     pub filelen: i32, // length of lump (bytes)
     pub version: i32, // lump format version
@@ -242,7 +251,7 @@ struct LumpHeader {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct CMGrid {
+pub struct CMGrid {
     cell_size: f32,
     cell_org: [i32; 2],
     cell_count: [i32; 2],
@@ -252,7 +261,7 @@ struct CMGrid {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct BspMesh {
+pub struct BspMesh {
     first_mesh_index: u32,
     num_triangles: u16,
     first_vertex: u16,
@@ -267,7 +276,7 @@ struct BspMesh {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct TricollHeader {
+pub struct TricollHeader {
     flags: i16,         // always 0?
     texture_flags: i16, // copy of texture_data.flags
     texture_data: i16,  // probably for surfaceproperties & decals
@@ -286,14 +295,14 @@ struct TricollHeader {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct GridCell {
+pub struct GridCell {
     geo_set_start: i16,
     geo_set_count: i16,
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct GeoSet {
+pub struct GeoSet {
     straddle_group: i16,
     prim_count: i16,
     prim_start: u32,
@@ -301,7 +310,7 @@ struct GeoSet {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct GeoSetBounds {
+pub struct GeoSetBounds {
     origin: [i16; 3],
     cos: i16,
     extends: [i16; 3],
@@ -318,7 +327,7 @@ enum PrimitiveType {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct VertexUnlit {
+pub struct VertexUnlit {
     vertex_index: i32,
     normal_index: i32,
     albedo_uv: Vec2,
@@ -327,7 +336,7 @@ struct VertexUnlit {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct VertexLitFlat {
+pub struct VertexLitFlat {
     vertex_index: u32,
     normal_index: u32,
     albedo_uv: Vec2,
@@ -338,7 +347,7 @@ struct VertexLitFlat {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct VertexLitBump {
+pub struct VertexLitBump {
     vertex_index: i32,
     normal_index: i32,
     albedo_uv: Vec2,
@@ -350,7 +359,7 @@ struct VertexLitBump {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct VertexUnlitTS {
+pub struct VertexUnlitTS {
     vertex_index: i32,
     normal_index: i32,
     albedo_uv: Vec2,
@@ -360,7 +369,7 @@ struct VertexUnlitTS {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct VertexBlinnPhong {
+pub struct VertexBlinnPhong {
     vertex_index: i32,
     normal_index: i32,
     color: u32,
@@ -370,7 +379,7 @@ struct VertexBlinnPhong {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct Brush {
+pub struct Brush {
     origin: Vec3,
     num_non_axial_do_discard: u8,
     num_plane_offsets: u8,
@@ -383,7 +392,7 @@ static ASSERT: () = assert!(std::mem::size_of::<Brush>() == 0x20);
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct MaterialSort {
+pub struct MaterialSort {
     texture_data: i16,
     light_map_header: i16,
     cubemap: i16,
@@ -393,43 +402,43 @@ struct MaterialSort {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct TricollNode {
+pub struct TricollNode {
     vals: [i16; 8], //just a guess because 16bit intrinics are used on this at engine.dll + 0x1D1B10
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct TricollTri {
+pub struct TricollTri {
     data: u32, //bitpacked
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct TricollBevelStart {
+pub struct TricollBevelStart {
     val: u16,
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct TricollBevelIndex {
+pub struct TricollBevelIndex {
     gap_0: [u8; 4],
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct ColBrush {
+pub struct ColBrush {
     gap_0: [u8; 32],
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct CollPrimitive {
+pub struct CollPrimitive {
     val: u32,
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct Dtexdata {
+pub struct Dtexdata {
     reflectivity: Vec3,
     name_string_table_id: i32,
     width: i32,
@@ -441,7 +450,7 @@ struct Dtexdata {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct DCollbrush {
+pub struct DCollbrush {
     origin: Vec3,               // size: 12
     non_axial_count: [u8; 2],   // size: 2
     prior_brush_count: i16,     // size: 2
@@ -451,7 +460,7 @@ struct DCollbrush {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct StaticProp {
+pub struct StaticProp {
     origin: Vec3,
     angles: Vec3,
     scale: f32,
@@ -472,7 +481,7 @@ struct StaticProp {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct FileHeader {
+pub struct FileHeader {
     // file version as defined by VHV_VERSION
     version: i32,
 
@@ -496,21 +505,21 @@ struct FileHeader {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct BodyPartHeader {
+pub struct BodyPartHeader {
     num_models: i32,
     model_offset: i32,
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct ModelHeader {
+pub struct ModelHeader {
     num_lods: i32,
     lod_offset: i32,
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct ModelLODHeader {
+pub struct ModelLODHeader {
     num_meshes: i32,
     mesh_offset: i32,
     switch_point: f32,
@@ -519,14 +528,14 @@ struct ModelLODHeader {
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 #[repr(packed)]
-struct MeshHeader {
+pub struct MeshHeader {
     num_strip_groups: i32,
     strip_group_header_offset: i32,
     flags: u8,
 }
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct StripGroupHeader {
+pub struct StripGroupHeader {
     num_verts: i32,
     vert_offset: i32,
     num_indices: i32,
@@ -538,7 +547,7 @@ struct StripGroupHeader {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct StripHeader {
+pub struct StripHeader {
     // indexOffset offsets into the mesh's index array.
     num_indices: i32,
     index_offset: i32,
@@ -562,7 +571,7 @@ const MAX_NUM_BONES_PER_VERT: usize = 3;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct Vertex {
+pub struct Vertex {
     // these index into the mesh's vert[origMeshVertID]'s bones
     bone_weight_index: [u8; MAX_NUM_BONES_PER_VERT],
     num_bones: u8,
@@ -576,7 +585,7 @@ struct Vertex {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct Studiohdr {
+pub struct Studiohdr {
     id: i32,          // Model format ID, such as "IDST" (0x49 0x44 0x53 0x54)
     version: i32,     // Format version number, such as 53 (0x35,0x00,0x00,0x00)
     checksum: i32,    // This has to be the same in the phy and vtx files to load!
@@ -759,7 +768,7 @@ struct Studiohdr {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct PhyHeader {
+pub struct PhyHeader {
     size: i32,        // Size of this header section (generally 16), this is also version.
     id: i32,          // Often zero, unknown purpose.
     solid_count: i32, // Number of solids in file
@@ -768,7 +777,7 @@ struct PhyHeader {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct PhySection {
+pub struct PhySection {
     surfaceheader: SwapCompactSurfaceheader,
     surfaceheader2: LegacySurfaceHeader,
     ledge: Compactledge,
@@ -777,7 +786,7 @@ struct PhySection {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct SwapCompactSurfaceheader {
+pub struct SwapCompactSurfaceheader {
     size: i32, // size of the content after this byte
     vphysics_id: i32,
     version: i16,
@@ -789,7 +798,7 @@ struct SwapCompactSurfaceheader {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct LegacySurfaceHeader {
+pub struct LegacySurfaceHeader {
     mass_center: Vec3,
     rotation_inertia: Vec3,
 
@@ -804,14 +813,14 @@ struct LegacySurfaceHeader {
 
 #[bitfield(bits = 32)]
 #[derive(Debug, Clone, Copy, Specifier)]
-struct BitPackedPart {
+pub struct BitPackedPart {
     max_deviation: B8, // 8
     byte_size: B24,    // 24
 }
 
 #[bitfield(bits = 32)]
 #[derive(Debug, Clone, Copy, Specifier)]
-struct Compactedge {
+pub struct Compactedge {
     start_point_index: B16, // point index
     opposite_index: B15, // rel to this // maybe extra array, 3 bits more than tri_index/pierce_index
     is_virtual: bool,
@@ -821,7 +830,7 @@ struct Compactedge {
 #[bitfield(bits = 128)]
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct Compacttriangle {
+pub struct Compacttriangle {
     tri_index: B12, // used for upward navigation
     pierce_index: B12,
     material_index: B7,
@@ -835,7 +844,7 @@ struct Compacttriangle {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct Compactledge {
+pub struct Compactledge {
     c_point_offset: i32, // byte offset from 'this' to (ledge) point array
     offsets: i32,
     packed: i32,
@@ -845,9 +854,25 @@ struct Compactledge {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-struct PhyVertex {
+pub struct PhyVertex {
     pos: Vec3,    // relative to bone
     pad: [u8; 4], // align to 16 bytes
+}
+
+pub struct BSPData {
+    pub vertices: Vec<Vec3>,
+    pub tricoll_headers: Vec<TricollHeader>,
+    pub tricoll_triangles: Vec<TricollTri>,
+    pub texture_data: Vec<Dtexdata>,
+    pub geo_sets: Vec<GeoSet>,
+    pub col_primatives: Vec<CollPrimitive>,
+    pub unique_contents: Vec<i32>,
+    pub brushes: Vec<Brush>,
+    pub brush_side_plane_offsets: Vec<u16>,
+    pub brush_planes: Vec<Vec4>,
+    pub grid: CMGrid,
+    pub props: Vec<StaticProp>,
+    pub model_data: Vec<Option<(Vec<Vec3>, Vec<u32>)>>,
 }
 
 fn read_i32(reader: &mut dyn SeekRead) -> Result<i32, io::Error> {
@@ -937,12 +962,6 @@ fn get_lump(header: &BSPHeader, lump: LumpIds) -> &LumpHeader {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    const UNPACK: &str = "target/vpk";
-    const UNPACK_MERGED: &str = "target/vpk_merged";
-    const UNPACK_COMMON: &str = "target/common_vpk";
-
-    const PATH: &str = "/home/catornot/.local/share/Steam/steamapps/common/Titanfall2/vpk/";
-
     let map_name = "mp_lf_uma";
     // let map_name = "mp_glitch";
     // let map_name = "mp_box";
@@ -1038,366 +1057,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .cloned()
         .ok_or("isn't there supposed to be only one grid thing")?;
 
-    let mut game_lump = read_lump_data::<u8>(&mut bsp, &header, LumpIds::GAME_LUMP)?
-        .into_iter()
-        .skip(20);
+    let mut game_lump = read_lump_data::<u8>(&mut bsp, &header, LumpIds::GAME_LUMP)?;
 
-    let (props, model_data) = {
-        let model_name_count = i32::from_le_bytes(std::array::from_fn(|_| {
-            game_lump
-                .next()
-                .expect("couldn't get expect game lump byte")
-        }));
-
-        let models = (0..dbg!(model_name_count))
-            .map(|_| {
-                std::array::from_fn::<_, 128, _>(|_| {
-                    game_lump
-                        .next()
-                        .expect("couldn't get expected game lump byte for model name")
-                })
-            })
-            .map(|name| String::from_utf8(name.to_vec()).unwrap())
-            .map(|name| {
-                name.split_once('\0')
-                    .map(|(left, _)| left.to_owned())
-                    .unwrap_or(name)
-                    .to_lowercase()
-            })
-            .map(|name| (std::fs::read(format!("{UNPACK_MERGED}/{name}")), name))
-            .map(|(err, name)| {
-                if err.is_err() {
-                    println!("failed to load: {name} because of {err:?}");
-                    panic!("must load all models");
-                }
-                err.expect("must load all models")
-            })
-            .map(|mut buf| {
-                // SAFETY: probably safe it's the same size yk
-                let header = unsafe {
-                    let mut header_drain = buf.drain(0..std::mem::size_of::<Studiohdr>());
-                    std::mem::transmute::<[u8; 724], Studiohdr>(std::array::from_fn::<
-                        _,
-                        { std::mem::size_of::<Studiohdr>() },
-                        _,
-                    >(|_| {
-                        header_drain.next().expect("how")
-                    }))
-                };
-
-                // dbg!(String::from_utf8_lossy(&header.name));
-
-                if header.phy_size == 0 {
-                    println!("mdl model is malformed with zero physics");
-                    return None;
-                }
-
-                buf.drain(0..header.phy_offset as usize - std::mem::size_of::<Studiohdr>());
-                let phy = buf.drain(0..header.phy_size as usize).collect::<Vec<_>>();
-
-                // SAFETY: probably not safe but it's almost ok
-                unsafe {
-                    let phy_header = (*phy.as_ptr().cast::<PhyHeader>().as_ref().expect("how"));
-                    let section = (phy
-                        .as_ptr()
-                        .byte_offset(std::mem::size_of::<PhyHeader>() as isize)
-                        .cast::<PhySection>()
-                        .as_ref()
-                        .expect("how"));
-
-                    let indicies = std::slice::from_raw_parts(
-                        &section.tri,
-                        section.ledge.n_triangles as usize,
-                    )
-                    .iter()
-                    .flat_map(|triangle| [triangle.edge1(), triangle.edge2(), triangle.edge3()])
-                    .map(|edge| edge.start_point_index() as u32)
-                    .collect::<Vec<u32>>();
-
-                    Some((
-                        std::slice::from_raw_parts(
-                            (&section.ledge as *const Compactledge)
-                                .byte_offset(section.ledge.c_point_offset as isize)
-                                .cast::<PhyVertex>(),
-                            indicies.iter().copied().max().unwrap_or(0) as usize,
-                        )
-                        .iter()
-                        .map(|vertex| vertex.pos * Vec3::splat(39.3701))
-                        .collect(),
-                        indicies,
-                    ))
-                }
-            })
-            .collect::<Vec<Option<(Vec<Vec3>, Vec<u32>)>>>();
-
-        // skip extra data
-        let mut game_lump = game_lump.skip(8);
-
-        let static_prop_count = dbg!(i32::from_le_bytes(std::array::from_fn(|_| {
-            game_lump
-                .next()
-                .expect("couldn't get expected game lump byte for static props count")
-        })) as usize);
-
-        let size = std::mem::size_of::<StaticProp>();
-        let mut buf = game_lump
-            .skip(4) // skip some more stuff
-            .collect::<Vec<u8>>()
-            .get(0..static_prop_count * std::mem::size_of::<StaticProp>())
-            .expect("expected to have enough bytes for static props")
-            .to_vec();
-
-        assert!(buf.len() % size == 0);
-        assert!(buf.capacity() % size == 0);
-
-        let static_props = unsafe {
-            Vec::from_raw_parts(
-                buf.as_mut_ptr().cast::<StaticProp>(),
-                buf.len() / size,
-                buf.capacity() / size,
-            )
-        };
-        std::mem::forget(buf);
-
-        (static_props, models)
-    };
+    let (props, model_data) = mdl_loader::extract_game_lump_models(game_lump);
 
     println!("vertices {:#?}", vertices.len());
     println!("normals {:#?}", normals.len());
 
-    let meshes = geo_sets
-        .into_iter()
-        .flat_map(|geoset| {
-            col_primatives
-                .get(((geoset.prim_start >> 8) & 0x1FFFFF) as usize..)
-                .unwrap_or(&[])
-                .iter()
-                .take((geoset.prim_count.eq(&1).not() as usize) * geoset.prim_count as usize)
-                .map(|col_primative| col_primative.val)
-                .chain(geoset.prim_count.eq(&1).then_some(geoset.prim_start))
-        })
-        .filter_map(|primative| {
-            let flag = Contents::SOLID as i32 | Contents::PLAYER_CLIP as i32;
-            // if it doesn't containt any
-            if (unique_contents[primative as usize & 0xFF] & flag == 0) {
-                None
-            } else {
-                Some((
-                    PrimitiveType::try_from((primative >> 29) & 0x7)
-                        .expect("invalid primative type"),
-                    ((primative >> 8) & 0x1FFFFF) as usize,
-                ))
-            }
-        })
-        .collect::<std::collections::HashSet<(PrimitiveType, usize)>>()
-        .into_iter()
-        .filter_map(|(ty, index)| {
-            let mut pushing_vertices: Vec<Vec3> = Vec::new();
-            let mut indices = Vec::new();
-
-            match ty {
-                PrimitiveType::Tricoll => {
-                    let tricoll_header = &tricoll_headers[index];
-
-                    let verts = &vertices[tricoll_header.first_vertex as usize..];
-                    let triangles_base =
-                        &tricoll_triangles[tricoll_header.first_triangle as usize..];
-                    let texture_data = texture_data[tricoll_header.texture_data as usize];
-                    for triangle in triangles_base
-                        .iter()
-                        .take(tricoll_header.num_triangles as usize)
-                        .map(|triangle| triangle.data)
-                    {
-                        let vert0 = triangle & 0x3FF;
-                        let vert1 = vert0 + ((triangle >> 10) & 0x7F);
-                        let vert2 = vert0 + ((triangle >> 17) & 0x7F);
-
-                        for vert_pos in [vert0, vert1, vert2].map(|vert| verts[vert as usize].xzy())
-                        {
-                            pushing_vertices.push(vert_pos);
-
-                            indices.push(
-                                pushing_vertices
-                                    .iter()
-                                    .zip([vert_pos].iter().cycle())
-                                    .position(|(other, cmp)| other == cmp)
-                                    .unwrap_or(pushing_vertices.len() - 1)
-                                    as u32,
-                            )
-                        }
-                    }
-                }
-                PrimitiveType::Brush => {
-                    use bevy::math::DVec3;
-
-                    let brush = brushes[index];
-                    fn contains_point(planes: &[Vec4], point: DVec3) -> bool {
-                        planes
-                            .iter()
-                            .map(|v| v.as_dvec4())
-                            .all(|plane| plane.dot(point.extend(-1.)) < 0.000001f64)
-                    }
-
-                    fn calculate_intersection_point(planes: [&Vec4; 3]) -> Option<DVec3> {
-                        let [p1, p2, p3] = planes.map(|p| p.as_dvec4());
-                        let m1 = DVec3::new(p1.x, p2.x, p3.x);
-                        let m2 = DVec3::new(p1.y, p2.y, p3.y);
-                        let m3 = DVec3::new(p1.z, p2.z, p3.z);
-                        let d = -DVec3::new(p1.w, p2.w, p3.w);
-
-                        let u = m2.cross(m3);
-                        let v = m1.cross(d);
-
-                        let denom = m1.dot(u);
-
-                        // Check for parallel planes or if planes do not intersect
-                        if denom.abs() < f64::EPSILON {
-                            return None;
-                        }
-
-                        Some(DVec3::new(d.dot(u), m3.dot(v), -m2.dot(v)) / denom)
-                    }
-
-                    let mut planes = (0..brush.num_plane_offsets as usize)
-                        .map(|i| {
-                            grid.base_plane_offset as usize + i + brush.brush_side_offset as usize
-                                - brush_side_plane_offsets[brush.brush_side_offset as usize + i]
-                                    as usize
-                        })
-                        .map(|index| brush_planes[index])
-                        .collect::<Vec<_>>();
-
-                    #[rustfmt::skip] let extend_planes =[
-                        Vec4::new(1., 0., 0., brush.extends.x.abs()),
-                        Vec4::new(-1., 0., 0., brush.extends.x.abs()),
-                        Vec4::new(0., 1., 0., brush.extends.y.abs()),
-                        Vec4::new(0., -1., 0., brush.extends.y.abs()),
-                        Vec4::new(0., 0., 1., brush.extends.z.abs()),
-                        Vec4::new(0., 0., -1., brush.extends.z.abs()),
-                    ];
-
-                    let [x, y, z] = (brush.origin).to_array();
-                    #[rustfmt::skip] let mut transform = SMatrix::<_, 4, 4>::new(
-                        1., 0., 0., -x,
-                        0., 1., 0., -y,
-                        0., 0., 1., -z,
-                        0., 0., 0., 1.
-                    );
-                    let org_transform = transform;
-                    transform.try_inverse_mut();
-                    transform.transpose_mut();
-                    let planes = planes
-                        .into_iter()
-                        .map(|p| {
-                            (
-                                SMatrix::<_, 4, 1>::new(p.x * p.w, p.y * p.w, p.z * p.w, 1.),
-                                SMatrix::<_, 4, 1>::new(p.x, p.y, p.z, 0.),
-                                SMatrix::<_, 4, 1>::zeros(),
-                            )
-                        })
-                        .map(|(org, normal, mut out)| {
-                            org_transform.mul_to(&org, &mut out);
-                            (out, normal, org)
-                        })
-                        .map(|(org, normal, mut out)| {
-                            transform.mul_to(&normal, &mut out);
-                            Vec4::new(
-                                out.x,
-                                out.y,
-                                out.z,
-                                Vec3::new(out.x, out.y, out.z).dot(Vec3::new(org.x, org.y, org.z)),
-                            )
-                        })
-                        .chain(extend_planes)
-                        .collect::<Vec<_>>(); // transpose(inverse(M))*p
-
-                    // planes
-                    //     .iter()
-                    //     .inspect(|v| println!("({}x)+({}y)+({}z)+({})=0", v.x, v.y, v.z, v.w))
-                    //     .count();
-
-                    let points = &planes
-                        .iter()
-                        .filter(|plane| plane.w != 0.) // hmm idk
-                        .tuple_combinations()
-                        .flat_map(|((p1), (p2), (p3))| {
-                            let intersection = calculate_intersection_point([p1, p2, p3])?;
-                            // If the intersection does not exist within the bounds the hull, discard it
-                            if !contains_point(&planes, intersection) {
-                                // println!(
-                                //     "({}, {}, {})",
-                                //     intersection.x, intersection.y, intersection.z
-                                // );
-                                return None;
-                            }
-
-                            Some(intersection)
-                        })
-                        // .inspect(|v| println!("({}, {}, {})", v.x, v.y, v.z))
-                        .map(|v| (v.as_vec3() + brush.origin).xzy())
-                        .map(|v| v.into())
-                        .collect::<Vec<_>>();
-
-                    // println!(
-                    //     "points {} planes {:?} {}",
-                    //     points.len(),
-                    //     planes,
-                    //     planes.len()
-                    // );
-
-                    let (vertices, pindices) =
-                        avian3d::parry::transformation::try_convex_hull(points).ok()?;
-
-                    pushing_vertices.extend(vertices.iter().map(|v| Vec3::new(v.x, v.y, v.z)));
-                    indices.extend(pindices.iter().flatten());
-                }
-                PrimitiveType::Prop => {
-                    if (props.len() <= index) {
-                        return None;
-                    }
-                    let static_prop = props[index];
-
-                    let transform = Transform::from_translation(static_prop.origin)
-                        .with_rotation(Quat::from_euler(
-                            EulerRot::XYZ,
-                            static_prop.angles.x,
-                            static_prop.angles.y,
-                            static_prop.angles.z,
-                        ))
-                        .with_scale(Vec3::splat(static_prop.scale))
-                        .compute_affine();
-
-                    if let Some(model_data) = model_data
-                        .get(static_prop.model_index as usize)
-                        .and_then(|o| o.as_ref())
-                    // .filter(|_| static_prop.solid == 1)
-                    {
-                        indices.extend(&model_data.1);
-                        pushing_vertices.extend(
-                            model_data
-                                .0
-                                .iter()
-                                .copied()
-                                .map(|vert| transform.transform_point3(vert)),
-                        );
-                        println!("phys model");
-                    } else {
-                        // println!("no phys model");
-                        return None;
-                    }
-                }
-            }
-
-            Some(
-                Mesh::new(
-                    bevy::render::mesh::PrimitiveTopology::TriangleList,
-                    RenderAssetUsages::all(),
-                )
-                .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pushing_vertices)
-                .with_inserted_indices(bevy::render::mesh::Indices::U32(indices)),
-            )
-        })
-        .collect::<Vec<Mesh>>();
+    let meshes = geoset_loader::geoset_to_meshes(BSPData {
+        vertices,
+        tricoll_headers,
+        tricoll_triangles,
+        texture_data,
+        geo_sets,
+        col_primatives,
+        unique_contents,
+        brushes,
+        brush_side_plane_offsets,
+        brush_planes,
+        grid,
+        props,
+        model_data,
+    });
 
     let mut app = App::new();
     app.add_plugins((
