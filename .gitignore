@@ -1,5 +1,6 @@
 /target
 /result
+/output
 bindgen_check.h
 cbindgen.toml
 justfile
