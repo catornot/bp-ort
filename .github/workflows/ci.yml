@@ -14,7 +14,9 @@ on:
   push:
   workflow_dispatch:
 
-build:
+
+jobs:
+  build:
     name: Build bp_ort
     runs-on: ubuntu-24.04
     steps:
