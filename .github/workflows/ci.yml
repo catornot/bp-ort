@@ -20,10 +20,10 @@ jobs:
     name: Build bp_ort
     runs-on: ubuntu-24.04
     steps:
+      - name: Checkout repository
       - uses: actions/checkout@v4
-        with:
-          submodules: true
 
+      - name: Install Nix
       - uses: nixbuild/nix-quick-install-action@v30
         with:
           # We don't enable ca-derivations here
