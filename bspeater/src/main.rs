@@ -22,7 +22,7 @@ use std::{
     fs::File,
     io::{self, BufWriter, Read, Seek, SeekFrom, Write},
     ops::{Div, Not, Sub},
-    path::Path,
+    path::{Path, PathBuf},
     process::Command,
 };
 
@@ -946,6 +946,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let map_name = "mp_lf_uma";
     // let map_name = "mp_glitch";
     // let map_name = "mp_box";
+    let map_name = "mp_couloire";
     let name = format!("englishclient_{map_name}.bsp.pak000_dir.vpk");
     let vpk_name_magic = format!("{UNPACK}/current_vpk");
 
@@ -977,7 +978,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         copy_dir_all(UNPACK_COMMON, UNPACK_MERGED)?;
     }
 
-    let mut bsp = if map_name != "mp_box" {
+    let mut bsp = if !PathBuf::from(format!("target/{map_name}.bsp")).exists() {
         Command::new("tf2-vpkunpack")
             .arg("--exclude")
             .arg("*")
@@ -1069,7 +1070,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("failed to load: {name} because of {err:?}");
                     panic!("must load all models");
                 }
-                err.unwrap()
+                err.expect("must load all models")
             })
             .map(|mut buf| {
                 // SAFETY: probably safe it's the same size yk
@@ -1088,7 +1089,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 if header.phy_size == 0 {
                     println!("mdl model is malformed with zero physics");
-                    return default();
+                    return None;
                 }
 
                 buf.drain(0..header.phy_offset as usize - std::mem::size_of::<Studiohdr>());
@@ -1113,7 +1114,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .map(|edge| edge.start_point_index() as u32)
                     .collect::<Vec<u32>>();
 
-                    (
+                    Some((
                         std::slice::from_raw_parts(
                             (&section.ledge as *const Compactledge)
                                 .byte_offset(section.ledge.c_point_offset as isize)
@@ -1124,10 +1125,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .map(|vertex| vertex.pos * Vec3::splat(39.3701))
                         .collect(),
                         indicies,
-                    )
+                    ))
                 }
             })
-            .collect::<Vec<(Vec<Vec3>, Vec<u32>)>>();
+            .collect::<Vec<Option<(Vec<Vec3>, Vec<u32>)>>>();
 
         // skip extra data
         let mut game_lump = game_lump.skip(8);
@@ -1140,6 +1141,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let size = std::mem::size_of::<StaticProp>();
         let mut buf = game_lump
+            .skip(4) // skip some more stuff
             .collect::<Vec<u8>>()
             .get(0..static_prop_count * std::mem::size_of::<StaticProp>())
             .expect("expected to have enough bytes for static props")
@@ -1365,14 +1367,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .with_scale(Vec3::splat(static_prop.scale))
                         .compute_affine();
 
-                    indices.extend(&model_data[static_prop.model_index as usize].1);
-                    pushing_vertices.extend(
-                        model_data[static_prop.model_index as usize]
-                            .0
-                            .iter()
-                            .copied()
-                            .map(|vert| transform.transform_point3(vert)),
-                    );
+                    if let Some(model_data) = model_data
+                        .get(static_prop.model_index as usize)
+                        .and_then(|o| o.as_ref())
+                    // .filter(|_| static_prop.solid == 1)
+                    {
+                        indices.extend(&model_data.1);
+                        pushing_vertices.extend(
+                            model_data
+                                .0
+                                .iter()
+                                .copied()
+                                .map(|vert| transform.transform_point3(vert)),
+                        );
+                        println!("phys model");
+                    } else {
+                        // println!("no phys model");
+                        return None;
+                    }
                 }
             }
 
@@ -1425,7 +1437,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .enumerate()
         .filter_map(|(i, mesh)| {
             Some((
-                // Collider::trimesh_from_mesh(&mesh)?,
+                Collider::trimesh_from_mesh(&mesh)?,
                 RigidBody::Static,
                 Mesh3d(
                     app.world_mut()
