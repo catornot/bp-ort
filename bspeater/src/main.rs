@@ -28,6 +28,7 @@ use std::{
 
 mod geoset_loader;
 mod mdl_loader;
+mod saving;
 
 pub const UNPACK: &str = "target/vpk";
 pub const UNPACK_MERGED: &str = "target/vpk_merged";
@@ -1149,7 +1150,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[derive(Resource, Clone, Copy, PartialEq)]
-struct WorlExtents(Vec3, Vec3);
+struct WorlExtends(Vec3, Vec3);
 
 #[derive(Resource, Clone, PartialEq)]
 struct WorldName(String);
@@ -1215,7 +1216,7 @@ fn calc_extents(
         );
 
     let reduce = Vec3::splat(1.);
-    commands.insert_resource(WorlExtents(min * reduce, max * reduce));
+    commands.insert_resource(WorlExtends(min * reduce, max * reduce));
     next_state.set(ProcessingStep::RayCasting);
 }
 
@@ -1223,7 +1224,7 @@ const CELL_SIZE: f32 = 25.;
 fn raycast_world(
     mut commands: Commands,
     ray_cast: SpatialQuery,
-    extends: Res<WorlExtents>,
+    extends: Res<WorlExtends>,
     mut next_state: ResMut<NextState<ProcessingStep>>,
 ) {
     let shape_config: ShapeCastConfig = ShapeCastConfig {
@@ -1299,7 +1300,7 @@ fn raycast_world(
             .collect(),
         full_vec,
     });
-    next_state.set(ProcessingStep::Done);
+    next_state.set(ProcessingStep::Saving);
 }
 
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, Encode, Decode)]
@@ -1325,27 +1326,26 @@ impl oktree::Position for ChunkCell {
 
 fn save_navmesh(
     mut commands: Commands,
-    checks: Query<(&GridPos, Option<&HitStuff>)>,
     map_name: Res<WorldName>,
-    mut gizmos: Gizmos,
+    extends: Res<WorlExtends>,
+    cells: Res<ChunkCells>,
     mut next_state: ResMut<NextState<ProcessingStep>>,
 ) {
-    println!(
-        "non hit {} hit {}",
-        checks.iter().filter(|c| matches!(c, (_, None))).count(),
-        checks.iter().filter(|c| matches!(c, (_, Some(_)))).count()
+    let offset = i32::MAX / 2;
+
+    saving::save_navmesh_to_disk(
+        cells
+            .collied_vec
+            .iter()
+            .map(|inter| (UVec3::from_array(inter.cord).as_ivec3() - IVec3::splat(offset)))
+            .collect(),
+        (
+            (extends.0 / Vec3::splat(CELL_SIZE)).as_ivec3(),
+            (extends.1 / Vec3::splat(CELL_SIZE)).as_ivec3(),
+        ),
+        CELL_SIZE,
+        &map_name.0,
     );
-
-    // let mut buffer = Vec::with_capacity(checks.iter().count());
-
-    // buffer.extend(checks.iter().map(|(pos, hit)| ChunkCell {
-    //     cord: pos.0.to_array(),
-    //     toggled: hit.is_some(),
-    // }));
-
-    // let mut writer = std::fs::File::create(format!("target/{}", map_name.0)).expect("huh");
-
-    // bincode::encode_into_std_write(buffer, &mut writer, bincode::config::standard());
 
     next_state.set(ProcessingStep::Done);
 }
