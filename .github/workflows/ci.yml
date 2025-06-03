@@ -28,6 +28,9 @@ jobs:
           # because we have later jobs where ca-derivations is enabled.
           nix_conf: ${{ env.nix_conf }}
 
+      - name: Build
+        run: nix build .#bp-ort
+
       - name: Restore and save Nix store
         uses: nix-community/cache-nix-action@v6
         with:
@@ -54,9 +57,6 @@ jobs:
       # # Uncomment to debug this job
       # - name: Setup tmate session
       #   uses: mxschmitt/action-tmate@v3
-
-      - name: Build
-        run: nix build .#bp-ort
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
