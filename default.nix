@@ -6,7 +6,7 @@
 }:
 let
 in
-rustPlatform.buildRustPackage rec {
+rustPlatform.buildRustPackage {
   name = "bp-ort";
 
   buildType = "debug";

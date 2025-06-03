@@ -1,27 +1,58 @@
-name: Deploy Config
+name: Build bp_ort
+
+
+env:
+  nix_conf: |
+    substituters = https://cache.nixos.org/ https://nix-community.cachix.org https://cache.iog.io
+    trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs= hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ=
+    keep-env-derivations = true
+    keep-outputs = true
+  nix_conf_ca_derivations: |
+    extra-experimental-features = ca-derivationson:
 
 on:
   push:
   workflow_dispatch:
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
+build:
+    name: Build bp_ort
+    runs-on: ubuntu-24.04
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
 
-    - name: Install Nix
-      uses: DeterminateSystems/nix-installer-action@main
-    - name: Cache Nix
-      uses: DeterminateSystems/magic-nix-cache-action@main
-    
-    - name: Build
-      run: nix build .#bp-ort
+      - uses: nixbuild/nix-quick-install-action@v30
+        with:
+          # We don't enable ca-derivations here
+          # because we have later jobs where ca-derivations is enabled.
+          nix_conf: ${{ env.nix_conf }}
 
-    - name: Upload Build Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: bp-ort
-        path: |
-          result/bin/
+      - name: Restore and save Nix store
+        uses: ./.
+        with:
+          primary-key: build-${{ runner.os }}-${{ hashFiles('flake.nix', 'flake.lock') }}
+          # do purge caches
+          purge: true
+          # purge all versions of the cache
+          purge-prefixes: build-${{ runner.os }}-
+          # created more than 0 seconds ago relative to the start of the `Post Restore` phase
+          purge-created: 0
+          # except the version with the `primary-key`, if it exists
+          purge-primary-key: never
+          # and collect garbage in the Nix store until it reaches this size in bytes
+          gc-max-store-size: 0
+
+      # # Uncomment to debug this job
+      # - name: Setup tmate session
+      #   uses: mxschmitt/action-tmate@v3
+
+      - name: Build
+        run: nix build .#bp-ort
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bp-ort
+          path: |
+            result/bin/
