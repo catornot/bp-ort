@@ -5,7 +5,7 @@ use avian3d::{
 };
 use bevy::{
     asset::RenderAssetUsages,
-    math::bounding::Aabb3d,
+    math::{Affine3, bounding::Aabb3d},
     pbr::wireframe::{WireframeConfig, WireframePlugin},
     platform::collections::HashSet,
     prelude::*,
@@ -14,6 +14,7 @@ use bevy::{
 use bevy_fly_camera::{FlyCamera, FlyCameraPlugin};
 use bincode::{Decode, Encode};
 use itertools::Itertools;
+use modular_bitfield::prelude::*;
 use oktree::{prelude::*, tree::Octree};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
@@ -21,6 +22,7 @@ use std::{
     fs::File,
     io::{self, BufWriter, Read, Seek, SeekFrom, Write},
     ops::{Div, Not, Sub},
+    path::Path,
     process::Command,
 };
 
@@ -447,6 +449,407 @@ struct DCollbrush {
     prior_non_axial_count: i32, // size: 4
 }
 
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct StaticProp {
+    origin: Vec3,
+    angles: Vec3,
+    scale: f32,
+    model_index: u16,
+    solid: u8,
+    flags: u8,
+    skin: u16,
+    word_22: u16,
+    forced_fade_scale: f32,
+    lighting_origin: Vec3,
+    diffuse_modulation_r: u8,
+    diffuse_modulation_g: u8,
+    diffuse_modulation_b: u8,
+    diffuse_modulation_a: u8,
+    unk: i32,
+    collision_flags_remove: u32,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct FileHeader {
+    // file version as defined by VHV_VERSION
+    version: i32,
+
+    // hardware params that affect how the model is to be optimized.
+    vert_cache_size: i32,
+    max_bones_per_strip: u16,
+    max_bones_per_face: u16,
+    max_bones_per_vert: i32,
+
+    // must match checkSum in the .mdl
+    check_sum: i32,
+
+    num_lods: i32, // garymcthack - this is also specified in ModelHeader_t and should match
+
+    // one of these for each LOD
+    material_replacement_list_offset: i32,
+
+    num_body_parts: i32,
+    body_part_offset: i32,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct BodyPartHeader {
+    num_models: i32,
+    model_offset: i32,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct ModelHeader {
+    num_lods: i32,
+    lod_offset: i32,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct ModelLODHeader {
+    num_meshes: i32,
+    mesh_offset: i32,
+    switch_point: f32,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+#[repr(packed)]
+struct MeshHeader {
+    num_strip_groups: i32,
+    strip_group_header_offset: i32,
+    flags: u8,
+}
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct StripGroupHeader {
+    num_verts: i32,
+    vert_offset: i32,
+    num_indices: i32,
+    index_offset: i32,
+    num_strips: i32,
+    strip_offset: i32,
+    flags: u8,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct StripHeader {
+    // indexOffset offsets into the mesh's index array.
+    num_indices: i32,
+    index_offset: i32,
+
+    // vertexOffset offsets into the mesh's vert array.
+    num_verts: i32,
+    vert_offset: i32,
+
+    // use this to enable/disable skinning.
+    // May decide (in optimize.cpp) to put all with 1 bone in a different strip
+    // than those that need skinning.
+    num_bones: u16,
+
+    flags: u8,
+
+    num_bone_state_changes: i32,
+    bone_state_change_offset: i32,
+}
+
+const MAX_NUM_BONES_PER_VERT: usize = 3;
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct Vertex {
+    // these index into the mesh's vert[origMeshVertID]'s bones
+    bone_weight_index: [u8; MAX_NUM_BONES_PER_VERT],
+    num_bones: u8,
+
+    orig_mesh_vert_id: u16,
+
+    // for sw skinned verts, these are indices into the global list of bones
+    // for hw skinned verts, these are hardware bone indices
+    bone_id: [u8; MAX_NUM_BONES_PER_VERT],
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct Studiohdr {
+    id: i32,          // Model format ID, such as "IDST" (0x49 0x44 0x53 0x54)
+    version: i32,     // Format version number, such as 53 (0x35,0x00,0x00,0x00)
+    checksum: i32,    // This has to be the same in the phy and vtx files to load!
+    sznameindex: i32, // This has been moved from studiohdr2_t to the front of the main header.
+    name: [u8; 64],   // The internal name of the model, padding with null chars.
+    // Typically "my_model.mdl" will have an internal name of "my_model"
+    length: i32, // Data size of MDL file in chars.
+
+    eyeposition: Vec3, // ideal eye position
+
+    illumposition: Vec3, // illumination center
+
+    hull_min: Vec3, // ideal movement hull size
+    hull_max: Vec3,
+
+    view_bbmin: Vec3, // clipping bounding box
+    view_bbmax: Vec3,
+
+    flags: i32,
+
+    // highest observed: 250
+    // max is definitely 256 because 8bit uint limit
+    numbones: i32, // bones
+    boneindex: i32,
+
+    numbonecontrollers: i32, // bone controllers
+    bonecontrollerindex: i32,
+
+    numhitboxsets: i32,
+    hitboxsetindex: i32,
+
+    numlocalanim: i32,   // animations/poses
+    localanimindex: i32, // animation descriptions
+
+    numlocalseq: i32, // sequences
+    localseqindex: i32,
+
+    activitylistversion: i32, // initialization flag - have the sequences been indexed? set on load
+    eventsindexed: i32,
+
+    // mstudiotexture_t
+    // short rpak path
+    // raw textures
+    numtextures: i32, // the material limit exceeds 128, probably 256.
+    textureindex: i32,
+
+    // this should always only be one, unless using vmts.
+    // raw textures search paths
+    numcdtextures: i32,
+    cdtextureindex: i32,
+
+    // replaceable textures tables
+    numskinref: i32,
+    numskinfamilies: i32,
+    skinindex: i32,
+
+    numbodyparts: i32,
+    bodypartindex: i32,
+
+    numlocalattachments: i32,
+    localattachmentindex: i32,
+
+    numlocalnodes: i32,
+    localnodeindex: i32,
+    localnodenameindex: i32,
+
+    deprecated_numflexdesc: i32,
+    deprecated_flexdescindex: i32,
+
+    deprecated_numflexcontrollers: i32,
+    deprecated_flexcontrollerindex: i32,
+
+    deprecated_numflexrules: i32,
+    deprecated_flexruleindex: i32,
+
+    numikchains: i32,
+    ikchainindex: i32,
+
+    ui_panel_count: i32,
+    ui_panel_offset: i32,
+
+    numlocalposeparameters: i32,
+    localposeparamindex: i32,
+
+    surfacepropindex: i32,
+
+    keyvalueindex: i32,
+    keyvaluesize: f32,
+
+    numlocalikautoplaylocks: i32,
+    localikautoplaylockindex: i32,
+
+    mass: f32,
+    contents: i32,
+
+    // external animations, models, etc.
+    numincludemodels: i32,
+    includemodelindex: u8,
+
+    // implementation specific back pointer to virtual data
+    virtual_model: i32,
+
+    bonetablebynameindex: i32,
+
+    // if STUDIOHDR_FLAGS_CONSTANT_DIRECTIONAL_LIGHT_DOT is set,
+    // this value is used to calculate directional components of lighting
+    // on static props
+    constdirectionallightdot: u8,
+
+    // set during load of mdl data to track *desired* lod configuration (not actual)
+    // the *actual* clamped root lod is found in studiohwdata
+    // this is stored here as a global store to ensure the staged loading matches the rendering
+    root_lod: f32,
+
+    // set in the mdl data to specify that lod configuration should only allow first numAllowRootLODs
+    // to be set as root LOD:
+    //	numAllowedRootLODs = 0	means no restriction, any lod can be set as root lod.
+    //	numAllowedRootLODs = N	means that lod0 - lod(N-1) can be set as root lod, but not lodN or lower.
+    num_allowed_root_lods: u8,
+
+    unused: u8,
+
+    default_fade_dist: f32, // set to -1 to never fade. set above 0 if you want it to fade out, distance is in feet.
+    // player/titan models seem to inherit this value from the first model loaded in menus.
+    // works oddly on entities, probably only meant for static props
+    deprecated_numflexcontrollerui: i32,
+    deprecated_flexcontrolleruiindex: i32,
+
+    fl_vert_anim_fixed_point_scale: f32,
+    surfaceprop_lookup: i32, // this index must be cached by the loader, not saved in the file
+
+    // stored maya files from used dmx files, animation files are not added. for internal tools likely
+    // in r1 this is a mixed bag, some are null with no data, some have a four byte section, and some actually have the files stored.
+    source_filename_offset: i32,
+
+    numsrcbonetransform: i32,
+    srcbonetransformindex: i32,
+
+    illumpositionattachmentindex: i32,
+
+    linearboneindex: i32,
+
+    m_n_bone_flex_driver_count: i32,
+    m_n_bone_flex_driver_index: i32,
+
+    // for static props (and maybe others)
+    // Precomputed Per-Triangle AABB data
+    m_n_per_tri_aabbindex: i32,
+    m_n_per_tri_aabbnode_count: i32,
+    m_n_per_tri_aabbleaf_count: i32,
+    m_n_per_tri_aabbvert_count: i32,
+
+    // always "" or "Titan", this is probably for internal tools
+    unk_string_offset: i32,
+
+    // ANIs are no longer used and this is reflected in many structs
+    // start of interal file data
+    vtx_offset: i32, // VTX
+    vvd_offset: i32, // VVD / IDSV
+    vvc_offset: i32, // VVC / IDCV
+    phy_offset: i32, // VPHY / IVPS
+
+    vtx_size: i32, // VTX
+    vvd_size: i32, // VVD / IDSV
+    vvc_size: i32, // VVC / IDCV
+    phy_size: i32, // VPHY / IVPS
+
+    // this data block is related to the vphy, if it's not present the data will not be written
+    // definitely related to phy, apex phy has this merged into it
+    unk_offset: i32, // section between vphy and vtx.?
+    unk_count: i32,  // only seems to be used when phy has one solid
+
+    // mostly seen on '_animated' suffixed models
+    // manually declared bone followers are no longer stored in kvs under 'bone_followers', they are now stored in an array of ints with the bone index.
+    bone_follower_count: i32,
+    bone_follower_offset: i32, // index only written when numbones > 1, means whatever func writes this likely checks this (would make sense because bonefollowers need more than one bone to even be useful). maybe only written if phy exists
+
+    unused1: [i32; 60],
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct PhyHeader {
+    size: i32,        // Size of this header section (generally 16), this is also version.
+    id: i32,          // Often zero, unknown purpose.
+    solid_count: i32, // Number of solids in file
+    check_sum: i32,   // checksum of source .mdl file (4-bytes)
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct PhySection {
+    surfaceheader: SwapCompactSurfaceheader,
+    surfaceheader2: LegacySurfaceHeader,
+    ledge: Compactledge,
+    tri: Compacttriangle,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct SwapCompactSurfaceheader {
+    size: i32, // size of the content after this byte
+    vphysics_id: i32,
+    version: i16,
+    model_type: i16,
+    surface_size: i32,
+    drag_axis_areas: Vec3,
+    axis_map_size: i32,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct LegacySurfaceHeader {
+    mass_center: Vec3,
+    rotation_inertia: Vec3,
+
+    upper_limit_radius: f32,
+
+    // big if true
+    packed: BitPackedPart,
+    offset_ledgetree_root: i32,
+
+    dummy: [i32; 3], // dummy[2] is id
+}
+
+#[bitfield(bits = 32)]
+#[derive(Debug, Clone, Copy, Specifier)]
+struct BitPackedPart {
+    max_deviation: B8, // 8
+    byte_size: B24,    // 24
+}
+
+#[bitfield(bits = 32)]
+#[derive(Debug, Clone, Copy, Specifier)]
+struct Compactedge {
+    start_point_index: B16, // point index
+    opposite_index: B15, // rel to this // maybe extra array, 3 bits more than tri_index/pierce_index
+    is_virtual: bool,
+}
+// static_assert(sizeof(compactedge_t) == 4);
+
+#[bitfield(bits = 128)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct Compacttriangle {
+    tri_index: B12, // used for upward navigation
+    pierce_index: B12,
+    material_index: B7,
+    is_virtual: bool,
+
+    // three edges
+    edge1: Compactedge,
+    edge2: Compactedge,
+    edge3: Compactedge,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct Compactledge {
+    c_point_offset: i32, // byte offset from 'this' to (ledge) point array
+    offsets: i32,
+    packed: i32,
+    n_triangles: i16,
+    for_future_use: i16,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct PhyVertex {
+    pos: Vec3,    // relative to bone
+    pad: [u8; 4], // align to 16 bytes
+}
+
 fn read_i32(reader: &mut dyn SeekRead) -> Result<i32, io::Error> {
     let mut int = [0; size_of::<i32>()];
     reader.read_exact(&mut int)?;
@@ -499,17 +902,6 @@ fn read_bspheader(reader: &mut dyn SeekRead) -> Result<BSPHeader, io::Error> {
     })
 }
 
-fn read_brush(reader: &mut dyn SeekRead) -> Result<Brush, io::Error> {
-    Ok(Brush {
-        origin: todo!(),
-        num_non_axial_do_discard: todo!(),
-        num_plane_offsets: todo!(),
-        index: todo!(),
-        extends: todo!(),
-        brush_side_offset: todo!(),
-    })
-}
-
 fn read_lump_data<T>(
     reader: &mut dyn SeekRead,
     header: &BSPHeader,
@@ -546,14 +938,19 @@ fn get_lump(header: &BSPHeader, lump: LumpIds) -> &LumpHeader {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     const UNPACK: &str = "target/vpk";
+    const UNPACK_MERGED: &str = "target/vpk_merged";
+    const UNPACK_COMMON: &str = "target/common_vpk";
+
     const PATH: &str = "/home/catornot/.local/share/Steam/steamapps/common/Titanfall2/vpk/";
 
     let map_name = "mp_lf_uma";
     // let map_name = "mp_glitch";
+    // let map_name = "mp_box";
     let name = format!("englishclient_{map_name}.bsp.pak000_dir.vpk");
     let vpk_name_magic = format!("{UNPACK}/current_vpk");
 
     // put a file to indicate what vpk is open then clean the vpk dir if we are opening another vpk
+    std::fs::create_dir_all(UNPACK_MERGED)?;
     {
         std::fs::create_dir_all(UNPACK)?;
         _ = File::create_new(&vpk_name_magic);
@@ -563,17 +960,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    Command::new("tf2-vpkunpack")
-        .arg("--exclude")
-        .arg("*")
-        .arg("--include")
-        .arg("maps")
-        .arg(UNPACK)
-        .arg(format!("{PATH}{name}"))
-        .spawn()?
-        .wait_with_output()?;
+    if !std::path::PathBuf::from(UNPACK_COMMON).is_dir() {
+        let lumps = (0..128).flat_map(|i| ["--exclude-bsp-lump".to_string(), i.to_string()]);
+        Command::new("tf2-vpkunpack")
+            .args(lumps)
+            .arg("--exclude")
+            .arg("*")
+            .arg("--include")
+            .arg("models/")
+            .arg(UNPACK_COMMON)
+            .arg(format!("{PATH}/englishclient_mp_common.bsp.pak000_dir.vpk"))
+            .spawn()?
+            .wait_with_output()?;
 
-    let mut bsp = File::open(format!("{UNPACK}/maps/{map_name}.bsp"))?;
+        std::fs::create_dir_all(UNPACK_MERGED)?;
+        copy_dir_all(UNPACK_COMMON, UNPACK_MERGED)?;
+    }
+
+    let mut bsp = if map_name != "mp_box" {
+        Command::new("tf2-vpkunpack")
+            .arg("--exclude")
+            .arg("*")
+            .arg("--include")
+            .arg("maps")
+            .arg("--include")
+            .arg("models")
+            .arg(UNPACK)
+            .arg(format!("{PATH}{name}"))
+            .spawn()?
+            .wait_with_output()?;
+
+        copy_dir_all(UNPACK, UNPACK_MERGED)?;
+        File::open(format!("{UNPACK_MERGED}/maps/{map_name}.bsp"))?
+    } else {
+        std::fs::create_dir_all(UNPACK);
+        File::open(format!("target/{map_name}.bsp"))?
+    };
 
     {
         let mut current_vpk = File::create(&vpk_name_magic)?;
@@ -615,6 +1037,129 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .cloned()
         .ok_or("isn't there supposed to be only one grid thing")?;
 
+    let mut game_lump = read_lump_data::<u8>(&mut bsp, &header, LumpIds::GAME_LUMP)?
+        .into_iter()
+        .skip(20);
+
+    let (props, model_data) = {
+        let model_name_count = i32::from_le_bytes(std::array::from_fn(|_| {
+            game_lump
+                .next()
+                .expect("couldn't get expect game lump byte")
+        }));
+
+        let models = (0..dbg!(model_name_count))
+            .map(|_| {
+                std::array::from_fn::<_, 128, _>(|_| {
+                    game_lump
+                        .next()
+                        .expect("couldn't get expected game lump byte for model name")
+                })
+            })
+            .map(|name| String::from_utf8(name.to_vec()).unwrap())
+            .map(|name| {
+                name.split_once('\0')
+                    .map(|(left, _)| left.to_owned())
+                    .unwrap_or(name)
+                    .to_lowercase()
+            })
+            .map(|name| (std::fs::read(format!("{UNPACK_MERGED}/{name}")), name))
+            .map(|(err, name)| {
+                if err.is_err() {
+                    println!("failed to load: {name} because of {err:?}");
+                    panic!("must load all models");
+                }
+                err.unwrap()
+            })
+            .map(|mut buf| {
+                // SAFETY: probably safe it's the same size yk
+                let header = unsafe {
+                    let mut header_drain = buf.drain(0..std::mem::size_of::<Studiohdr>());
+                    std::mem::transmute::<[u8; 724], Studiohdr>(std::array::from_fn::<
+                        _,
+                        { std::mem::size_of::<Studiohdr>() },
+                        _,
+                    >(|_| {
+                        header_drain.next().expect("how")
+                    }))
+                };
+
+                // dbg!(String::from_utf8_lossy(&header.name));
+
+                if header.phy_size == 0 {
+                    println!("mdl model is malformed with zero physics");
+                    return default();
+                }
+
+                buf.drain(0..header.phy_offset as usize - std::mem::size_of::<Studiohdr>());
+                let phy = buf.drain(0..header.phy_size as usize).collect::<Vec<_>>();
+
+                // SAFETY: probably not safe but it's almost ok
+                unsafe {
+                    let phy_header = (*phy.as_ptr().cast::<PhyHeader>().as_ref().expect("how"));
+                    let section = (phy
+                        .as_ptr()
+                        .byte_offset(std::mem::size_of::<PhyHeader>() as isize)
+                        .cast::<PhySection>()
+                        .as_ref()
+                        .expect("how"));
+
+                    let indicies = std::slice::from_raw_parts(
+                        &section.tri,
+                        section.ledge.n_triangles as usize,
+                    )
+                    .iter()
+                    .flat_map(|triangle| [triangle.edge1(), triangle.edge2(), triangle.edge3()])
+                    .map(|edge| edge.start_point_index() as u32)
+                    .collect::<Vec<u32>>();
+
+                    (
+                        std::slice::from_raw_parts(
+                            (&section.ledge as *const Compactledge)
+                                .byte_offset(section.ledge.c_point_offset as isize)
+                                .cast::<PhyVertex>(),
+                            indicies.iter().copied().max().unwrap_or(0) as usize,
+                        )
+                        .iter()
+                        .map(|vertex| vertex.pos * Vec3::splat(39.3701))
+                        .collect(),
+                        indicies,
+                    )
+                }
+            })
+            .collect::<Vec<(Vec<Vec3>, Vec<u32>)>>();
+
+        // skip extra data
+        let mut game_lump = game_lump.skip(8);
+
+        let static_prop_count = dbg!(i32::from_le_bytes(std::array::from_fn(|_| {
+            game_lump
+                .next()
+                .expect("couldn't get expected game lump byte for static props count")
+        })) as usize);
+
+        let size = std::mem::size_of::<StaticProp>();
+        let mut buf = game_lump
+            .collect::<Vec<u8>>()
+            .get(0..static_prop_count * std::mem::size_of::<StaticProp>())
+            .expect("expected to have enough bytes for static props")
+            .to_vec();
+
+        assert!(buf.len() % size == 0);
+        assert!(buf.capacity() % size == 0);
+
+        let static_props = unsafe {
+            Vec::from_raw_parts(
+                buf.as_mut_ptr().cast::<StaticProp>(),
+                buf.len() / size,
+                buf.capacity() / size,
+            )
+        };
+        std::mem::forget(buf);
+
+        (static_props, models)
+    };
+
     println!("vertices {:#?}", vertices.len());
     println!("normals {:#?}", normals.len());
 
@@ -645,7 +1190,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .collect::<std::collections::HashSet<(PrimitiveType, usize)>>()
         .into_iter()
         .filter_map(|(ty, index)| {
-            let mut pushing_vertecies: Vec<Vec3> = Vec::new();
+            let mut pushing_vertices: Vec<Vec3> = Vec::new();
             let mut indices = Vec::new();
 
             match ty {
@@ -667,14 +1212,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                         for vert_pos in [vert0, vert1, vert2].map(|vert| verts[vert as usize].xzy())
                         {
-                            pushing_vertecies.push(vert_pos);
+                            pushing_vertices.push(vert_pos);
 
                             indices.push(
-                                pushing_vertecies
+                                pushing_vertices
                                     .iter()
                                     .zip([vert_pos].iter().cycle())
                                     .position(|(other, cmp)| other == cmp)
-                                    .unwrap_or(pushing_vertecies.len() - 1)
+                                    .unwrap_or(pushing_vertices.len() - 1)
                                     as u32,
                             )
                         }
@@ -688,7 +1233,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         planes
                             .iter()
                             .map(|v| v.as_dvec4())
-                            .all(|plane| plane.xyz().dot(point) - plane.w < 0.000001f64)
+                            .all(|plane| plane.dot(point.extend(-1.)) < 0.000001f64)
                     }
 
                     fn calculate_intersection_point(planes: [&Vec4; 3]) -> Option<DVec3> {
@@ -729,82 +1274,105 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         Vec4::new(0., 0., -1., brush.extends.z.abs()),
                     ];
 
-                    let [x, y, z] = brush.origin.to_array();
+                    let [x, y, z] = (brush.origin).to_array();
                     #[rustfmt::skip] let mut transform = SMatrix::<_, 4, 4>::new(
-                        1., 0., 0., x,
-                        0., 1., 0., y,
-                        0., 0., 1., z,
+                        1., 0., 0., -x,
+                        0., 1., 0., -y,
+                        0., 0., 1., -z,
                         0., 0., 0., 1.
                     );
                     let org_transform = transform;
                     transform.try_inverse_mut();
                     transform.transpose_mut();
-                    planes.extend(
-                        extend_planes
-                            .into_iter()
-                            .map(|p| {
-                                (
-                                    SMatrix::<_, 4, 1>::new(p.x * p.w, p.y * p.w, p.z * p.w, 1.),
-                                    SMatrix::<_, 4, 1>::new(p.x, p.y, p.z, 0.),
-                                    SMatrix::<_, 4, 1>::zeros(),
-                                )
-                            })
-                            .map(|(org, normal, mut out)| {
-                                org_transform.mul_to(&org, &mut out);
-                                (out, normal, org)
-                            })
-                            .map(|(org, normal, mut out)| {
-                                transform.mul_to(&normal, &mut out);
-                                Vec4::new(
-                                    out.x,
-                                    out.y,
-                                    out.z,
-                                    Vec3::new(out.x, out.y, out.z)
-                                        .dot(Vec3::new(org.x, org.y, org.z)),
-                                )
-                            }),
-                    ); // transpose(inverse(M))*p
+                    let planes = planes
+                        .into_iter()
+                        .map(|p| {
+                            (
+                                SMatrix::<_, 4, 1>::new(p.x * p.w, p.y * p.w, p.z * p.w, 1.),
+                                SMatrix::<_, 4, 1>::new(p.x, p.y, p.z, 0.),
+                                SMatrix::<_, 4, 1>::zeros(),
+                            )
+                        })
+                        .map(|(org, normal, mut out)| {
+                            org_transform.mul_to(&org, &mut out);
+                            (out, normal, org)
+                        })
+                        .map(|(org, normal, mut out)| {
+                            transform.mul_to(&normal, &mut out);
+                            Vec4::new(
+                                out.x,
+                                out.y,
+                                out.z,
+                                Vec3::new(out.x, out.y, out.z).dot(Vec3::new(org.x, org.y, org.z)),
+                            )
+                        })
+                        .chain(extend_planes)
+                        .collect::<Vec<_>>(); // transpose(inverse(M))*p
 
-                    planes
-                        .iter()
-                        .inspect(|v| println!("({}x)+({}y)+({}z)+({})=0", v.x, v.y, v.z, v.w))
-                        .count();
+                    // planes
+                    //     .iter()
+                    //     .inspect(|v| println!("({}x)+({}y)+({}z)+({})=0", v.x, v.y, v.z, v.w))
+                    //     .count();
 
                     let points = &planes
                         .iter()
+                        .filter(|plane| plane.w != 0.) // hmm idk
                         .tuple_combinations()
                         .flat_map(|((p1), (p2), (p3))| {
                             let intersection = calculate_intersection_point([p1, p2, p3])?;
                             // If the intersection does not exist within the bounds the hull, discard it
                             if !contains_point(&planes, intersection) {
-                                println!(
-                                    "({}, {}, {})",
-                                    intersection.x, intersection.y, intersection.z
-                                );
+                                // println!(
+                                //     "({}, {}, {})",
+                                //     intersection.x, intersection.y, intersection.z
+                                // );
                                 return None;
                             }
 
                             Some(intersection)
                         })
-                        .inspect(|v| println!("({}, {}, {})", v.x, v.y, v.z))
+                        // .inspect(|v| println!("({}, {}, {})", v.x, v.y, v.z))
                         .map(|v| (v.as_vec3() + brush.origin).xzy())
                         .map(|v| v.into())
                         .collect::<Vec<_>>();
 
-                    println!(
-                        "points {} planes {:?} {}",
-                        points.len(),
-                        planes,
-                        planes.len()
-                    );
-                    return None;
-                    let (vertices, pindices) = avian3d::parry::transformation::convex_hull(points);
+                    // println!(
+                    //     "points {} planes {:?} {}",
+                    //     points.len(),
+                    //     planes,
+                    //     planes.len()
+                    // );
 
-                    pushing_vertecies.extend(vertices.iter().map(|v| Vec3::new(v.x, v.y, v.z)));
+                    let (vertices, pindices) =
+                        avian3d::parry::transformation::try_convex_hull(points).ok()?;
+
+                    pushing_vertices.extend(vertices.iter().map(|v| Vec3::new(v.x, v.y, v.z)));
                     indices.extend(pindices.iter().flatten());
                 }
                 PrimitiveType::Prop => {
-                    return None;
+                    if (props.len() <= index) {
+                        return None;
+                    }
+                    let static_prop = props[index];
+
+                    let transform = Transform::from_translation(static_prop.origin)
+                        .with_rotation(Quat::from_euler(
+                            EulerRot::XYZ,
+                            static_prop.angles.x,
+                            static_prop.angles.y,
+                            static_prop.angles.z,
+                        ))
+                        .with_scale(Vec3::splat(static_prop.scale))
+                        .compute_affine();
+
+                    indices.extend(&model_data[static_prop.model_index as usize].1);
+                    pushing_vertices.extend(
+                        model_data[static_prop.model_index as usize]
+                            .0
+                            .iter()
+                            .copied()
+                            .map(|vert| transform.transform_point3(vert)),
+                    );
                 }
             }
 
@@ -813,13 +1381,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     bevy::render::mesh::PrimitiveTopology::TriangleList,
                     RenderAssetUsages::all(),
                 )
-                .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pushing_vertecies)
+                .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pushing_vertices)
                 .with_inserted_indices(bevy::render::mesh::Indices::U32(indices)),
             )
         })
         .collect::<Vec<Mesh>>();
-
-    dbg!();
 
     let mut app = App::new();
     app.add_plugins((
@@ -859,7 +1425,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .enumerate()
         .filter_map(|(i, mesh)| {
             Some((
-                Collider::trimesh_from_mesh(&mesh)?,
+                // Collider::trimesh_from_mesh(&mesh)?,
                 RigidBody::Static,
                 Mesh3d(
                     app.world_mut()
@@ -1148,4 +1714,19 @@ impl TryFrom<u32> for PrimitiveType {
             value => return Err(value),
         })
     }
+}
+
+fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> {
+    use std::fs;
+    fs::create_dir_all(&dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        } else {
+            fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        }
+    }
+    Ok(())
 }

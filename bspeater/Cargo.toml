@@ -10,6 +10,7 @@ bevy = { version = "0.16.*", features = ["wayland"] }
 bevy_fly_camera = "0.16.*"
 bincode = { version = "2.*", features = ["derive", "serde"] }
 itertools = "0.14.*"
+modular-bitfield = "0.12.0"
 oktree = { version = "0.5.*", features = ["bevy"] }
 rayon = "1.*"
 serde = { version = "1.*", features = ["derive"] }
