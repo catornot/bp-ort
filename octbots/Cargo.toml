@@ -10,6 +10,8 @@ shared = { workspace = true }
 parking_lot = "*"
 once_cell = "*"
 libc = "0.2.*"
+bincode = { version = "2.0.1", features = ["derive"] }
+oktree = { version = "0.5.0", default-features = false, features = ["std"] }
 
 [lib]
 crate-type = ["cdylib"]

@@ -15,6 +15,7 @@ use rrplug::{
     mid::{squirrel::SQVM_SERVER, utils::try_cstring},
     prelude::*,
 };
+use shared::bindings::HostState;
 use simple_bot_manager::ManagerData;
 use std::{
     cell::RefCell,
@@ -365,6 +366,14 @@ impl Plugin for Bots {
                 .ok()
                 .filter(|sqvm| sqvm.is_some())
                 .is_some()
+            && unsafe {
+                ENGINE_FUNCTIONS
+                    .wait()
+                    .host_state
+                    .as_ref()
+                    .map(|state| state.current_state == HostState::Run)
+                    .unwrap_or_default()
+            }
         {
             if let Err(err) = simple_bot_manager::check_player_amount(self, engine_token) {
                 log::error!("bot manager: {err}");

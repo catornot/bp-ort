@@ -1,19 +1,21 @@
-use std::{ffi::CStr, mem::MaybeUninit, ops::Range};
-
+use bincode::Decode;
+use loader::Navmesh;
 use once_cell::sync::OnceCell;
 use parking_lot::{Mutex, RwLock};
 use rrplug::{exports::windows::Win32::Foundation::HMODULE, prelude::*};
 use shared::{
     bindings::{
-        CTraceFilterSimple, ClientFunctions, EngineFunctions, HostState, MatSysFunctions, Ray,
-        ServerFunctions, TraceResults, CLIENT_FUNCTIONS, ENGINE_FUNCTIONS, MATSYS_FUNCTIONS,
-        SERVER_FUNCTIONS,
+        ClientFunctions, EngineFunctions, HostState, MatSysFunctions, ServerFunctions,
+        CLIENT_FUNCTIONS, ENGINE_FUNCTIONS, MATSYS_FUNCTIONS, SERVER_FUNCTIONS,
     },
     interfaces::{IVDebugOverlay, IVEngineServer},
 };
+use std::ffi::CStr;
 
-const NAV_CUBE_SIZE: usize = 50;
-const HALF_CUBE: f32 = NAV_CUBE_SIZE as f32 / 2.;
+mod loader;
+
+const NAV_CUBE_SIZE: f32 = 50.;
+const HALF_CUBE: f32 = NAV_CUBE_SIZE / 2.;
 
 pub static ENGINE_INTERFACES: OnceCell<EngineInterfaces> = OnceCell::new();
 
@@ -25,9 +27,19 @@ pub struct EngineInterfaces {
 unsafe impl Sync for EngineInterfaces {}
 unsafe impl Send for EngineInterfaces {}
 
+#[derive(Decode)]
+pub struct NavmeshBin {
+    min: [i32; 3],
+    max: [i32; 3],
+    cell_size: f32,
+    filled_pos: Vec<[i32; 3]>,
+}
+
 pub struct OctBots {
     #[allow(clippy::type_complexity)]
-    nav_grid: RwLock<Vec<Vec<Vec<(bool, Vector3)>>>>,
+    nav_grid: RwLock<Vec<[i32; 3]>>,
+    cell_size: RwLock<f32>,
+    navmesh: RwLock<loader::Navmesh>,
     current_map: Mutex<String>,
 }
 
@@ -39,17 +51,14 @@ impl Plugin for OctBots {
         Self {
             nav_grid: RwLock::new(Vec::new()),
             current_map: Mutex::new("".to_string()),
+            cell_size: RwLock::new(25.),
+            navmesh: RwLock::new(loader::Navmesh::default()),
         }
     }
 
     fn plugins_loaded(&self, _engine_token: EngineToken) {}
 
-    fn on_dll_load(
-        &self,
-        engine: Option<&EngineData>,
-        dll_ptr: &DLLPointer,
-        engine_token: EngineToken,
-    ) {
+    fn on_dll_load(&self, engine: Option<&EngineData>, dll_ptr: &DLLPointer, _: EngineToken) {
         unsafe {
             EngineFunctions::try_init(dll_ptr, &ENGINE_FUNCTIONS);
             ClientFunctions::try_init(dll_ptr, &CLIENT_FUNCTIONS);
@@ -57,7 +66,7 @@ impl Plugin for OctBots {
             MatSysFunctions::try_init(dll_ptr, &MATSYS_FUNCTIONS);
         }
 
-        let Some(engine_data) = engine else { return };
+        let Some(_) = engine else { return };
 
         _ = unsafe {
             ENGINE_INTERFACES.set(EngineInterfaces {
@@ -73,10 +82,6 @@ impl Plugin for OctBots {
                 .unwrap(),
             })
         };
-
-        engine_data
-            .register_concommand("test_raycasting", test_raycasting, "", 0, engine_token)
-            .expect("couldn't register a concommand");
     }
 
     fn on_reload_request(&self) -> reloading::ReloadResponse {
@@ -86,53 +91,88 @@ impl Plugin for OctBots {
 
     #[allow(unused_variables, unreachable_code)]
     fn runframe(&self, _engine_token: EngineToken) {
-        return;
-
-        if let Some(state) = unsafe { ENGINE_FUNCTIONS.wait().host_state.as_ref() } {
+        if let Some((state, origin)) = unsafe {
+            ENGINE_FUNCTIONS
+                .get()
+                .and_then(|funcs| funcs.host_state.as_ref())
+                .and_then(|state| Some((state, SERVER_FUNCTIONS.get()?)))
+                .and_then(|(state, server_funcs)| {
+                    let mut v = Vector3::ZERO;
+                    Some((
+                        state,
+                        *(server_funcs.get_player_by_index)(1)
+                            .as_ref()?
+                            .get_origin(&mut v),
+                    ))
+                })
+        } {
             let current_name =
                 unsafe { CStr::from_ptr(state.level_name.as_ptr()).to_string_lossy() };
             let mut load_nav = self.current_map.lock();
 
             if *load_nav != current_name && state.current_state == HostState::Run {
-                *self.nav_grid.write() = generate_nav_data((-20..20, -20..20, -20..20));
+                if let Some(navmesh) = std::fs::File::open(format!("output/{current_name}.navmesh"))
+                    .ok()
+                    .and_then(|mut reader| {
+                        bincode::decode_from_std_read::<NavmeshBin, _, _>(
+                            &mut reader,
+                            bincode::config::standard(),
+                        )
+                        .ok()
+                    })
+                {
+                    self.nav_grid.write().clear();
+                    self.nav_grid.write().extend(navmesh.filled_pos);
+                    *self.cell_size.write() = navmesh.cell_size;
 
+                    log::info!("loaded {current_name}");
+                } else {
+                    self.nav_grid.write().clear();
+                    log::error!("couldn't load {current_name}");
+                }
                 *load_nav = current_name.to_string();
             } else {
-                let debug = ENGINE_INTERFACES.wait().debug_overlay;
-                return;
+                let Some(debug) = ENGINE_INTERFACES.get().map(|engine| engine.debug_overlay) else {
+                    return;
+                };
+                let cell_size = *self.cell_size.read();
 
-                log::info!("wow");
+                pub fn distance3(pos: Vector3, target: Vector3) -> f32 {
+                    ((pos.x - target.x).powi(2)
+                        + (pos.y - target.y).powi(2)
+                        + (pos.z - target.z).powi(2))
+                    .sqrt()
+                }
 
-                for (exists, origin) in self
+                for origin in self
                     .nav_grid
                     .read()
                     .iter()
-                    .flat_map(|vec| vec.iter())
-                    .flat_map(|vec| vec.iter())
-                    .copied()
+                    .map(|point| {
+                        Vector3::new(point[0] as f32, point[2] as f32, point[1] as f32)
+                            * Vector3::new(cell_size, cell_size, cell_size)
+                    })
+                    .filter(|pos| distance3(*pos, origin) < 500.)
                 {
-                    if !exists {
-                        continue;
-                    }
-
+                    let half_cube = cell_size / 2.;
                     unsafe {
-                        debug.AddLineOverlay(
-                            &(Vector3::new(-HALF_CUBE, -HALF_CUBE, -HALF_CUBE) + origin),
-                            &(Vector3::new(HALF_CUBE, HALF_CUBE, HALF_CUBE) + origin),
-                            255,
-                            20,
-                            20,
-                            false,
-                            0.1,
-                        );
+                        // debug.AddLineOverlay(
+                        //     &(Vector3::new(-half_cube, -half_cube, -half_cube) + origin),
+                        //     &(Vector3::new(half_cube, half_cube, half_cube) + origin),
+                        //     255,
+                        //     20,
+                        //     20,
+                        //     false,
+                        //     0.1,
+                        // );
                         debug.AddBoxOverlay(
                             &origin,
-                            &Vector3::new(-HALF_CUBE, -HALF_CUBE, -HALF_CUBE),
-                            &Vector3::new(HALF_CUBE, HALF_CUBE, HALF_CUBE),
+                            &Vector3::new(-half_cube, -half_cube, -half_cube),
+                            &Vector3::new(half_cube, half_cube, half_cube),
                             &Vector3::new(0., 0., 0.),
-                            20,
-                            20,
-                            20,
+                            0,
+                            0,
+                            200,
                             255,
                             false,
                             0.1,
@@ -145,92 +185,3 @@ impl Plugin for OctBots {
 }
 
 entry!(OctBots);
-
-#[rrplug::concommand]
-fn test_raycasting() {
-    for x_range in (-12..12).map(|i| i * 34..(i + 1) * 34) {
-        log::info!("thread for {x_range:?}");
-        generate_nav_data((x_range, -400..400, -400..400));
-    }
-}
-
-fn generate_nav_data(
-    portion: (Range<i32>, Range<i32>, Range<i32>),
-) -> Vec<Vec<Vec<(bool, Vector3)>>> {
-    let engine_funcs = ENGINE_FUNCTIONS.wait();
-    let server_funcs = SERVER_FUNCTIONS.wait();
-
-    portion
-        .clone()
-        .0
-        .map(|x| {
-            log::info!("raycasting slice {x}");
-            portion
-                .clone()
-                .1
-                .map(|y| {
-                    portion
-                        .clone()
-                        .2
-                        .map(move |z| (x, y, z))
-                        .map(|(x, y, z)| {
-                            Vector3::new(
-                                x as f32 * NAV_CUBE_SIZE as f32,
-                                y as f32 * NAV_CUBE_SIZE as f32,
-                                z as f32 * NAV_CUBE_SIZE as f32,
-                            )
-                        })
-                        .map(|origin| (check_block(engine_funcs, server_funcs, origin), origin))
-                        .collect()
-                })
-                .collect()
-        })
-        .collect()
-}
-
-fn check_block(
-    engine_funcs: &EngineFunctions,
-    server_funcs: &ServerFunctions,
-    origin: Vector3,
-) -> bool {
-    const TRACE_MASK_SHOT: i32 = 1178615859;
-    // const TRACE_MASK_SOLID_BRUSHONLY: i32 = 16907;
-    const TRACE_COLLISION_GROUP_BLOCK_WEAPONS: i32 = 0x12; // 18
-
-    let mut result: MaybeUninit<TraceResults> = MaybeUninit::zeroed();
-    let mut ray = unsafe {
-        let mut ray: Ray = MaybeUninit::zeroed().assume_init(); // all zeros is correct for Ray
-        ray.unk6 = 0;
-        (server_funcs.create_trace_hull)(
-            &mut ray,
-            &Vector3::new(origin.x, origin.y, origin.z + HALF_CUBE - 1.),
-            &Vector3::new(origin.x, origin.y, origin.z - HALF_CUBE + 1.),
-            &Vector3::new(-HALF_CUBE, -HALF_CUBE, -1.),
-            &Vector3::new(HALF_CUBE, HALF_CUBE, 1.),
-        );
-        ray
-    };
-    let filter: *const CTraceFilterSimple = &CTraceFilterSimple {
-        vtable: server_funcs.simple_filter_vtable,
-        unk: 0,
-        pass_ent: std::ptr::null(),
-        should_hit_func: std::ptr::null(),
-        collision_group: TRACE_COLLISION_GROUP_BLOCK_WEAPONS,
-    };
-
-    ray.is_smth = false;
-    unsafe {
-        (engine_funcs.trace_ray_filter)(
-            (*server_funcs.ctraceengine) as *const libc::c_void,
-            &ray,
-            TRACE_MASK_SHOT as u32,
-            filter.cast(),
-            // std::ptr::null(),
-            result.as_mut_ptr(),
-        );
-    }
-
-    let result = unsafe { result.assume_init() };
-
-    !result.start_solid && result.fraction_left_solid == 0.0
-}

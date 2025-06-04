@@ -3538,8 +3538,10 @@ dependencies = [
 name = "octbots"
 version = "0.1.0"
 dependencies = [
+ "bincode 2.0.1",
  "libc",
  "log",
+ "oktree",
  "once_cell",
  "parking_lot",
  "rrplug",

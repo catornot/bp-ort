@@ -51,10 +51,10 @@ impl Plugin for R2Mole {
         // };
     }
 
-    fn on_reload_request(&self) -> reloading::ReloadResponse {
-        // has to be reloadable
-        unsafe { reloading::ReloadResponse::allow_reload() }
-    }
+    // fn on_reload_request(&self) -> reloading::ReloadResponse {
+    //     // has to be reloadable
+    //     unsafe { reloading::ReloadResponse::allow_reload() }
+    // }
 
     #[allow(unused_variables, unreachable_code)]
     fn runframe(&self, _engine_token: EngineToken) {}
