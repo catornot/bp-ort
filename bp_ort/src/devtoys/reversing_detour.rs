@@ -61,7 +61,7 @@ fn trace_ray_filter_hook(
 ) {
     unsafe {
         log::info!("ray: {:?}", ray.as_ref());
-        log::info!("fmask: {:?}", fmask);
+        log::info!("fmask: {fmask:?}");
     }
 
     unsafe { CEngineTraceServer__TraceRayFiltered.call(this, ray, fmask, filter, trace) }
@@ -81,10 +81,10 @@ fn some_trace_function_hook(
 ) {
     unsafe {
         log::info!("ray: {:?}", ray.as_ref());
-        log::info!("fmask: {:?}", fmask);
-        log::info!("unk1: {:?}", unk1);
-        log::info!("unk2: {:?}", unk2);
-        log::info!("unk3: {:?}", unk3);
+        log::info!("fmask: {fmask:?}");
+        log::info!("unk1: {unk1:?}");
+        log::info!("unk2: {unk2:?}");
+        log::info!("unk3: {unk3:?}");
         log::info!("trace: {:?}", trace.as_ref());
     }
 

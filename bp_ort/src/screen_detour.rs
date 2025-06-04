@@ -22,7 +22,7 @@ fn ctexture_constructor_hook(unk1: *const c_void) -> *const c_void {
 
         let vtable = &*mem::transmute::<_, *const [*const c_void; 5]>(ptr);
 
-        log::info!("vtable {:?}", vtable);
+        log::info!("vtable {vtable:?}");
 
         ptr
     }
@@ -36,7 +36,7 @@ fn ctexture_consumer_hook(unk1: *const c_void) -> *const c_void {
 
         let vtable = &*mem::transmute::<_, *const [*const c_void; 5]>(ptr);
 
-        log::info!("vtable {:?}", vtable);
+        log::info!("vtable {vtable:?}");
 
         // let get_name: unsafe extern "C" fn(*const c_void) -> *const c_char = mem::transmute(vtable[0]);
 

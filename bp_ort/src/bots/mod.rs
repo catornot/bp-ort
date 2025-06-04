@@ -397,11 +397,7 @@ fn spawn_fake_player(
         .count() as u32;
     let max_players = plugin.bots.max_players.load(Ordering::Acquire);
     if players >= max_players {
-        log::warn!(
-            "max players({}) reached({}) can't add more",
-            max_players,
-            players
-        );
+        log::warn!("max players({max_players}) reached({players}) can't add more");
         return None;
     }
 

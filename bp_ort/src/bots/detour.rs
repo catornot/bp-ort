@@ -72,7 +72,7 @@ fn get_net_var_from_ent_hook(
             str_from_char_ptr((SERVER_FUNCTIONS.wait().get_entity_name)(player))
         );
         log::info!("var: {:?}", str_from_char_ptr(var));
-        log::info!("index: {:?}", index);
+        log::info!("index: {index:?}");
         let value = GetNetVarFromEnt.call(player, var, index, unk1);
 
         log::info!("value: {value}");

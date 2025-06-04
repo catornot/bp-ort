@@ -50,7 +50,7 @@ pub unsafe fn set_stuff_on_join(client: &mut CClient) {
             &crate::PLUGIN.wait().bots.clang_tag.lock(),
         );
 
-        log::info!("set the clan tag for {} bot", name);
+        log::info!("set the clan tag for {name} bot");
     } else if name == "cat_or_not" {
         set_c_char_array(&mut client.m_szClanTag, "cat");
         set_c_char_array(&mut client.m_szServerName, "cat_or_nya");

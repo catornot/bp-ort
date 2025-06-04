@@ -79,7 +79,7 @@ pub fn interfaces_load_some(command: CCommandResult) -> Option<()> {
         let interface = (create_interface?)(c_interface_name.as_ptr(), std::ptr::null_mut());
 
         if !interface.is_null() {
-            log::info!("found {interface_name} at addr {:?}", interface);
+            log::info!("found {interface_name} at addr {interface:?}");
         }
     }
 

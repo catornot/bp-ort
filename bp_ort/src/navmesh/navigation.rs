@@ -128,11 +128,7 @@ impl Navigation {
         };
 
         if !status || ref_end == 0 || ref_start == 0 {
-            log::warn!(
-                "failed to find nearest poly, with goal {} start {}",
-                ref_end,
-                ref_start
-            );
+            log::warn!("failed to find nearest poly, with goal {ref_end} start {ref_start}");
             return Err(NavigationError::NoPoints(start, end, ref_start, ref_end));
         }
 
