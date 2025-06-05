@@ -1,6 +1,5 @@
 use oktree::prelude::*;
-use parking_lot::Mutex;
-use std::thread::{Builder, JoinHandle, ThreadId};
+use std::thread::{Builder, JoinHandle};
 
 use crate::NavmeshBin;
 
@@ -9,8 +8,9 @@ type Octree32 = Octree<u32, TUVec3u32>;
 #[derive(Default, Debug)]
 pub struct Navmesh {
     pub navmesh: NavmeshStatus,
-    loading_thread: Option<JoinHandle<Option<Octree32>>>,
+    loading_thread: Option<JoinHandle<Option<(Octree32, f32)>>>,
     id: String,
+    pub cell_size: f32,
 }
 
 #[derive(Default, Debug)]
@@ -51,18 +51,25 @@ impl Navmesh {
 
     /// try to mount the a navmesh that can be potentially loaded
     pub fn try_loaded(&mut self) -> Option<bool> {
+        if self.navmesh.get().is_some() {
+            return Some(true);
+        }
+
         if self
             .loading_thread
             .as_ref()
-            .map(|thread| thread.is_finished())
+            .map(|thread| !thread.is_finished())
             .unwrap_or(true)
         {
             return Some(false);
         }
 
         if let Some(thread) = self.loading_thread.take() {
-            if let Some(octree) = thread.join().ok().flatten() {
+            if let Some((octree, cell_size)) = thread.join().ok().flatten() {
                 self.navmesh = NavmeshStatus::Loaded(octree);
+                self.cell_size = cell_size;
+
+                log::info!("loaded {}.navmesh", self.id);
                 Some(true)
             } else {
                 log::warn!("no octtree found when trying to load from async worker");
@@ -85,46 +92,77 @@ impl Navmesh {
                 .spawn(async_load_worker_builder(self.id.clone()))
                 .ok()?,
         );
+        self.navmesh = NavmeshStatus::Loading;
         None
     }
 }
 
-fn async_load_worker_builder(id: String) -> impl FnOnce() -> Option<Octree32> {
+fn async_load_worker_builder(id: String) -> impl FnOnce() -> Option<(Octree32, f32)> {
     move || {
-        let offset = (u32::MAX / 2) as i32;
         let navmesh = bincode::decode_from_std_read::<NavmeshBin, _, _>(
             &mut std::fs::File::open(format!("output/{id}.navmesh"))
-                .inspect_err(|err| log::error!("failed loading navmesh file: {err}"))
+                .inspect_err(|err| log::error!("failed loading {id}: {err}"))
                 .ok()?,
             bincode::config::standard(),
         )
-        .inspect_err(|err| log::error!("failed parsing navmesh file: {err}"))
+        .inspect_err(|err| log::error!("failed parsing {id}: {err}"))
         .ok()?;
 
-        let map_to_u32 = |value| (value + offset) as u32;
         let (min, max) = (navmesh.min.map(map_to_u32), navmesh.max.map(map_to_u32));
 
+        log::info!("pre oct init");
         // swizzle here
-        let mut octree: Octree32 = Octree::from_aabb(Aabb::from_min_max(
+        let mut octree: Octree32 = Octree::from_aabb(dbg!(Aabb::from_min_max(
             TUVec3 {
-                x: min[0],
-                y: min[2],
-                z: min[1],
+                x: round_down_to_power_of_2(min[0]),
+                y: round_down_to_power_of_2(min[2]),
+                z: round_down_to_power_of_2(min[1]),
             },
             TUVec3 {
-                x: max[0],
-                y: max[2],
-                z: max[1],
+                x: round_up_to_power_of_2(max[0]),
+                y: round_up_to_power_of_2(max[2]),
+                z: round_up_to_power_of_2(max[1]),
             },
-        ));
+        )));
+        log::info!("post oct init {}", octree.len());
 
         navmesh
             .filled_pos
             .iter()
+            // .filter(|pos| distance_to_origin(pos) < 500.)
             .map(|pos| pos.map(map_to_u32))
             // swizzle here too
-            .for_each(|pos| _ = octree.insert(TUVec3u32::new(pos[0], pos[2], pos[2])));
+            .for_each(|pos| _ = octree.insert(TUVec3u32::new(pos[0], pos[2], pos[1])));
 
-        Some(octree)
+        log::info!("post oct fill {}", octree.iter_elements().count());
+
+        Some((octree, navmesh.cell_size))
     }
+}
+
+fn round_up_to_power_of_2(mut num: u32) -> u32 {
+    num -= 1;
+    num |= num >> 1;
+    num |= num >> 2;
+    num |= num >> 4;
+    num |= num >> 8;
+    num |= num >> 16;
+    num + 1
+}
+
+fn round_down_to_power_of_2(num: u32) -> u32 {
+    round_up_to_power_of_2(num) >> 1
+}
+
+fn distance_to_origin(pos: &[i32; 3]) -> f32 {
+    (pos[0].pow(2) as f32 + pos[1].pow(2) as f32 + pos[2].pow(2) as f32).sqrt()
+}
+
+const OFFSET: i32 = i32::MAX / 2;
+pub fn map_to_u32(value: i32) -> u32 {
+    (value + OFFSET) as u32
+}
+
+pub fn map_to_i32(value: u32) -> i32 {
+    value as i32 - OFFSET
 }

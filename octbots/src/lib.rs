@@ -1,5 +1,6 @@
 use bincode::Decode;
-use loader::Navmesh;
+use loader::map_to_i32;
+use oktree::prelude::*;
 use once_cell::sync::OnceCell;
 use parking_lot::{Mutex, RwLock};
 use rrplug::{exports::windows::Win32::Foundation::HMODULE, prelude::*};
@@ -85,6 +86,10 @@ impl Plugin for OctBots {
     }
 
     fn on_reload_request(&self) -> reloading::ReloadResponse {
+        if let Some(mut navmesh) = self.navmesh.try_write() {
+            navmesh.drop_navmesh();
+        }
+
         // has to be reloadable
         unsafe { reloading::ReloadResponse::allow_reload() }
     }
@@ -111,31 +116,26 @@ impl Plugin for OctBots {
             let mut load_nav = self.current_map.lock();
 
             if *load_nav != current_name && state.current_state == HostState::Run {
-                if let Some(navmesh) = std::fs::File::open(format!("output/{current_name}.navmesh"))
-                    .ok()
-                    .and_then(|mut reader| {
-                        bincode::decode_from_std_read::<NavmeshBin, _, _>(
-                            &mut reader,
-                            bincode::config::standard(),
-                        )
-                        .ok()
-                    })
-                {
-                    self.nav_grid.write().clear();
-                    self.nav_grid.write().extend(navmesh.filled_pos);
-                    *self.cell_size.write() = navmesh.cell_size;
+                self.navmesh.write().load_navmesh(current_name.as_ref());
 
-                    log::info!("loaded {current_name}");
-                } else {
-                    self.nav_grid.write().clear();
-                    log::error!("couldn't load {current_name}");
-                }
                 *load_nav = current_name.to_string();
             } else {
                 let Some(debug) = ENGINE_INTERFACES.get().map(|engine| engine.debug_overlay) else {
                     return;
                 };
-                let cell_size = *self.cell_size.read();
+
+                let mut navmesh = self.navmesh.write();
+
+                let octree = match &navmesh.navmesh {
+                    loader::NavmeshStatus::Unloaded => return,
+                    loader::NavmeshStatus::Loading => {
+                        navmesh.try_loaded();
+                        return;
+                    }
+                    loader::NavmeshStatus::Loaded(octree) => octree,
+                };
+
+                let cell_size = navmesh.cell_size;
 
                 pub fn distance3(pos: Vector3, target: Vector3) -> f32 {
                     ((pos.x - target.x).powi(2)
@@ -144,14 +144,9 @@ impl Plugin for OctBots {
                     .sqrt()
                 }
 
-                for origin in self
-                    .nav_grid
-                    .read()
-                    .iter()
-                    .map(|point| {
-                        Vector3::new(point[0] as f32, point[2] as f32, point[1] as f32)
-                            * Vector3::new(cell_size, cell_size, cell_size)
-                    })
+                for origin in octree
+                    .iter_elements()
+                    .map(|(_, point)| tuvec_to_vector3(cell_size, *point))
                     .filter(|pos| distance3(*pos, origin) < 500.)
                 {
                     let half_cube = cell_size / 2.;
@@ -179,9 +174,69 @@ impl Plugin for OctBots {
                         );
                     };
                 }
+
+                for (min, max) in octree
+                    .iter_nodes()
+                    .map(|node| {
+                        (
+                            tuvec_to_vector3(cell_size, TUVec3u32(node.aabb.min)),
+                            tuvec_to_vector3(cell_size, TUVec3u32(node.aabb.max)),
+                        )
+                    })
+                    .filter(|pos| {
+                        distance3(pos.0, origin) < 100. || distance3(pos.1, origin) < 100.
+                    })
+                {
+                    unsafe {
+                        //     debug.AddLineOverlay(
+                        //         &(Vector3::new(min.x, 0., 0.)),
+                        //         &(Vector3::new(max.x, 0., 0.)),
+                        //         255,
+                        //         200,
+                        //         20,
+                        //         false,
+                        //         0.1,
+                        //     );
+                        //     debug.AddLineOverlay(
+                        //         &(Vector3::new(0., min.y, 0.)),
+                        //         &(Vector3::new(0., max.y, 0.)),
+                        //         255,
+                        //         200,
+                        //         20,
+                        //         false,
+                        //         0.1,
+                        //     );
+                        //     debug.AddLineOverlay(
+                        //         &(Vector3::new(0., 0., min.z)),
+                        //         &(Vector3::new(0., 0., max.z)),
+                        //         255,
+                        //         200,
+                        //         20,
+                        //         false,
+                        //         0.1,
+                        //     );
+                        //     debug.AddLineOverlay(
+                        //         &(Vector3::new(min.x, min.y, min.z)),
+                        //         &(Vector3::new(max.x, max.y, max.z)),
+                        //         255,
+                        //         200,
+                        //         20,
+                        //         false,
+                        //         0.1,
+                        //     );
+                    };
+                }
             }
         }
     }
+}
+
+fn tuvec_to_vector3(cell_size: f32, point: TUVec3u32) -> Vector3 {
+    Vector3::new(
+        map_to_i32(point.0.x) as f32,
+        map_to_i32(point.0.y) as f32,
+        map_to_i32(point.0.z) as f32,
+    ) * Vector3::new(cell_size, cell_size, cell_size)
 }
 
 entry!(OctBots);
