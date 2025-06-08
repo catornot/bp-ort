@@ -18,4 +18,7 @@ pub struct BspeaterCli {
 
     #[arg(long, short = 'n')]
     pub map_name: String,
+
+    #[arg(long, short = 't', default_value_t = false, action = clap::ArgAction::SetTrue)]
+    pub show_octtree: bool,
 }
