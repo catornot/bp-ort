@@ -9,16 +9,17 @@ use bevy::{
     pbr::wireframe::{WireframeConfig, WireframePlugin},
     platform::collections::HashSet,
     prelude::*,
-    render::mesh::MeshVertexAttributeId,
+    render::{RenderPlugin, mesh::MeshVertexAttributeId, settings::WgpuSettings},
 };
 use bevy_fly_camera::{FlyCamera, FlyCameraPlugin};
 use bincode::{Decode, Encode};
+use clap::Parser;
 use itertools::Itertools;
 use oktree::{prelude::*, tree::Octree};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::{
-    fs::File,
+    fs::{self, File},
     io::{self, BufWriter, Read, Seek, SeekFrom, Write},
     ops::{Div, Not, Sub},
     path::{Path, PathBuf},
@@ -28,6 +29,7 @@ use std::{
 pub use bindings::*;
 
 mod bindings;
+mod cli;
 mod geoset_loader;
 mod mdl_loader;
 mod saving;
@@ -128,10 +130,13 @@ fn get_lump(header: &BSPHeader, lump: LumpIds) -> &LumpHeader {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let map_name = "mp_lf_uma";
-    // let map_name = "mp_glitch";
-    // let map_name = "mp_box";
-    let map_name = "mp_couloire";
+    let cli::BspeaterCli {
+        vpk_dir,
+        game_dir,
+        display,
+        map_name,
+    } = cli::BspeaterCli::parse();
+
     let name = format!("englishclient_{map_name}.bsp.pak000_dir.vpk");
     let vpk_name_magic = format!("{UNPACK}/current_vpk");
 
@@ -155,7 +160,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .arg("--include")
             .arg("models/")
             .arg(UNPACK_COMMON)
-            .arg(format!("{PATH}/englishclient_mp_common.bsp.pak000_dir.vpk"))
+            .arg(game_dir.join("englishclient_mp_common.bsp.pak000_dir.vpk"))
             .spawn()?
             .wait_with_output()?;
 
@@ -172,7 +177,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .arg("--include")
             .arg("models")
             .arg(UNPACK)
-            .arg(format!("{PATH}{name}"))
+            .arg(game_dir.join(name))
             .spawn()?
             .wait_with_output()?;
 
@@ -247,8 +252,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let mut app = App::new();
+
     app.add_plugins((
-        DefaultPlugins,
+        DefaultPlugins.set(RenderPlugin {
+            render_creation: if display.not() {
+                WgpuSettings {
+                    backends: None,
+                    ..default()
+                }
+                .into()
+            } else {
+                Default::default()
+            },
+            ..default()
+        }),
         FlyCameraPlugin,
         PhysicsPlugins::default(),
         PhysicsDebugPlugin::default(),
@@ -258,6 +275,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     .init_resource::<ChunkCells>()
     .add_systems(Startup, setup)
     .insert_resource(WorldName(map_name.to_owned()))
+    .insert_resource(EarlyExit(!display))
     .init_state::<ProcessingStep>();
 
     const BASE: u8 = 200;
@@ -306,6 +324,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             (
                 raycast_world.run_if(in_state(ProcessingStep::RayCasting)),
                 save_navmesh.run_if(in_state(ProcessingStep::Saving)),
+                save_meshes.run_if(in_state(ProcessingStep::Done)),
+                exit_app_system
+                    .run_if(in_state(ProcessingStep::Exit))
+                    .run_if(|exit: Res<EarlyExit>| exit.0),
                 debug_world,
             ),
         )
@@ -319,6 +341,9 @@ struct WorlExtends(Vec3, Vec3);
 
 #[derive(Resource, Clone, PartialEq)]
 struct WorldName(String);
+
+#[derive(Resource, Clone, PartialEq)]
+struct EarlyExit(bool);
 
 #[derive(Component, Clone, Copy, PartialEq)]
 struct WireMe;
@@ -337,6 +362,7 @@ enum ProcessingStep {
     Cleanup,
     Saving,
     Done,
+    Exit,
 }
 
 fn setup(mut commands: Commands, mut wireframe_config: ResMut<WireframeConfig>) {
@@ -541,37 +567,51 @@ fn debug_world(
     Ok(())
 }
 
-impl TryFrom<u32> for MeshFlags {
-    type Error = u32;
+fn save_meshes(
+    meshes_assets: Res<Assets<Mesh>>,
+    map_name: Res<WorldName>,
+    mut next_state: ResMut<NextState<ProcessingStep>>,
+) {
+    bevy::log::info!("trying to save meshes");
 
-    fn try_from(value: u32) -> Result<Self, Self::Error> {
-        Ok(match value {
-            0x0002 => MeshFlags::SKY_2D,
-            0x0004 => MeshFlags::SKY,
-            0x0008 => MeshFlags::WARP,
-            0x0010 => MeshFlags::TRANSLUCENT,
-            0x000 => MeshFlags::VERTEX_LIT_FLAT,
-            0x200 => MeshFlags::VERTEX_LIT_BUMP,
-            0x400 => MeshFlags::VERTEX_UNLIT,
-            0x600 => MeshFlags::VERTEX_UNLIT_TS,
-            0x20000 => MeshFlags::SKIP,
-            0x40000 => MeshFlags::TRIGGER,
-            value => return Err(value),
-        })
+    match bevy_gltf_export::export::export_meshes(
+        meshes_assets
+            .iter()
+            .map(|(_, mesh)| bevy_gltf_export::MeshData {
+                mesh,
+                material: None,
+                transform: Some(
+                    Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::PI / 2.))
+                        .with_scale(Vec3::NEG_ONE),
+                ),
+            }),
+        Some(map_name.0.clone()),
+        |_| None,
+        bevy_gltf_export::CompressGltfOptions {
+            skip_materials: true,
+        },
+    ) {
+        Err(err) => {
+            bevy::log::error!("coudln't save meshes {err:?}");
+        }
+        Ok(gltf) => {
+            match gltf.to_bytes() {
+                Ok(bytes) => {
+                    if let Err(err) = fs::write(format!("output/{}.glb", map_name.0), bytes) {
+                        bevy::log::error!("false we didn't save {err:?}")
+                    }
+                }
+                Err(err) => bevy::log::error!("false we didn't save {err:?}"),
+            }
+            bevy::log::info!("saved meshes");
+        }
     }
+
+    next_state.set(ProcessingStep::Exit);
 }
 
-impl TryFrom<u32> for PrimitiveType {
-    type Error = u32;
-
-    fn try_from(value: u32) -> Result<Self, Self::Error> {
-        Ok(match value {
-            0 => Self::Brush,
-            2 => Self::Tricoll,
-            3 => Self::Prop,
-            value => return Err(value),
-        })
-    }
+fn exit_app_system(mut writer: EventWriter<AppExit>) {
+    writer.write(AppExit::Success);
 }
 
 fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> {
