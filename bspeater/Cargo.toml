@@ -8,7 +8,9 @@ edition = "2024"
 avian3d = { version = "0.3.*", features = ["simd", "debug-plugin"] }
 bevy = { version = "0.16.*", features = ["wayland"] }
 bevy_fly_camera = "0.16.*"
+bevy_gltf_export = { git = "https://github.com/luca-della-vedova/bevy_gltf_export.git", version = "0.1.0" }
 bincode = { version = "2.*", features = ["derive", "serde"] }
+clap = { version = "4.5.39", features = ["derive"] }
 itertools = "0.14.*"
 modular-bitfield = "0.12.0"
 oktree = { version = "0.5.*", features = ["bevy"] }

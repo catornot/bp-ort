@@ -80,6 +80,14 @@ pub fn geoset_to_meshes(
                     bevy::render::mesh::PrimitiveTopology::TriangleList,
                     RenderAssetUsages::all(),
                 )
+                .with_inserted_attribute(
+                    Mesh::ATTRIBUTE_NORMAL,
+                    pushing_vertices.iter().map(|_| Vec3::ZERO).collect_vec(),
+                )
+                .with_inserted_attribute(
+                    Mesh::ATTRIBUTE_UV_0,
+                    pushing_vertices.iter().map(|_| Vec2::ONE).collect_vec(),
+                )
                 .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pushing_vertices)
                 .with_inserted_indices(bevy::render::mesh::Indices::U32(indices)),
             )

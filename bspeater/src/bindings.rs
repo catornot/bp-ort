@@ -837,3 +837,36 @@ pub struct BSPData {
     pub props: Vec<StaticProp>,
     pub model_data: Vec<Option<(Vec<Vec3>, Vec<u32>)>>,
 }
+
+impl TryFrom<u32> for MeshFlags {
+    type Error = u32;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        Ok(match value {
+            0x0002 => MeshFlags::SKY_2D,
+            0x0004 => MeshFlags::SKY,
+            0x0008 => MeshFlags::WARP,
+            0x0010 => MeshFlags::TRANSLUCENT,
+            0x000 => MeshFlags::VERTEX_LIT_FLAT,
+            0x200 => MeshFlags::VERTEX_LIT_BUMP,
+            0x400 => MeshFlags::VERTEX_UNLIT,
+            0x600 => MeshFlags::VERTEX_UNLIT_TS,
+            0x20000 => MeshFlags::SKIP,
+            0x40000 => MeshFlags::TRIGGER,
+            value => return Err(value),
+        })
+    }
+}
+
+impl TryFrom<u32> for PrimitiveType {
+    type Error = u32;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        Ok(match value {
+            0 => Self::Brush,
+            2 => Self::Tricoll,
+            3 => Self::Prop,
+            value => return Err(value),
+        })
+    }
+}
