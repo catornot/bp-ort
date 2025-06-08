@@ -135,6 +135,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         game_dir,
         display,
         map_name,
+        show_octtree,
     } = cli::BspeaterCli::parse();
 
     let name = format!("englishclient_{map_name}.bsp.pak000_dir.vpk");
@@ -276,6 +277,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     .add_systems(Startup, setup)
     .insert_resource(WorldName(map_name.to_owned()))
     .insert_resource(EarlyExit(!display))
+    .insert_resource(DebugAmount {
+        octree: show_octtree,
+    })
     .init_state::<ProcessingStep>();
 
     const BASE: u8 = 200;
@@ -338,6 +342,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[derive(Resource, Clone, Copy, PartialEq)]
 struct WorlExtends(Vec3, Vec3);
+
+#[derive(Resource, Clone, Copy, PartialEq)]
+struct DebugAmount {
+    octree: bool,
+}
 
 #[derive(Resource, Clone, PartialEq)]
 struct WorldName(String);
@@ -423,7 +432,6 @@ fn raycast_world(
         compute_contact_on_penetration: false,
         ..default()
     };
-    let offset = i32::MAX / 2;
     let extends = *extends;
     let cuboid = Collider::cuboid(CELL_SIZE, CELL_SIZE, CELL_SIZE);
     let mut scale_cuboid = cuboid.clone();
@@ -444,7 +452,24 @@ fn raycast_world(
         return;
     }
 
-    let mut buffer: Octree<u32, ChunkCell> = Octree::with_capacity(100000);
+    let (min, max) = (
+        ((extends.0 / Vec3::splat(CELL_SIZE)).as_ivec3() + IVec3::splat(OFFSET)).as_uvec3(),
+        ((extends.1 / Vec3::splat(CELL_SIZE)).as_ivec3() + IVec3::splat(OFFSET)).as_uvec3(),
+    );
+
+    let mut octtree = Octree::<u32, TUVec3u32>::from_aabb(Aabb::from_min_max(
+        TUVec3 {
+            x: round_down_to_power_of_2(min[0]),
+            y: round_down_to_power_of_2(min[2]),
+            z: round_down_to_power_of_2(min[1]),
+        },
+        TUVec3 {
+            x: round_up_to_power_of_2(max[0]),
+            y: round_up_to_power_of_2(max[2]),
+            z: round_up_to_power_of_2(max[1]),
+        },
+    ));
+
     let full_vec = (extends.0.x.div(CELL_SIZE) as i32..=extends.1.x.div(CELL_SIZE) as i32)
         .into_par_iter()
         .flat_map_iter(move |x| {
@@ -472,18 +497,18 @@ fn raycast_world(
             )
         })
         .map(move |([x, y, z], hit)| ChunkCell {
-            cord: [x + offset, y + offset, z + offset].map(|v| v as u32),
+            cord: [x + OFFSET, y + OFFSET, z + OFFSET].map(|v| v as u32),
             toggled: hit,
         })
         .filter(|cell| cell.toggled)
         .collect::<Vec<ChunkCell>>();
     for cell in full_vec.iter().filter(|cell| cell.toggled).cloned() {
-        buffer.insert(cell);
+        octtree.insert(TUVec3u32::new(cell.cord[0], cell.cord[1], cell.cord[2]));
     }
 
     commands.remove_resource::<ChunkCells>();
     commands.insert_resource(ChunkCells {
-        tree: buffer,
+        tree: octtree,
         collied_vec: full_vec
             .iter()
             .cloned()
@@ -502,7 +527,7 @@ struct ChunkCell {
 
 #[derive(Resource, Default, Debug, Clone)]
 struct ChunkCells {
-    tree: Octree<u32, ChunkCell>,
+    tree: Octree<u32, TUVec3u32>,
     full_vec: Vec<ChunkCell>,
     collied_vec: Vec<ChunkCell>,
 }
@@ -522,13 +547,11 @@ fn save_navmesh(
     cells: Res<ChunkCells>,
     mut next_state: ResMut<NextState<ProcessingStep>>,
 ) {
-    let offset = i32::MAX / 2;
-
     saving::save_navmesh_to_disk(
         cells
             .collied_vec
             .iter()
-            .map(|inter| (UVec3::from_array(inter.cord).as_ivec3() - IVec3::splat(offset)))
+            .map(|inter| (UVec3::from_array(inter.cord).as_ivec3() - IVec3::splat(OFFSET)))
             .collect(),
         (
             (extends.0 / Vec3::splat(CELL_SIZE)).as_ivec3(),
@@ -543,17 +566,18 @@ fn save_navmesh(
 
 fn debug_world(
     camera: Query<&Transform, (With<FlyCamera>, Without<WireMe>)>,
+    extends: Res<WorlExtends>,
+    debug_amount: Res<WorlExtends>,
     cells: Res<ChunkCells>,
     mut gizmos: Gizmos,
 ) -> Result<(), BevyError> {
     let origin = camera.single()?.translation;
-    let offset = i32::MAX / 2;
 
     for pos in cells
         .collied_vec
         .iter()
         .map(|inter| {
-            (UVec3::from_array(inter.cord).as_ivec3() - IVec3::splat(offset)).as_vec3()
+            (UVec3::from_array(inter.cord).as_ivec3() - IVec3::splat(OFFSET)).as_vec3()
                 * Vec3::splat(CELL_SIZE)
         })
         .filter(|pos| pos.distance(origin) < 500.)
@@ -561,6 +585,26 @@ fn debug_world(
         gizmos.cuboid(
             Transform::from_translation(pos).with_scale(Vec3::splat(CELL_SIZE)),
             Color::srgba_u8(255, 0, 0, 255),
+        );
+    }
+
+    for (center, scale) in cells
+        .tree
+        .iter_nodes()
+        .map(|node| (node.aabb.center(), node.aabb.size()))
+        .map(|(center, scale)| ([center.x, center.y, center.z], UVec3::splat(scale)))
+        .map(|(center, scale)| {
+            (
+                (UVec3::from_array(center).as_ivec3() - IVec3::splat(OFFSET)).as_vec3()
+                    * Vec3::splat(CELL_SIZE),
+                (scale.as_vec3() * Vec3::splat(CELL_SIZE)),
+            )
+        })
+        .filter(|(center, _)| center.distance(origin) < 500.)
+    {
+        gizmos.cuboid(
+            Transform::from_translation(center).with_scale(scale),
+            Color::srgba_u8(255, 255, 0, 255),
         );
     }
 
@@ -627,4 +671,31 @@ fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> 
         }
     }
     Ok(())
+}
+
+fn round_up_to_power_of_2(mut num: u32) -> u32 {
+    num -= 1;
+    num |= num >> 1;
+    num |= num >> 2;
+    num |= num >> 4;
+    num |= num >> 8;
+    num |= num >> 16;
+    num + 1
+}
+
+fn round_down_to_power_of_2(num: u32) -> u32 {
+    round_up_to_power_of_2(num) >> 1
+}
+
+fn distance_to_origin(pos: &[i32; 3]) -> f32 {
+    (pos[0].pow(2) as f32 + pos[1].pow(2) as f32 + pos[2].pow(2) as f32).sqrt()
+}
+
+const OFFSET: i32 = i32::MAX / 2;
+pub fn map_to_u32(value: i32) -> u32 {
+    (value + OFFSET) as u32
+}
+
+pub fn map_to_i32(value: u32) -> i32 {
+    value as i32 - OFFSET
 }
