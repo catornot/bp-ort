@@ -1,13 +1,11 @@
 use crate::*;
-use avian3d::prelude::*;
-use bevy::{math::DVec3, prelude::*};
+use bevy::math::DVec3;
 
 pub fn geoset_to_meshes(
     BSPData {
         vertices,
         tricoll_headers,
         tricoll_triangles,
-        texture_data,
         geo_sets,
         col_primatives,
         unique_contents,
@@ -33,7 +31,7 @@ pub fn geoset_to_meshes(
         .filter_map(|primative| {
             let flag = Contents::SOLID as i32 | Contents::PLAYER_CLIP as i32;
             // if it doesn't containt any
-            if (unique_contents[primative as usize & 0xFF] & flag == 0) {
+            if unique_contents[primative as usize & 0xFF] & flag == 0 {
                 None
             } else {
                 Some((
@@ -54,7 +52,6 @@ pub fn geoset_to_meshes(
                     &tricoll_headers[index],
                     &vertices,
                     &tricoll_triangles,
-                    &texture_data,
                     &mut pushing_vertices,
                     &mut indices,
                 ),
@@ -103,7 +100,7 @@ fn brush_to_mesh(
     pushing_vertices: &mut Vec<Vec3>,
     indices: &mut Vec<u32>,
 ) -> Option<()> {
-    let mut planes = (0..brush.num_plane_offsets as usize)
+    let planes = (0..brush.num_plane_offsets as usize)
         .map(|i| {
             grid.base_plane_offset as usize + i + brush.brush_side_offset as usize
                 - brush_side_plane_offsets[brush.brush_side_offset as usize + i] as usize
@@ -131,7 +128,7 @@ fn brush_to_mesh(
         .iter()
         .filter(|plane| plane.w != 0.) // hmm idk
         .tuple_combinations()
-        .flat_map(|((p1), (p2), (p3))| {
+        .flat_map(|(p1, p2, p3)| {
             let intersection = calculate_intersection_point([p1, p2, p3])?;
             // If the intersection does not exist within the bounds the hull, discard it
             if !contains_point(&planes, intersection) {
@@ -161,7 +158,7 @@ fn prop_to_mesh(
     pushing_vertices: &mut Vec<Vec3>,
     indices: &mut Vec<u32>,
 ) -> Option<()> {
-    if (props.len() <= index) {
+    if props.len() <= index {
         return None;
     }
     let static_prop = props[index];
@@ -200,13 +197,11 @@ fn tricoll_to_mesh(
     tricoll_header: &TricollHeader,
     vertices: &[Vec3],
     tricoll_triangles: &[TricollTri],
-    texture_data: &[Dtexdata],
     pushing_vertices: &mut Vec<Vec3>,
     indices: &mut Vec<u32>,
 ) {
     let verts = &vertices[tricoll_header.first_vertex as usize..];
     let triangles_base = &tricoll_triangles[tricoll_header.first_triangle as usize..];
-    let texture_data = texture_data[tricoll_header.texture_data as usize];
     for triangle in triangles_base
         .iter()
         .take(tricoll_header.num_triangles as usize)

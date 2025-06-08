@@ -26,7 +26,7 @@ pub fn save_navmesh_to_disk(
         bincode::config::standard(),
     ) {
         Ok(serialized) => {
-            fs::create_dir_all("output");
+            fs::create_dir_all("output").expect("couldn't create ouput dir");
             let path = format!("output/{map_name}.navmesh");
             if let Err(err) = fs::write(&path, serialized) {
                 bevy::log::error!("failed to save navmesh: {err:?}");

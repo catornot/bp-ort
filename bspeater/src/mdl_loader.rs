@@ -45,11 +45,11 @@ pub fn extract_game_lump_models(
     (static_props, models)
 }
 
-fn extract_mdl_physics(mut reader: &mut dyn SeekRead) -> Option<(Vec<Vec3>, Vec<u32>)> {
+fn extract_mdl_physics(reader: &mut dyn SeekRead) -> Option<(Vec<Vec3>, Vec<u32>)> {
     // SAFETY: probably safe it's the same size yk
     let header = unsafe {
         let mut buf = [0; std::mem::size_of::<Studiohdr>()];
-        let mut header_drain = reader.read_exact(&mut buf);
+        reader.read_exact(&mut buf).ok()?;
         std::mem::transmute::<[u8; 724], Studiohdr>(buf)
     };
 
@@ -60,19 +60,22 @@ fn extract_mdl_physics(mut reader: &mut dyn SeekRead) -> Option<(Vec<Vec3>, Vec<
         return None;
     }
 
-    reader.seek(std::io::SeekFrom::Start(header.phy_offset as u64));
+    // TODO: throw errors
+    reader
+        .seek(std::io::SeekFrom::Start(header.phy_offset as u64))
+        .ok()?;
     let mut phy = vec![0; header.phy_size as usize];
-    reader.read_to_end(&mut phy);
+    reader.read_to_end(&mut phy).ok()?;
 
     // SAFETY: probably not safe but it's almost ok
     unsafe {
-        let phy_header = (*phy.as_ptr().cast::<PhyHeader>().as_ref().expect("how"));
-        let section = (phy
+        let phy_header = *phy.as_ptr().cast::<PhyHeader>().as_ref().expect("how");
+        let section = phy
             .as_ptr()
             .byte_offset(std::mem::size_of::<PhyHeader>() as isize)
             .cast::<PhySection>()
             .as_ref()
-            .expect("how"));
+            .expect("how");
 
         let indicies = std::slice::from_raw_parts(&section.tri, section.ledge.n_triangles as usize)
             .iter()

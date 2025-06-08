@@ -1,27 +1,22 @@
-#![allow(dead_code, unused, clippy::type_complexity)]
-use avian3d::{
-    parry::na::{Matrix4xX, SMatrix},
-    prelude::*,
-};
+#![allow(clippy::type_complexity)]
+use avian3d::prelude::*;
 use bevy::{
     asset::RenderAssetUsages,
-    math::{Affine3, bounding::Aabb3d},
-    pbr::wireframe::{WireframeConfig, WireframePlugin},
-    platform::collections::HashSet,
+    pbr::wireframe::WireframeConfig,
     prelude::*,
-    render::{RenderPlugin, mesh::MeshVertexAttributeId, settings::WgpuSettings},
+    render::{RenderPlugin, settings::WgpuSettings},
 };
 use bevy_fly_camera::{FlyCamera, FlyCameraPlugin};
 use bincode::{Decode, Encode};
 use clap::Parser;
 use itertools::Itertools;
 use oktree::{prelude::*, tree::Octree};
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File},
-    io::{self, BufWriter, Read, Seek, SeekFrom, Write},
-    ops::{Div, Not, Sub},
+    io::{self, Read, Seek, SeekFrom, Write},
+    ops::{Div, Not},
     path::{Path, PathBuf},
     process::Command,
 };
@@ -38,8 +33,6 @@ pub const UNPACK: &str = "target/vpk";
 pub const UNPACK_MERGED: &str = "target/vpk_merged";
 pub const UNPACK_COMMON: &str = "target/common_vpk";
 
-const PATH: &str = "/home/catornot/.local/share/Steam/steamapps/common/Titanfall2/vpk/";
-
 trait SeekRead: Seek + Read {}
 impl<T: Seek + Read> SeekRead for T {}
 
@@ -47,20 +40,6 @@ fn read_i32(reader: &mut dyn SeekRead) -> Result<i32, io::Error> {
     let mut int = [0; size_of::<i32>()];
     reader.read_exact(&mut int)?;
     Ok(i32::from_le_bytes(int))
-}
-
-fn read_f32(reader: &mut dyn SeekRead) -> Result<f32, io::Error> {
-    let mut float = [0; size_of::<f32>()];
-    reader.read_exact(&mut float)?;
-    Ok(f32::from_le_bytes(float))
-}
-
-fn read_vec3(reader: &mut dyn SeekRead) -> Result<Vec3, io::Error> {
-    Ok(Vec3::new(
-        read_f32(reader)?,
-        read_f32(reader)?,
-        read_f32(reader)?,
-    ))
 }
 
 fn read_lump(reader: &mut dyn SeekRead) -> Result<LumpHeader, io::Error> {
@@ -103,7 +82,7 @@ fn read_lump_data<T>(
     let lump = get_lump(header, id);
     let size = std::mem::size_of::<T>();
 
-    reader.seek(SeekFrom::Start(lump.fileofs as u64));
+    reader.seek(SeekFrom::Start(lump.fileofs as u64))?;
 
     let mut buf = vec![0; lump.filelen as usize];
 
@@ -131,7 +110,7 @@ fn get_lump(header: &BSPHeader, lump: LumpIds) -> &LumpHeader {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli::BspeaterCli {
-        vpk_dir,
+        vpk_dir: _,
         game_dir,
         display,
         map_name,
@@ -185,7 +164,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         copy_dir_all(UNPACK, UNPACK_MERGED)?;
         File::open(format!("{UNPACK_MERGED}/maps/{map_name}.bsp"))?
     } else {
-        std::fs::create_dir_all(UNPACK);
+        std::fs::create_dir_all(UNPACK)?;
         File::open(format!("target/{map_name}.bsp"))?
     };
 
@@ -199,22 +178,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let header = read_bspheader(&mut bsp)?;
     let vertices = read_lump_data::<Vec3>(&mut bsp, &header, LumpIds::VERTICES)?;
     let normals = read_lump_data::<Vec3>(&mut bsp, &header, LumpIds::VERTEX_NORMALS)?;
-    let mesh_indices = read_lump_data::<u16>(&mut bsp, &header, LumpIds::MESH_INDICES)?;
-    let bspmeshes = read_lump_data::<BspMesh>(&mut bsp, &header, LumpIds::MESHES)?;
-    let materialsorts = read_lump_data::<MaterialSort>(&mut bsp, &header, LumpIds::MATERIAL_SORTS)?;
-    let vertex_unlit = read_lump_data::<VertexUnlit>(&mut bsp, &header, LumpIds::VERTEX_UNLIT)?;
-    let vertex_lit_flat =
-        read_lump_data::<VertexLitFlat>(&mut bsp, &header, LumpIds::VERTEX_LIT_FLAT)?;
-    let vertex_lit_bump =
-        read_lump_data::<VertexLitBump>(&mut bsp, &header, LumpIds::VERTEX_LIT_BUMP)?;
-    let vertex_unlit_ts =
-        read_lump_data::<VertexUnlitTS>(&mut bsp, &header, LumpIds::VERTEX_UNLIT_TS)?;
+    // let mesh_indices = read_lump_data::<u16>(&mut bsp, &header, LumpIds::MESH_INDICES)?;
+    // let bspmeshes = read_lump_data::<BspMesh>(&mut bsp, &header, LumpIds::MESHES)?;
+    // let materialsorts = read_lump_data::<MaterialSort>(&mut bsp, &header, LumpIds::MATERIAL_SORTS)?;
+    // let vertex_unlit = read_lump_data::<VertexUnlit>(&mut bsp, &header, LumpIds::VERTEX_UNLIT)?;
+    // let vertex_lit_flat =
+    //     read_lump_data::<VertexLitFlat>(&mut bsp, &header, LumpIds::VERTEX_LIT_FLAT)?;
+    // let vertex_lit_bump =
+    //     read_lump_data::<VertexLitBump>(&mut bsp, &header, LumpIds::VERTEX_LIT_BUMP)?;
+    // let vertex_unlit_ts =
+    //     read_lump_data::<VertexUnlitTS>(&mut bsp, &header, LumpIds::VERTEX_UNLIT_TS)?;
 
     let tricoll_headers =
         read_lump_data::<TricollHeader>(&mut bsp, &header, LumpIds::TRICOLL_HEADERS)?;
     let tricoll_triangles =
         read_lump_data::<TricollTri>(&mut bsp, &header, LumpIds::TRICOLL_TRIANGLES)?;
-    let texture_data = read_lump_data::<Dtexdata>(&mut bsp, &header, LumpIds::TEXTURE_DATA)?;
+    // let texture_data = read_lump_data::<Dtexdata>(&mut bsp, &header, LumpIds::TEXTURE_DATA)?;
     let geo_sets = read_lump_data::<GeoSet>(&mut bsp, &header, LumpIds::CM_GEO_SETS)?;
     let col_primatives =
         read_lump_data::<CollPrimitive>(&mut bsp, &header, LumpIds::CM_PRIMITIVES)?;
@@ -229,7 +208,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .cloned()
         .ok_or("isn't there supposed to be only one grid thing")?;
 
-    let mut game_lump = read_lump_data::<u8>(&mut bsp, &header, LumpIds::GAME_LUMP)?;
+    let game_lump = read_lump_data::<u8>(&mut bsp, &header, LumpIds::GAME_LUMP)?;
 
     let (props, model_data) = mdl_loader::extract_game_lump_models(game_lump);
 
@@ -240,7 +219,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         vertices,
         tricoll_headers,
         tricoll_triangles,
-        texture_data,
         geo_sets,
         col_primatives,
         unique_contents,
@@ -368,7 +346,6 @@ enum ProcessingStep {
     #[default]
     Startup,
     RayCasting,
-    Cleanup,
     Saving,
     Done,
     Exit,
@@ -503,7 +480,11 @@ fn raycast_world(
         .filter(|cell| cell.toggled)
         .collect::<Vec<ChunkCell>>();
     for cell in full_vec.iter().filter(|cell| cell.toggled).cloned() {
-        octtree.insert(TUVec3u32::new(cell.cord[0], cell.cord[1], cell.cord[2]));
+        // look into this
+        if let Err(err) = octtree.insert(TUVec3u32::new(cell.cord[0], cell.cord[1], cell.cord[2])) {
+            _ = err;
+            // bevy::log::error!("tree: {err}");
+        };
     }
 
     commands.remove_resource::<ChunkCells>();
@@ -514,7 +495,6 @@ fn raycast_world(
             .cloned()
             .filter(|cell| cell.toggled)
             .collect(),
-        full_vec,
     });
     next_state.set(ProcessingStep::Saving);
 }
@@ -528,7 +508,6 @@ struct ChunkCell {
 #[derive(Resource, Default, Debug, Clone)]
 struct ChunkCells {
     tree: Octree<u32, TUVec3u32>,
-    full_vec: Vec<ChunkCell>,
     collied_vec: Vec<ChunkCell>,
 }
 
@@ -541,7 +520,6 @@ impl oktree::Position for ChunkCell {
 }
 
 fn save_navmesh(
-    mut commands: Commands,
     map_name: Res<WorldName>,
     extends: Res<WorlExtends>,
     cells: Res<ChunkCells>,
@@ -566,8 +544,7 @@ fn save_navmesh(
 
 fn debug_world(
     camera: Query<&Transform, (With<FlyCamera>, Without<WireMe>)>,
-    extends: Res<WorlExtends>,
-    debug_amount: Res<WorlExtends>,
+    debug_amount: Res<DebugAmount>,
     cells: Res<ChunkCells>,
     mut gizmos: Gizmos,
 ) -> Result<(), BevyError> {
@@ -586,6 +563,10 @@ fn debug_world(
             Transform::from_translation(pos).with_scale(Vec3::splat(CELL_SIZE)),
             Color::srgba_u8(255, 0, 0, 255),
         );
+    }
+
+    if !debug_amount.octree {
+        return Ok(());
     }
 
     for (center, scale) in cells
@@ -687,9 +668,9 @@ fn round_down_to_power_of_2(num: u32) -> u32 {
     round_up_to_power_of_2(num) >> 1
 }
 
-fn distance_to_origin(pos: &[i32; 3]) -> f32 {
-    (pos[0].pow(2) as f32 + pos[1].pow(2) as f32 + pos[2].pow(2) as f32).sqrt()
-}
+// fn distance_to_origin(pos: &[i32; 3]) -> f32 {
+//     (pos[0].pow(2) as f32 + pos[1].pow(2) as f32 + pos[2].pow(2) as f32).sqrt()
+// }
 
 const OFFSET: i32 = i32::MAX / 2;
 pub fn map_to_u32(value: i32) -> u32 {
