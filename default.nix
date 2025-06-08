@@ -39,6 +39,7 @@ rustPlatform.buildRustPackage {
     lockFile = ./Cargo.lock;
     outputHashes = {
       "rrplug-4.1.0" = "sha256-4ufvWl0VaHDAoXjNGJ7lBfPLgGLYyRz7E6e4TWED3Ko=";
+      "bevy_gltf_export-0.1.0" = "sha256-eIp8TY96HMpmRpRsryaQzZII5/liCLaScF331GQINfY=";
     };
   };
 }
