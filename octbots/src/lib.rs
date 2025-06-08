@@ -161,7 +161,7 @@ impl Plugin for OctBots {
                             0,
                             0,
                             200,
-                            255,
+                            10,
                             false,
                             0.1,
                         );

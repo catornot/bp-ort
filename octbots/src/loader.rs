@@ -1,5 +1,8 @@
 use oktree::prelude::*;
-use std::thread::{Builder, JoinHandle};
+use std::{
+    sync::atomic::{AtomicI32, Ordering},
+    thread::{Builder, JoinHandle},
+};
 
 use crate::NavmeshBin;
 
@@ -45,6 +48,10 @@ impl Navmesh {
                 LoadingStatus::Loading(&self.id)
             }
             NavmeshStatus::Loading => LoadingStatus::Loading(&self.id),
+            NavmeshStatus::Loaded(_) if id != self.id => {
+                self.drop_navmesh();
+                self.load_navmesh(id)
+            }
             NavmeshStatus::Loaded(_) => LoadingStatus::Loaded(&self.id),
         }
     }
@@ -72,6 +79,7 @@ impl Navmesh {
                 log::info!("loaded {}.navmesh", self.id);
                 Some(true)
             } else {
+                self.navmesh = NavmeshStatus::Unloaded;
                 log::warn!("no octtree found when trying to load from async worker");
                 None
             }
@@ -81,6 +89,7 @@ impl Navmesh {
     }
 
     pub fn drop_navmesh(&mut self) {
+        log::info!("dropping {}", self.id);
         _ = self.loading_thread.take();
         self.navmesh = NavmeshStatus::Unloaded;
     }
@@ -108,33 +117,66 @@ fn async_load_worker_builder(id: String) -> impl FnOnce() -> Option<(Octree32, f
         .inspect_err(|err| log::error!("failed parsing {id}: {err}"))
         .ok()?;
 
-        let (min, max) = (navmesh.min.map(map_to_u32), navmesh.max.map(map_to_u32));
+        OFFSET.store(
+            navmesh
+                .min
+                .iter()
+                .min()
+                .copied()
+                .unwrap_or(OFFSET.load(Ordering::Relaxed))
+                .abs(),
+            Ordering::Relaxed,
+        );
+
+        let (min, max) = (
+            navmesh
+                .min
+                .map(map_to_u32)
+                .iter()
+                .min()
+                .copied()
+                .unwrap_or(0),
+            navmesh
+                .max
+                .map(map_to_u32)
+                .iter()
+                .max()
+                .copied()
+                .unwrap_or_else(|| unreachable!()),
+        );
 
         log::info!("pre oct init");
         // swizzle here
-        let mut octree: Octree32 = Octree::from_aabb(dbg!(Aabb::from_min_max(
-            TUVec3 {
-                x: round_down_to_power_of_2(min[0]),
-                y: round_down_to_power_of_2(min[2]),
-                z: round_down_to_power_of_2(min[1]),
-            },
-            TUVec3 {
-                x: round_up_to_power_of_2(max[0]),
-                y: round_up_to_power_of_2(max[2]),
-                z: round_up_to_power_of_2(max[1]),
-            },
-        )));
+        let mut octree: Octree32 = Octree::from_aabb_with_capacity(
+            dbg!(Aabb::from_min_max(
+                TUVec3 {
+                    x: round_down_to_power_of_2(min),
+                    y: round_down_to_power_of_2(min),
+                    z: round_down_to_power_of_2(min),
+                },
+                TUVec3 {
+                    x: round_up_to_power_of_2(max),
+                    y: round_up_to_power_of_2(max),
+                    z: round_up_to_power_of_2(max),
+                },
+            )),
+            navmesh.filled_pos.len(),
+        );
         log::info!("post oct init {}", octree.len());
 
+        let mut err = String::new();
         navmesh
             .filled_pos
             .iter()
-            // .filter(|pos| distance_to_origin(pos) < 500.)
             .map(|pos| pos.map(map_to_u32))
             // swizzle here too
-            .for_each(|pos| _ = octree.insert(TUVec3u32::new(pos[0], pos[2], pos[1])));
+            .for_each(|pos| {
+                _ = octree
+                    .insert(TUVec3u32::new(pos[0], pos[2], pos[1]))
+                    .inspect_err(|thiserr| err = thiserr.to_string());
+            });
 
-        log::info!("post oct fill {}", octree.iter_elements().count());
+        log::info!("post oct fill {} {err}", octree.iter_elements().count());
 
         Some((octree, navmesh.cell_size))
     }
@@ -154,15 +196,11 @@ fn round_down_to_power_of_2(num: u32) -> u32 {
     round_up_to_power_of_2(num) >> 1
 }
 
-fn distance_to_origin(pos: &[i32; 3]) -> f32 {
-    (pos[0].pow(2) as f32 + pos[1].pow(2) as f32 + pos[2].pow(2) as f32).sqrt()
-}
-
-const OFFSET: i32 = i32::MAX / 2;
+static OFFSET: AtomicI32 = AtomicI32::new(i32::MAX / 2);
 pub fn map_to_u32(value: i32) -> u32 {
-    (value + OFFSET) as u32
+    (value + OFFSET.load(Ordering::Relaxed)) as u32
 }
 
 pub fn map_to_i32(value: u32) -> i32 {
-    value as i32 - OFFSET
+    value as i32 - OFFSET.load(Ordering::Relaxed)
 }
