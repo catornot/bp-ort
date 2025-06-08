@@ -15,9 +15,6 @@ use std::ffi::CStr;
 
 mod loader;
 
-const NAV_CUBE_SIZE: f32 = 50.;
-const HALF_CUBE: f32 = NAV_CUBE_SIZE / 2.;
-
 pub static ENGINE_INTERFACES: OnceCell<EngineInterfaces> = OnceCell::new();
 
 pub struct EngineInterfaces {
@@ -38,8 +35,6 @@ pub struct NavmeshBin {
 
 pub struct OctBots {
     #[allow(clippy::type_complexity)]
-    nav_grid: RwLock<Vec<[i32; 3]>>,
-    cell_size: RwLock<f32>,
     navmesh: RwLock<loader::Navmesh>,
     current_map: Mutex<String>,
 }
@@ -50,9 +45,7 @@ impl Plugin for OctBots {
 
     fn new(_reloaded: bool) -> Self {
         Self {
-            nav_grid: RwLock::new(Vec::new()),
             current_map: Mutex::new("".to_string()),
-            cell_size: RwLock::new(25.),
             navmesh: RwLock::new(loader::Navmesh::default()),
         }
     }
@@ -187,44 +180,44 @@ impl Plugin for OctBots {
                         distance3(pos.0, origin) < 100. || distance3(pos.1, origin) < 100.
                     })
                 {
-                    unsafe {
-                        //     debug.AddLineOverlay(
-                        //         &(Vector3::new(min.x, 0., 0.)),
-                        //         &(Vector3::new(max.x, 0., 0.)),
-                        //         255,
-                        //         200,
-                        //         20,
-                        //         false,
-                        //         0.1,
-                        //     );
-                        //     debug.AddLineOverlay(
-                        //         &(Vector3::new(0., min.y, 0.)),
-                        //         &(Vector3::new(0., max.y, 0.)),
-                        //         255,
-                        //         200,
-                        //         20,
-                        //         false,
-                        //         0.1,
-                        //     );
-                        //     debug.AddLineOverlay(
-                        //         &(Vector3::new(0., 0., min.z)),
-                        //         &(Vector3::new(0., 0., max.z)),
-                        //         255,
-                        //         200,
-                        //         20,
-                        //         false,
-                        //         0.1,
-                        //     );
-                        //     debug.AddLineOverlay(
-                        //         &(Vector3::new(min.x, min.y, min.z)),
-                        //         &(Vector3::new(max.x, max.y, max.z)),
-                        //         255,
-                        //         200,
-                        //         20,
-                        //         false,
-                        //         0.1,
-                        //     );
-                    };
+                    // unsafe {
+                    //     debug.AddLineOverlay(
+                    //         &(Vector3::new(min.x, 0., 0.)),
+                    //         &(Vector3::new(max.x, 0., 0.)),
+                    //         255,
+                    //         200,
+                    //         20,
+                    //         false,
+                    //         0.1,
+                    //     );
+                    //     debug.AddLineOverlay(
+                    //         &(Vector3::new(0., min.y, 0.)),
+                    //         &(Vector3::new(0., max.y, 0.)),
+                    //         255,
+                    //         200,
+                    //         20,
+                    //         false,
+                    //         0.1,
+                    //     );
+                    //     debug.AddLineOverlay(
+                    //         &(Vector3::new(0., 0., min.z)),
+                    //         &(Vector3::new(0., 0., max.z)),
+                    //         255,
+                    //         200,
+                    //         20,
+                    //         false,
+                    //         0.1,
+                    //     );
+                    //     debug.AddLineOverlay(
+                    //         &(Vector3::new(min.x, min.y, min.z)),
+                    //         &(Vector3::new(max.x, max.y, max.z)),
+                    //         255,
+                    //         200,
+                    //         20,
+                    //         false,
+                    //         0.1,
+                    //     );
+                    // };
                 }
             }
         }

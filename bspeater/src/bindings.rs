@@ -1,3 +1,4 @@
+#![allow(dead_code, unused, clippy::type_complexity)]
 use bevy::prelude::*;
 use modular_bitfield::prelude::*;
 
@@ -826,7 +827,6 @@ pub struct BSPData {
     pub vertices: Vec<Vec3>,
     pub tricoll_headers: Vec<TricollHeader>,
     pub tricoll_triangles: Vec<TricollTri>,
-    pub texture_data: Vec<Dtexdata>,
     pub geo_sets: Vec<GeoSet>,
     pub col_primatives: Vec<CollPrimitive>,
     pub unique_contents: Vec<i32>,
