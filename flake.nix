@@ -35,6 +35,9 @@
             libc = "msvcrt";
           };
         };
+        overrides = (builtins.fromTOML (builtins.readFile (self + "/rust-toolchain.toml")));
+        toolchain-win = (pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml);
+        toolchain-linux = (native-pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml);
       in
       rec {
         formatter = native-pkgs.nixfmt-rfc-style;
@@ -45,12 +48,13 @@
           packaged-mod = pkgs.callPackage ./packaged-mod.nix { bp-ort = self.packages.${system}.bp-ort; };
           default = self.packages.${system}.bp-ort;
 
-          default-shell = devShell.default;
-          run-shell = devShell.run;
+          win-shell = devShell.default;
+          native-shell = devShell.native;
         };
 
         devShell.default = pkgs.mkShell rec {
           nativeBuildInputs = with pkgs; [
+            toolchain-win
             pkg-config
           ];
 
@@ -65,8 +69,9 @@
           WINEPATH = nixpkgs.lib.makeLibraryPath buildInputs;
         };
 
-        devShell.run = pkgs.mkShell rec {
+        devShell.native = pkgs.mkShell rec {
           nativeBuildInputs = with native-pkgs; [
+            toolchain-linux
             clang
             cmake
             cmakeCurses
