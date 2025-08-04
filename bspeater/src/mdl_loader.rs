@@ -69,6 +69,7 @@ fn extract_mdl_physics(reader: &mut dyn SeekRead) -> Option<(Vec<Vec3>, Vec<u32>
 
     // SAFETY: probably not safe but it's almost ok
     unsafe {
+        #[allow(unused)]
         let phy_header = *phy.as_ptr().cast::<PhyHeader>().as_ref().expect("how");
         let section = phy
             .as_ptr()

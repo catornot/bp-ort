@@ -233,6 +233,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut app = App::new();
 
     app.add_plugins((
+        // TODO: actually make this non dependent on a display output since rn it needs a wayland compositor or x server to run lol
         DefaultPlugins.set(RenderPlugin {
             render_creation: if display.not() {
                 WgpuSettings {
