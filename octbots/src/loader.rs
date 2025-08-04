@@ -25,6 +25,7 @@ pub enum NavmeshStatus {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum LoadingStatus<'a> {
     Loading(&'a str),
     Loaded(&'a str),

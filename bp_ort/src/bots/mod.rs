@@ -40,6 +40,7 @@ use crate::{
 mod cmds;
 mod cmds_exec;
 mod cmds_helper;
+mod cmds_interface;
 mod cmds_utils;
 mod convars;
 mod debug_commands;
@@ -126,6 +127,7 @@ pub struct Bots {
     pub max_teams: AtomicU32,
     pub player_names: Mutex<HashMap<[i8; 32], (String, String)>>,
     pub manager_data: Mutex<simple_bot_manager::ManagerData>,
+    pub external_simulations: &'static cmds_interface::ExternalSimulations,
 }
 
 impl Plugin for Bots {
@@ -140,6 +142,12 @@ impl Plugin for Bots {
         register_sq_functions(remember_name_override);
         register_sq_functions(remember_name_override_uid);
         simple_bot_manager::register_manager_sq_functions();
+        let external_simulations = unsafe {
+            register_interface(
+                "ExternalSimulation001",
+                cmds_interface::ExternalSimulations::new(),
+            )
+        };
 
         let mut bot_names = [
             "FiveBots",
@@ -209,6 +217,7 @@ impl Plugin for Bots {
             max_teams: AtomicU32::new(2),
             player_names: Mutex::new(HashMap::new()),
             manager_data: Mutex::new(ManagerData::default()),
+            external_simulations,
         }
     }
 
@@ -573,12 +582,13 @@ fn choose_team_normal() -> i32 {
 }
 
 fn choose_team_ffa(max_teams: u32) -> i32 {
+    const TEAM_OFFSET: u32 = 2;
     let server_functions = SERVER_FUNCTIONS.wait();
-    let teams = Vec::from_iter((2..=max_teams + 2).map(|_| 0));
+    let teams = Vec::from_iter((TEAM_OFFSET..=max_teams + TEAM_OFFSET).map(|_| 0));
 
     (1..=PLUGIN.wait().bots.max_players.load(Ordering::Acquire) as i32)
         .filter_map(|i| unsafe { (server_functions.get_player_by_index)(i).as_ref() })
-        .map(|player| player.m_iTeamNum as u32)
+        .filter_map(|player| (player.m_iTeamNum as u32).checked_sub(TEAM_OFFSET + 1)) // remove any bad teams
         .fold(teams, |mut map, team| {
             if let Some(team_slot) = map.get_mut(team as usize) {
                 *team_slot += 1;
@@ -590,6 +600,7 @@ fn choose_team_ffa(max_teams: u32) -> i32 {
         })
         .into_iter()
         .enumerate()
+        .map(|(team, amount)| (team as u32 + TEAM_OFFSET + 1, amount))
         .filter(|(team, _)| *team >= 2)
         .reduce(|left, rigth| if left.1 < rigth.1 { left } else { rigth })
         .map(|(team, _)| team as i32)
@@ -600,7 +611,9 @@ fn choose_team() -> i32 {
     let max_teams = PLUGIN.wait().bots.max_teams.load(Ordering::Acquire);
 
     if max_teams > 2 {
-        choose_team_ffa(max_teams)
+        let team = choose_team_ffa(max_teams);
+        log::info!("chosen {team}");
+        team
     } else {
         choose_team_normal()
     }

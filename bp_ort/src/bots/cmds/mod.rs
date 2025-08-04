@@ -305,6 +305,24 @@ pub(super) fn get_cmd(
         32 => CUserCmd::new_basic_move(Vector3::ZERO, Action::OffHand2 as u32, &helper),
         33 => CUserCmd::new_basic_move(Vector3::ZERO, Action::OffHand3 as u32, &helper),
         34 => CUserCmd::new_basic_move(Vector3::ZERO, Action::OffHand4 as u32, &helper),
+
+        sim_type
+            if let Some(cmd_func) = crate::PLUGIN
+                .wait()
+                .bots
+                .external_simulations
+                .simulations
+                .read()
+                .values()
+                .find_map(move |sim_info| {
+                    sim_info
+                        .simulation_maps
+                        .get(&(sim_type.max(0).unsigned_abs() as usize))
+                }) =>
+        {
+            cmd_func(&helper, player)
+        }
+
         _ => CUserCmd::new_empty(&helper),
     })?;
 

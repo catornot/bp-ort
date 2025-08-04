@@ -1,5 +1,5 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 
 members = [
     "bp_ort", "bspeater", "octbots", "r2mole", "ranim", "shared",
@@ -9,6 +9,7 @@ members = [
 # rrplug = { path = "../rrplug" }
 shared = { path = "shared" }
 rrplug = { git = "https://github.com/catornot/rrplug.git" }
+rustc_version = "0.4.1"
 
 # for crates that deal with ub a lot 
 [profile.release-ub]

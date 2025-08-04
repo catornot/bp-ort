@@ -3,27 +3,36 @@ use loader::map_to_i32;
 use oktree::prelude::*;
 use once_cell::sync::OnceCell;
 use parking_lot::{Mutex, RwLock};
-use rrplug::{exports::windows::Win32::Foundation::HMODULE, prelude::*};
+use rrplug::{
+    bindings::{class_types::cplayer::CPlayer, plugin_abi::PluginColor},
+    exports::windows::Win32::Foundation::HMODULE,
+    mid::northstar::NORTHSTAR_DATA,
+    prelude::*,
+};
 use shared::{
     bindings::{
-        ClientFunctions, EngineFunctions, HostState, MatSysFunctions, ServerFunctions,
+        CUserCmd, ClientFunctions, EngineFunctions, HostState, MatSysFunctions, ServerFunctions,
         CLIENT_FUNCTIONS, ENGINE_FUNCTIONS, MATSYS_FUNCTIONS, SERVER_FUNCTIONS,
     },
+    cmds_helper::CUserCmdHelper,
     interfaces::{IVDebugOverlay, IVEngineServer},
+    plugin_interfaces::{rust_version_hash, ExternalSimulations},
 };
 use std::ffi::CStr;
 
 mod loader;
 
-pub static ENGINE_INTERFACES: OnceCell<EngineInterfaces> = OnceCell::new();
+const PLUGIN_DLL_NAME: *const i8 = c"octbots.dll".as_ptr();
 
-pub struct EngineInterfaces {
+pub static ENGINE_INTERFACES: OnceCell<SourceInterfaces> = OnceCell::new();
+
+pub struct SourceInterfaces {
     pub debug_overlay: &'static IVDebugOverlay, // since it's a ptr to class which has a ptr to vtable
     pub engine_server: &'static IVEngineServer,
 }
 
-unsafe impl Sync for EngineInterfaces {}
-unsafe impl Send for EngineInterfaces {}
+unsafe impl Sync for SourceInterfaces {}
+unsafe impl Send for SourceInterfaces {}
 
 #[derive(Decode)]
 pub struct NavmeshBin {
@@ -37,20 +46,59 @@ pub struct OctBots {
     #[allow(clippy::type_complexity)]
     navmesh: RwLock<loader::Navmesh>,
     current_map: Mutex<String>,
+    simulations: OnceCell<&'static ExternalSimulations>,
 }
 
 impl Plugin for OctBots {
-    const PLUGIN_INFO: PluginInfo =
-        PluginInfo::new(c"octbots", c" OCTBOTS ", c"OCTBOTS", PluginContext::all());
+    const PLUGIN_INFO: PluginInfo = PluginInfo::new_with_color(
+        c"octbots",
+        c" OCTBOTS ",
+        c"OCTBOTS",
+        PluginContext::all(),
+        PluginColor {
+            red: 139,
+            green: 0,
+            blue: 139,
+        },
+    );
 
     fn new(_reloaded: bool) -> Self {
         Self {
             current_map: Mutex::new("".to_string()),
             navmesh: RwLock::new(loader::Navmesh::default()),
+            simulations: OnceCell::new(),
         }
     }
 
-    fn plugins_loaded(&self, _engine_token: EngineToken) {}
+    fn plugins_loaded(&self, _engine_token: EngineToken) {
+        if let Some(interface) =
+            unsafe { ExternalSimulations::from_dll_name("bp_ort.dll", "ExternalSimulation001") }
+                .iter()
+                .find(|interface| unsafe { interface.rust_version_hash() == rust_version_hash() })
+        {
+            unsafe {
+                if !interface.register_simulation(PLUGIN_DLL_NAME, 100, wallpathfining_bots) {
+                    log::error!("failed to register simulation functions");
+                }
+            };
+
+            log::info!(
+                "loaded interfaces {} {}",
+                unsafe { interface.rust_version_hash() },
+                rust_version_hash()
+            );
+            _ = self.simulations.set(interface);
+        } else {
+            log::error!("failed to load interfaces from bp_ort; unloading!");
+            log::error!(
+                "possibly because the plugin doesn't exist or was compiled on a different version of rustc"
+            );
+            let northstar_data = NORTHSTAR_DATA
+                .get()
+                .expect("northstar interface should exist");
+            unsafe { northstar_data.sys().unload(northstar_data.handle()) };
+        }
+    }
 
     fn on_dll_load(&self, engine: Option<&EngineData>, dll_ptr: &DLLPointer, _: EngineToken) {
         unsafe {
@@ -63,7 +111,7 @@ impl Plugin for OctBots {
         let Some(_) = engine else { return };
 
         _ = unsafe {
-            ENGINE_INTERFACES.set(EngineInterfaces {
+            ENGINE_INTERFACES.set(SourceInterfaces {
                 debug_overlay: IVDebugOverlay::from_dll_ptr(
                     HMODULE(dll_ptr.get_dll_ptr() as isize),
                     "VDebugOverlay004",
@@ -82,6 +130,8 @@ impl Plugin for OctBots {
         if let Some(mut navmesh) = self.navmesh.try_write() {
             navmesh.drop_navmesh();
         }
+
+        unsafe { self.simulations.wait().drop_simulation(PLUGIN_DLL_NAME) };
 
         // has to be reloadable
         unsafe { reloading::ReloadResponse::allow_reload() }
@@ -230,6 +280,12 @@ fn tuvec_to_vector3(cell_size: f32, point: TUVec3u32) -> Vector3 {
         map_to_i32(point.0.y) as f32,
         map_to_i32(point.0.z) as f32,
     ) * Vector3::new(cell_size, cell_size, cell_size)
+}
+
+extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, player: &mut CPlayer) -> CUserCmd {
+    log::info!("wow {}", player.m_iTeamNum);
+    println!("wow {}", player.m_iTeamNum);
+    CUserCmd::new_empty(helper)
 }
 
 entry!(OctBots);

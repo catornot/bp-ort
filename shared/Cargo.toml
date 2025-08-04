@@ -5,3 +5,6 @@ edition = "2021"
 
 [dependencies]
 rrplug = { workspace = true }
+
+[build-dependencies]
+rustc_version = { workspace = true }
