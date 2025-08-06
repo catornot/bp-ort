@@ -1,9 +1,6 @@
 use crate::{bindings::CUserCmd, cmds_helper::CUserCmdHelper};
-use rrplug::{bindings::class_types::cplayer::CPlayer, create_external_interface, prelude::*};
-use std::{
-    ffi::c_char,
-    hash::{DefaultHasher, Hash, Hasher},
-};
+use rrplug::{bindings::class_types::cplayer::CPlayer, create_external_interface};
+use std::ffi::c_char;
 
 pub type SimulationFunc = extern "C" fn(&CUserCmdHelper, &mut CPlayer) -> CUserCmd;
 

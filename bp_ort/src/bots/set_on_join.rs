@@ -15,7 +15,6 @@ const FUNNY_CLAN_TAGS: &[&str] = &[
 
 use super::UWUFY_CONVAR;
 
-// TODO: find out if the hook is causing the weird invincibility glitch
 pub unsafe fn set_stuff_on_join(client: &mut CClient) {
     let name = get_c_char_array_lossy(&client.m_szServerName);
     let sqvm = SQVM_SERVER.get(EngineToken::new_unchecked()).borrow();
@@ -43,6 +42,7 @@ pub unsafe fn set_stuff_on_join(client: &mut CClient) {
         );
         set_c_char_array(&mut client.m_szServerName, name);
         set_c_char_array(&mut client.m_szClanTag, tag);
+        return;
     }
 
     if client.m_bFakePlayer {

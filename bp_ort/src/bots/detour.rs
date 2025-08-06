@@ -4,7 +4,7 @@ use rrplug::{
     mid::utils::str_from_char_ptr,
 };
 use std::{
-    ffi::{c_char, c_uchar, c_void},
+    ffi::{c_char, c_void},
     mem,
     ops::Not,
 };
@@ -20,9 +20,6 @@ static_detour! {
     // static CClient__Connect: unsafe extern "C" fn(CClientPtr, *const c_char, *const c_void, c_char, *const c_void, [c_char;256] this is a *mut c_char, *const c_void ) -> bool;
     static SomeFuncInConnectProcedure: unsafe extern "C" fn(*mut CClient, *const c_void);
     static CreateNullUserCmd: unsafe extern "C" fn(*mut CUserCmd) -> *mut CUserCmd;
-    static SomeFuncInDisconnectProcedure: unsafe extern "C" fn(*mut CClient, *const c_void,c_uchar);
-    static SomeFuncOtherInDisconnectProcedure: unsafe extern "C" fn(*mut c_void);
-    static CClient__Disconnect: unsafe extern "C" fn(*mut CClient, c_uchar, *const c_void, *const c_void);
     static FUN_18069e7a0: unsafe extern "C" fn(*mut c_void, *mut CPlayer, *const c_void);
     static CMoveHelperServer__PlayerFallingDamage: unsafe extern "C" fn(*mut CMoveHelperServer, *mut c_void, *const c_void, *const c_void);
     static GetPlayerNetInt: unsafe extern "C" fn(*mut CPlayer, *const c_char)-> i32 ;
@@ -241,48 +238,8 @@ pub fn subfunc_cclient_connect_hook(this: *mut CClient, unk1: *const c_void) {
     }
 }
 
-pub fn subfunc_cclient_disconnect_hook(this: *mut CClient, unk1: *const c_void, unk2: c_uchar) {
-    unsafe { SomeFuncInDisconnectProcedure.call(this, unk1, unk2) }
-}
-
-// this didn't work either
-pub fn other_subfunc_cclient_disconnect_hook(unk1: *mut c_void) {
-    if unk1.is_null() {
-        return unsafe { SomeFuncOtherInDisconnectProcedure.call(unk1) };
-    }
-
-    log::info!(
-        "unk1 {:x} {:x}",
-        unk1 as usize,
-        unk1 as usize as isize - 0xf588
-    );
-
-    // unk1 is a field of CClient at 0xf588
-    let client = unsafe { unk1.byte_offset(-0xf588).cast::<CClient>().as_mut() };
-
-    log::info!(
-        "client leaving {:?}",
-        client.map(|client| crate::utils::get_c_char_array_lossy(&client.m_szServerName))
-    );
-
-    unsafe { SomeFuncOtherInDisconnectProcedure.call(unk1) }
-}
-
-pub fn disconnect_hook(
-    this: *mut CClient,
-    unk1: c_uchar,
-    unk2: *const c_void,
-    unk3: *const c_void,
-) {
-    unsafe { CClient__Disconnect.call(this, unk1, unk2, unk3) }
-}
-
 pub fn hook_engine(addr: *const c_void) {
     log::info!("hooking bot engine functions");
-
-    if SomeFuncInConnectProcedure.is_enabled() {
-        return;
-    }
 
     unsafe {
         SomeFuncInConnectProcedure
@@ -295,36 +252,6 @@ pub fn hook_engine(addr: *const c_void) {
             .expect("failure to enable the SomeFuncInConnectProcedure hook");
 
         log::info!("hooked SomeFuncInConnectProcedure");
-
-        SomeFuncInDisconnectProcedure
-            .initialize(
-                mem::transmute(addr.offset(0x103810)),
-                subfunc_cclient_disconnect_hook,
-            )
-            .expect("failed to hook SomeFuncInDisconnectProcedure")
-            .enable()
-            .expect("failure to enable the SomeFuncInDisconnectProcedure hook");
-
-        log::info!("hooked SomeFuncInDisconnectProcedure");
-
-        SomeFuncOtherInDisconnectProcedure
-            .initialize(
-                mem::transmute(addr.offset(0x16fde0)),
-                other_subfunc_cclient_disconnect_hook,
-            )
-            .expect("failed to hook SomeFuncOtherInDisconnectProcedure");
-        // .enable()
-        // .expect("failure to enable the SomeFuncOtherInDisconnectProcedure hook");
-
-        log::info!("hooked SomeFuncOtherInDisconnectProcedure");
-
-        CClient__Disconnect
-            .initialize(mem::transmute(addr.offset(0x1012c0)), disconnect_hook)
-            .expect("failed to hook CClient__Disconnect")
-            .enable()
-            .expect("failure to enable the CClient__Disconnect hook");
-
-        log::info!("hooked CClient__Disconnect");
     }
 }
 
