@@ -28,6 +28,7 @@ void function Init_botSetup()
 	AddClientCommandCallback( "test_script_navs_random", TestScriptNavsRandom )
 	AddClientCommandCallback( "bot_task", NewTask )
 	AddClientCommandCallback( "bump", BumpEveryone )
+	AddClientCommandCallback( "safe_reload_plugins", SafePluginsReload )
 
 	if (GetConVarBool("auto_select_gamemode"))
 		SelectCmdType()
@@ -340,5 +341,21 @@ bool function BumpEveryone(entity player, array<string> args) {
 	foreach(entity player in GetPlayerArray()) { player.SetVelocity(< RandomInt( 500 ), RandomInt( 500 ), RandomInt( 500 ) >) }
 
 	return true
+}
+
+bool function SafePluginsReload(entity player, array<string> args) {
+
+	thread SafePluginsReloadThreaded()
+
+	return true
+}
+
+void function SafePluginsReloadThreaded()
+{
+	SetConVarInt("bot_cmds_type", 0)
+	wait 0.1
+	ServerCommand("reload_plugins")
+	wait 0.5
+	SetConVarInt("bot_cmds_type", 100)
 }
 #endif
