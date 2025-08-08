@@ -16,6 +16,7 @@ bonsai-bt = { version = "0.10.0", features = ["visualize"] }
 indexmap = "2.*"
 rustc-hash = "2.*"
 itertools = { workspace = true }
+bevy_math = { version = "0.16.1", default-features = false, features = ["std"] }
 
 [lib]
 crate-type = ["cdylib"]

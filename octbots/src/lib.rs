@@ -1,5 +1,6 @@
-#![feature(let_chains)]
+#![feature(let_chains, mpmc_channel)]
 
+use async_pathfinding::JobMarket;
 use bincode::Decode;
 use loader::map_to_i32;
 use oktree::prelude::*;
@@ -19,6 +20,7 @@ use shared::{
 };
 use std::{ffi::CStr, sync::Arc};
 
+mod async_pathfinding;
 mod behavior;
 mod loader;
 mod pathfinding;
@@ -48,6 +50,7 @@ pub struct OctBots {
     navmesh: Arc<RwLock<loader::Navmesh>>,
     current_map: Mutex<String>,
     simulations: OnceCell<&'static ExternalSimulations>,
+    job_market: JobMarket,
 }
 
 impl Plugin for OctBots {
@@ -64,9 +67,11 @@ impl Plugin for OctBots {
     );
 
     fn new(_reloaded: bool) -> Self {
+        let navmesh = Arc::new(RwLock::new(loader::Navmesh::default()));
         Self {
             current_map: Mutex::new("".to_string()),
-            navmesh: Arc::new(RwLock::new(loader::Navmesh::default())),
+            job_market: JobMarket::new(Arc::clone(&navmesh)),
+            navmesh,
             simulations: OnceCell::new(),
         }
     }
@@ -149,6 +154,7 @@ impl Plugin for OctBots {
         }
 
         unsafe { self.simulations.wait().drop_simulation(PLUGIN_DLL_NAME) };
+        self.job_market.stop();
 
         // has to be reloadable
         unsafe { reloading::ReloadResponse::allow_reload() }

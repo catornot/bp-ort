@@ -1,4 +1,4 @@
-use bonsai_bt::{Action, Behavior::While, Event, Float, Sequence, Status, UpdateArgs, BT, RUNNING};
+use bonsai_bt::{Action, Event, Sequence, Status, UpdateArgs, BT, RUNNING};
 use itertools::Itertools;
 use oktree::prelude::*;
 use parking_lot::RwLock;
@@ -16,8 +16,8 @@ use std::{
 };
 
 use crate::{
+    async_pathfinding::PathReceiver,
     loader::{map_to_i32, map_to_u32, Navmesh, NavmeshStatus},
-    pathfinding::find_path,
     ENGINE_INTERFACES,
 };
 
@@ -27,6 +27,7 @@ static BEHAVIOR: LazyLock<RwLock<HashMap<u16, BT<BotAction, BotBrain>>>> =
 struct BotBrain {
     navmesh: Arc<RwLock<Navmesh>>,
     current_target: Option<i32>,
+    path_receiver: Option<PathReceiver>,
     path: Vec<Vector3>,
     next_cmd: CUserCmd,
     last_alive_state: bool,
@@ -63,6 +64,7 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
             current_target: None,
             next_cmd: CUserCmd::init_default(SERVER_FUNCTIONS.wait()),
             last_alive_state: false,
+            path_receiver: None,
             path: Vec::new(),
         },
     ));
@@ -115,7 +117,7 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, player: &mut CPla
                 break 'path (Status::Failure, 0.);
             };
 
-            let NavmeshStatus::Loaded(navmesh_tree) = &navmesh.navmesh else {
+            let NavmeshStatus::Loaded(_navmesh_tree) = &navmesh.navmesh else {
                 break 'path (Status::Failure, 0.);
             };
 
@@ -125,22 +127,38 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, player: &mut CPla
                 *other_player.get_origin(&mut v)
             });
 
-            log::info!("pathfinding from {start:?} to {end:?}");
+            // log::info!("pathfinding from {start:?} to {end:?}");
 
-            brain.path = find_path(navmesh_tree, start, end)
-                .into_iter()
-                .flatten()
-                .map(|point| tuvec_to_vector3(navmesh.cell_size, point))
-                .collect();
+            brain.path_receiver = brain
+                .path_receiver
+                .take()
+                .or_else(|| crate::PLUGIN.wait().job_market.find_path(start, end));
 
-            (Status::Success, 0.)
+            if let Some(path_receiver) = brain.path_receiver.take() {
+                match path_receiver.try_recv() {
+                    Ok(path) => {
+                        brain.path = path
+                            .into_iter()
+                            .flatten()
+                            .map(|point| tuvec_to_vector3(navmesh.cell_size, point))
+                            .collect();
+
+                        (Status::Success, 0.)
+                    }
+                    Err(std::sync::mpmc::TryRecvError::Disconnected) => (Status::Failure, 0.),
+                    Err(std::sync::mpmc::TryRecvError::Empty) => {
+                        brain.path_receiver = Some(path_receiver);
+                        RUNNING
+                    }
+                }
+            } else {
+                (Status::Failure, 0.)
+            }
         }
         BotAction::RenderPath => 'render: {
-            log::info!("render");
             if brain.path.is_empty() {
                 break 'render (Status::Failure, 0.);
             }
-            log::info!("render2");
 
             let debug = ENGINE_INTERFACES.wait().debug_overlay;
             brain

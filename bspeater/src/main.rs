@@ -481,15 +481,36 @@ fn raycast_world(
                         &SpatialQueryFilter::DEFAULT,
                     )
                     .is_some(),
+                true,
+                0., // ray_cast
+                    //     .cast_ray(
+                    //         origin,
+                    //         Dir3::X,
+                    //         shape_config.target_distance,
+                    //         false,
+                    //         &SpatialQueryFilter::DEFAULT,
+                    //     )
+                    //     .is_some(),
+                    // ray_cast
+                    //     .cast_shape(
+                    //         &cuboid,
+                    //         origin,
+                    //         Quat::default(),
+                    //         Dir3::NEG_Y,
+                    //         &shape_config,
+                    //         &SpatialQueryFilter::DEFAULT,
+                    //     )
+                    //     .map(|hitdata| hitdata.distance)
+                    //     .unwrap_or(CELL_SIZE),
             )
         })
-        .map(move |([x, y, z], hit)| ChunkCell {
+        .filter(|(_, hit, _, _)| *hit)
+        .map(move |([x, y, z], _, _near_wall, height)| ChunkCell {
             cord: [x + OFFSET, y + OFFSET, z + OFFSET].map(|v| v as u32),
-            toggled: hit,
+            floor_distance: height,
         })
-        .filter(|cell| cell.toggled)
         .collect::<Vec<ChunkCell>>();
-    for cell in full_vec.iter().filter(|cell| cell.toggled).cloned() {
+    for cell in full_vec.iter().cloned() {
         // look into this
         if let Err(err) = octtree.insert(TUVec3u32::new(cell.cord[0], cell.cord[1], cell.cord[2])) {
             _ = err;
@@ -500,11 +521,7 @@ fn raycast_world(
     commands.remove_resource::<ChunkCells>();
     commands.insert_resource(ChunkCells {
         tree: octtree,
-        collied_vec: full_vec
-            .iter()
-            .cloned()
-            .filter(|cell| cell.toggled)
-            .collect(),
+        collied_vec: full_vec,
     });
     next_state.set(ProcessingStep::Saving);
 }
@@ -512,7 +529,7 @@ fn raycast_world(
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, Encode, Decode)]
 struct ChunkCell {
     cord: [u32; 3],
-    toggled: bool,
+    floor_distance: f32,
 }
 
 #[derive(Resource, Default, Debug, Clone)]
