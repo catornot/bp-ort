@@ -282,6 +282,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for mesh in meshes
         .into_iter()
+        .filter(|mesh| {
+            mesh.get_vertex_size() > 1
+                && mesh
+                    .indices()
+                    .into_iter()
+                    .flat_map(|indices| indices.iter())
+                    .count()
+                    > 1
+        })
         .enumerate()
         .filter_map(|(i, mesh)| {
             Some((

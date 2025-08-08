@@ -60,6 +60,8 @@ fn extract_mdl_physics(reader: &mut dyn SeekRead) -> Option<(Vec<Vec3>, Vec<u32>
         return None;
     }
 
+    return None;
+
     // TODO: throw errors
     reader
         .seek(std::io::SeekFrom::Start(header.phy_offset as u64))
