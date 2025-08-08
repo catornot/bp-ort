@@ -383,10 +383,9 @@ impl Plugin for Bots {
                     .map(|state| state.current_state == HostState::Run)
                     .unwrap_or_default()
             }
+            && let Err(err) = simple_bot_manager::check_player_amount(self, engine_token)
         {
-            if let Err(err) = simple_bot_manager::check_player_amount(self, engine_token) {
-                log::error!("bot manager: {err}");
-            }
+            log::error!("bot manager: {err}");
         }
     }
 }
@@ -470,6 +469,15 @@ fn spawn_fake_player(
         nav_query: Navigation::new(Hull::Human),
         ..Default::default()
     };
+
+    plugin
+        .bots
+        .external_simulations
+        .simulations
+        .read()
+        .values()
+        .filter_map(|sim| sim.init_func.as_ref())
+        .for_each(|init_func| (init_func)(handle, client));
 
     Some(handle as i32)
 }

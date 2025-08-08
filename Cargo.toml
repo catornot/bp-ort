@@ -10,6 +10,8 @@ members = [
 shared = { path = "shared" }
 rrplug = { git = "https://github.com/catornot/rrplug.git" }
 rustc_version = "0.4.1"
+windows-sys = { version = "0.48.0", features = ["Win32_System_LibraryLoader", "Win32_Foundation", "Win32_System_Console", "Win32_System_Diagnostics_Debug", "Win32_System_Threading"] }
+itertools = "0.14.*"
 
 # for crates that deal with ub a lot 
 [profile.release-ub]

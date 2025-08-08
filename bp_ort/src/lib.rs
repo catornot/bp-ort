@@ -1,4 +1,10 @@
-#![feature(c_variadic, iter_array_chunks, iter_collect_into, if_let_guard)]
+#![feature(
+    c_variadic,
+    iter_array_chunks,
+    iter_collect_into,
+    if_let_guard,
+    let_chains
+)]
 #![allow(clippy::missing_transmute_annotations)] // too lazy to fix rn
 
 use rrplug::{bindings::plugin_abi::PluginColor, prelude::*};

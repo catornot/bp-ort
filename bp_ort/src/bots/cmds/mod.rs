@@ -39,10 +39,10 @@ pub(super) fn get_cmd(
         } else {
             Hull::Human
         };
-        if Some(desired_hull) != local_data.nav_query.as_ref().map(|q| q.hull) {
-            if let Some(ref mut query) = local_data.nav_query {
-                _ = query.switch_query(desired_hull);
-            }
+        if Some(desired_hull) != local_data.nav_query.as_ref().map(|q| q.hull)
+            && let Some(ref mut query) = local_data.nav_query
+        {
+            _ = query.switch_query(desired_hull);
         }
     }
 
@@ -52,6 +52,23 @@ pub(super) fn get_cmd(
     };
 
     let mut cmd = Some(match sim_type {
+        sim_type
+            if let Some(cmd_func) = crate::PLUGIN
+                .wait()
+                .bots
+                .external_simulations
+                .simulations
+                .read()
+                .values()
+                .find_map(move |sim_info| {
+                    sim_info
+                        .simulation_maps
+                        .get(&(sim_type.max(0).unsigned_abs() as usize))
+                }) =>
+        {
+            cmd_func(&helper, player)
+        }
+
         _ if unsafe { (helper.sv_funcs.is_alive)(player) == 0 } => {
             if let Some(query) = local_data.nav_query.as_mut() {
                 query.path_points.clear()
@@ -305,23 +322,6 @@ pub(super) fn get_cmd(
         32 => CUserCmd::new_basic_move(Vector3::ZERO, Action::OffHand2 as u32, &helper),
         33 => CUserCmd::new_basic_move(Vector3::ZERO, Action::OffHand3 as u32, &helper),
         34 => CUserCmd::new_basic_move(Vector3::ZERO, Action::OffHand4 as u32, &helper),
-
-        sim_type
-            if let Some(cmd_func) = crate::PLUGIN
-                .wait()
-                .bots
-                .external_simulations
-                .simulations
-                .read()
-                .values()
-                .find_map(move |sim_info| {
-                    sim_info
-                        .simulation_maps
-                        .get(&(sim_type.max(0).unsigned_abs() as usize))
-                }) =>
-        {
-            cmd_func(&helper, player)
-        }
 
         _ => CUserCmd::new_empty(&helper),
     })?;

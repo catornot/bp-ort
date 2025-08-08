@@ -6,7 +6,7 @@ use std::{
 
 use crate::NavmeshBin;
 
-type Octree32 = Octree<u32, TUVec3u32>;
+pub type Octree32 = Octree<u32, TUVec3u32>;
 
 #[derive(Default, Debug)]
 pub struct Navmesh {

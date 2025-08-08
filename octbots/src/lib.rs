@@ -1,26 +1,27 @@
+#![feature(let_chains)]
+
 use bincode::Decode;
 use loader::map_to_i32;
 use oktree::prelude::*;
 use once_cell::sync::OnceCell;
 use parking_lot::{Mutex, RwLock};
 use rrplug::{
-    bindings::{class_types::cplayer::CPlayer, plugin_abi::PluginColor},
-    exports::windows::Win32::Foundation::HMODULE,
-    mid::northstar::NORTHSTAR_DATA,
-    prelude::*,
+    bindings::plugin_abi::PluginColor, exports::windows::Win32::Foundation::HMODULE,
+    mid::northstar::NORTHSTAR_DATA, prelude::*,
 };
 use shared::{
     bindings::{
-        CUserCmd, ClientFunctions, EngineFunctions, HostState, MatSysFunctions, ServerFunctions,
+        ClientFunctions, EngineFunctions, HostState, MatSysFunctions, ServerFunctions,
         CLIENT_FUNCTIONS, ENGINE_FUNCTIONS, MATSYS_FUNCTIONS, SERVER_FUNCTIONS,
     },
-    cmds_helper::CUserCmdHelper,
     interfaces::{IVDebugOverlay, IVEngineServer},
     plugin_interfaces::{rust_version_hash, ExternalSimulations},
 };
-use std::ffi::CStr;
+use std::{ffi::CStr, sync::Arc};
 
+mod behavior;
 mod loader;
+mod pathfinding;
 
 const PLUGIN_DLL_NAME: *const i8 = c"octbots.dll".as_ptr();
 
@@ -44,7 +45,7 @@ pub struct NavmeshBin {
 
 pub struct OctBots {
     #[allow(clippy::type_complexity)]
-    navmesh: RwLock<loader::Navmesh>,
+    navmesh: Arc<RwLock<loader::Navmesh>>,
     current_map: Mutex<String>,
     simulations: OnceCell<&'static ExternalSimulations>,
 }
@@ -65,7 +66,7 @@ impl Plugin for OctBots {
     fn new(_reloaded: bool) -> Self {
         Self {
             current_map: Mutex::new("".to_string()),
-            navmesh: RwLock::new(loader::Navmesh::default()),
+            navmesh: Arc::new(RwLock::new(loader::Navmesh::default())),
             simulations: OnceCell::new(),
         }
     }
@@ -77,8 +78,16 @@ impl Plugin for OctBots {
                 .find(|interface| unsafe { interface.rust_version_hash() == rust_version_hash() })
         {
             unsafe {
-                if !interface.register_simulation(PLUGIN_DLL_NAME, 100, wallpathfining_bots) {
-                    log::error!("failed to register simulation functions");
+                if !interface.set_bot_init(PLUGIN_DLL_NAME, behavior::init_bot) {
+                    log::error!("failed to register init_bot function");
+                }
+
+                if !interface.register_simulation(
+                    PLUGIN_DLL_NAME,
+                    100,
+                    behavior::wallpathfining_bots,
+                ) {
+                    log::error!("failed to register a simulation function");
                 }
             };
 
@@ -124,6 +133,14 @@ impl Plugin for OctBots {
                 .unwrap(),
             })
         };
+    }
+
+    fn on_sqvm_destroyed(&self, sqvm_handle: &CSquirrelVMHandle, _engine_token: EngineToken) {
+        if sqvm_handle.get_context() != ScriptContext::SERVER {
+            return;
+        }
+
+        behavior::drop_behaviors();
     }
 
     fn on_reload_request(&self) -> reloading::ReloadResponse {
@@ -187,35 +204,37 @@ impl Plugin for OctBots {
                     .sqrt()
                 }
 
+                return;
+
                 for origin in octree
                     .iter_elements()
                     .map(|(_, point)| tuvec_to_vector3(cell_size, *point))
                     .filter(|pos| distance3(*pos, origin) < 500.)
                 {
                     let half_cube = cell_size / 2.;
-                    unsafe {
-                        // debug.AddLineOverlay(
-                        //     &(Vector3::new(-half_cube, -half_cube, -half_cube) + origin),
-                        //     &(Vector3::new(half_cube, half_cube, half_cube) + origin),
-                        //     255,
-                        //     20,
-                        //     20,
-                        //     false,
-                        //     0.1,
-                        // );
-                        debug.AddBoxOverlay(
-                            &origin,
-                            &Vector3::new(-half_cube, -half_cube, -half_cube),
-                            &Vector3::new(half_cube, half_cube, half_cube),
-                            &Vector3::new(0., 0., 0.),
-                            0,
-                            0,
-                            200,
-                            10,
-                            false,
-                            0.1,
-                        );
-                    };
+                    // unsafe {
+                    // debug.AddLineOverlay(
+                    //     &(Vector3::new(-half_cube, -half_cube, -half_cube) + origin),
+                    //     &(Vector3::new(half_cube, half_cube, half_cube) + origin),
+                    //     255,
+                    //     20,
+                    //     20,
+                    //     false,
+                    //     0.1,
+                    // );
+                    // debug.AddBoxOverlay(
+                    //     &origin,
+                    //     &Vector3::new(-half_cube, -half_cube, -half_cube),
+                    //     &Vector3::new(half_cube, half_cube, half_cube),
+                    //     &Vector3::new(0., 0., 0.),
+                    //     0,
+                    //     0,
+                    //     200,
+                    //     10,
+                    //     false,
+                    //     0.1,
+                    // );
+                    // };
                 }
 
                 for (min, max) in octree
@@ -280,12 +299,6 @@ fn tuvec_to_vector3(cell_size: f32, point: TUVec3u32) -> Vector3 {
         map_to_i32(point.0.y) as f32,
         map_to_i32(point.0.z) as f32,
     ) * Vector3::new(cell_size, cell_size, cell_size)
-}
-
-extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, player: &mut CPlayer) -> CUserCmd {
-    log::info!("wow {}", player.m_iTeamNum);
-    println!("wow {}", player.m_iTeamNum);
-    CUserCmd::new_empty(helper)
 }
 
 entry!(OctBots);

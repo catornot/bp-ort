@@ -1,8 +1,13 @@
 use crate::{bindings::CUserCmd, cmds_helper::CUserCmdHelper};
-use rrplug::{bindings::class_types::cplayer::CPlayer, create_external_interface};
+use rrplug::{
+    bindings::class_types::{client::CClient, cplayer::CPlayer},
+    create_external_interface,
+};
 use std::ffi::c_char;
 
 pub type SimulationFunc = extern "C" fn(&CUserCmdHelper, &mut CPlayer) -> CUserCmd;
+
+pub type BotInitFunction = extern "C" fn(u16, &CClient);
 
 create_external_interface! {
     pub ExternalSimulations + ExternalSimulations001 => {
@@ -10,6 +15,8 @@ create_external_interface! {
         pub fn register_simulation(dll_name: *const c_char, simtype: usize, func: SimulationFunc) -> bool;
         pub fn unregister_simulation(dll_name: *const c_char, simtype: usize) -> bool;
         pub fn drop_simulation(dll_name: *const c_char) -> bool;
+        pub fn set_bot_init(dll_name: *const c_char, func: BotInitFunction) -> bool;
+        pub fn drop_bot_init(dll_name: *const c_char) -> bool;
     }
 }
 

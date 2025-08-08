@@ -116,6 +116,7 @@
             export CXX=clang++
             export CMAKE=${native-pkgs.cmake}/bin/cmake
             export WGPU_ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER=1
+            export RUST_BACKTRACE=1
           '';
         };
 

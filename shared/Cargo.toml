@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 rrplug = { workspace = true }
+windows-sys = { workspace = true }
 
 [build-dependencies]
 rustc_version = { workspace = true }

@@ -93,8 +93,8 @@ pub(crate) fn basic_combat(
                     local_data.should_recaculate_path,
                     helper,
                 );
-            } else if let Some(((target_pos, target), _)) = target {
-                if path_to_target(
+            } else if let Some(((target_pos, target), _)) = target
+                && path_to_target(
                     &mut cmd,
                     local_data,
                     origin,
@@ -102,9 +102,9 @@ pub(crate) fn basic_combat(
                     local_data.last_target_index != target.pl.index
                         || local_data.should_recaculate_path,
                     helper,
-                ) {
-                    local_data.last_target_index = target.pl.index
-                }
+                )
+            {
+                local_data.last_target_index = target.pl.index
             }
 
             local_data.should_recaculate_path = false;
