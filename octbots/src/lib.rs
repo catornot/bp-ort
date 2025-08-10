@@ -1,9 +1,6 @@
 #![feature(let_chains, mpmc_channel)]
 
-use async_pathfinding::JobMarket;
 use bincode::Decode;
-use loader::map_to_i32;
-use oktree::prelude::*;
 use once_cell::sync::OnceCell;
 use parking_lot::{Mutex, RwLock};
 use rrplug::{
@@ -19,6 +16,10 @@ use shared::{
     plugin_interfaces::{rust_version_hash, ExternalSimulations},
 };
 use std::{ffi::CStr, sync::Arc};
+// use tracing_chrome::FlushGuard;
+// use tracing_subscriber::layer::SubscriberExt;
+
+use crate::async_pathfinding::JobMarket;
 
 mod async_pathfinding;
 mod behavior;
@@ -51,6 +52,8 @@ pub struct OctBots {
     current_map: Mutex<String>,
     simulations: OnceCell<&'static ExternalSimulations>,
     job_market: JobMarket,
+    // frame: Mutex<UnsafeHandle<EnteredSpan>>, // I really need this
+    // trace_guard: Mutex<Option<FlushGuard>>,
 }
 
 impl Plugin for OctBots {
@@ -60,19 +63,40 @@ impl Plugin for OctBots {
         c"OCTBOTS",
         PluginContext::all(),
         PluginColor {
-            red: 139,
-            green: 0,
-            blue: 139,
+            red: 255,
+            green: 127,
+            blue: 127,
         },
     );
 
     fn new(_reloaded: bool) -> Self {
         let navmesh = Arc::new(RwLock::new(loader::Navmesh::default()));
+
+        // let file = PathBuf::from(format!(
+        //     "trace/trace_{}.json",
+        //     SystemTime::now()
+        //         .duration_since(SystemTime::UNIX_EPOCH)
+        //         .unwrap()
+        //         .as_secs_f64()
+        //         .trunc() as i64
+        // ));
+
+        // fs::create_dir_all(file.parent().unwrap()).unwrap();
+        // _ = fs::File::create_new(&file);
+
+        // log::info!("trace goes into {file:?}");
+
+        // let (chrome_layer, guard) = tracing_chrome::ChromeLayerBuilder::new().file(file).build();
+        // tracing::subscriber::set_global_default(tracing_subscriber::registry().with(chrome_layer))
+        //     .expect("setup tracy layer");
+
         Self {
             current_map: Mutex::new("".to_string()),
             job_market: JobMarket::new(Arc::clone(&navmesh)),
             navmesh,
             simulations: OnceCell::new(),
+            // frame: Mutex::new(unsafe { UnsafeHandle::new(Span::none().entered()) }),
+            // trace_guard: Mutex::new(Some(guard)),
         }
     }
 
@@ -92,6 +116,10 @@ impl Plugin for OctBots {
                     100,
                     behavior::wallpathfining_bots,
                 ) {
+                    log::error!("failed to register a simulation function");
+                }
+
+                if !interface.register_simulation(PLUGIN_DLL_NAME, 99, behavior::infodump) {
                     log::error!("failed to register a simulation function");
                 }
             };
@@ -145,6 +173,7 @@ impl Plugin for OctBots {
             return;
         }
 
+        // self.trace_guard.lock().take();
         behavior::drop_behaviors();
     }
 
@@ -155,27 +184,20 @@ impl Plugin for OctBots {
 
         unsafe { self.simulations.wait().drop_simulation(PLUGIN_DLL_NAME) };
         self.job_market.stop();
+        // self.trace_guard.lock().flush();
 
         // has to be reloadable
         unsafe { reloading::ReloadResponse::allow_reload() }
     }
 
-    #[allow(unused_variables, unreachable_code)]
     fn runframe(&self, _engine_token: EngineToken) {
-        if let Some((state, origin)) = unsafe {
+        // let mut frame = self.frame.lock();
+        // *frame = unsafe { UnsafeHandle::new(span!(Level::TRACE, "frame").entered()) };
+
+        if let Some(state) = unsafe {
             ENGINE_FUNCTIONS
                 .get()
                 .and_then(|funcs| funcs.host_state.as_ref())
-                .and_then(|state| Some((state, SERVER_FUNCTIONS.get()?)))
-                .and_then(|(state, server_funcs)| {
-                    let mut v = Vector3::ZERO;
-                    Some((
-                        state,
-                        *(server_funcs.get_player_by_index)(1)
-                            .as_ref()?
-                            .get_origin(&mut v),
-                    ))
-                })
         } {
             let current_name =
                 unsafe { CStr::from_ptr(state.level_name.as_ptr()).to_string_lossy() };
@@ -186,125 +208,18 @@ impl Plugin for OctBots {
 
                 *load_nav = current_name.to_string();
             } else {
-                let Some(debug) = ENGINE_INTERFACES.get().map(|engine| engine.debug_overlay) else {
-                    return;
-                };
-
                 let mut navmesh = self.navmesh.write();
 
-                let octree = match &navmesh.navmesh {
-                    loader::NavmeshStatus::Unloaded => return,
+                match &navmesh.navmesh {
+                    loader::NavmeshStatus::Unloaded => {}
                     loader::NavmeshStatus::Loading => {
                         navmesh.try_loaded();
-                        return;
                     }
-                    loader::NavmeshStatus::Loaded(octree) => octree,
-                };
-
-                let cell_size = navmesh.cell_size;
-
-                pub fn distance3(pos: Vector3, target: Vector3) -> f32 {
-                    ((pos.x - target.x).powi(2)
-                        + (pos.y - target.y).powi(2)
-                        + (pos.z - target.z).powi(2))
-                    .sqrt()
-                }
-
-                return;
-
-                for origin in octree
-                    .iter_elements()
-                    .map(|(_, point)| tuvec_to_vector3(cell_size, *point))
-                    .filter(|pos| distance3(*pos, origin) < 500.)
-                {
-                    let half_cube = cell_size / 2.;
-                    // unsafe {
-                    // debug.AddLineOverlay(
-                    //     &(Vector3::new(-half_cube, -half_cube, -half_cube) + origin),
-                    //     &(Vector3::new(half_cube, half_cube, half_cube) + origin),
-                    //     255,
-                    //     20,
-                    //     20,
-                    //     false,
-                    //     0.1,
-                    // );
-                    // debug.AddBoxOverlay(
-                    //     &origin,
-                    //     &Vector3::new(-half_cube, -half_cube, -half_cube),
-                    //     &Vector3::new(half_cube, half_cube, half_cube),
-                    //     &Vector3::new(0., 0., 0.),
-                    //     0,
-                    //     0,
-                    //     200,
-                    //     10,
-                    //     false,
-                    //     0.1,
-                    // );
-                    // };
-                }
-
-                for (min, max) in octree
-                    .iter_nodes()
-                    .map(|node| {
-                        (
-                            tuvec_to_vector3(cell_size, TUVec3u32(node.aabb.min)),
-                            tuvec_to_vector3(cell_size, TUVec3u32(node.aabb.max)),
-                        )
-                    })
-                    .filter(|pos| {
-                        distance3(pos.0, origin) < 100. || distance3(pos.1, origin) < 100.
-                    })
-                {
-                    // unsafe {
-                    //     debug.AddLineOverlay(
-                    //         &(Vector3::new(min.x, 0., 0.)),
-                    //         &(Vector3::new(max.x, 0., 0.)),
-                    //         255,
-                    //         200,
-                    //         20,
-                    //         false,
-                    //         0.1,
-                    //     );
-                    //     debug.AddLineOverlay(
-                    //         &(Vector3::new(0., min.y, 0.)),
-                    //         &(Vector3::new(0., max.y, 0.)),
-                    //         255,
-                    //         200,
-                    //         20,
-                    //         false,
-                    //         0.1,
-                    //     );
-                    //     debug.AddLineOverlay(
-                    //         &(Vector3::new(0., 0., min.z)),
-                    //         &(Vector3::new(0., 0., max.z)),
-                    //         255,
-                    //         200,
-                    //         20,
-                    //         false,
-                    //         0.1,
-                    //     );
-                    //     debug.AddLineOverlay(
-                    //         &(Vector3::new(min.x, min.y, min.z)),
-                    //         &(Vector3::new(max.x, max.y, max.z)),
-                    //         255,
-                    //         200,
-                    //         20,
-                    //         false,
-                    //         0.1,
-                    //     );
-                    // };
+                    loader::NavmeshStatus::Loaded(_) => {}
                 }
             }
         }
     }
-}
-
-fn tuvec_to_vector3(cell_size: f32, point: TUVec3u32) -> Vector3 {
-    Vector3::new(
-        map_to_i32(point.0.x) as f32,
-        map_to_i32(point.0.y) as f32,
-        map_to_i32(point.0.z) as f32,
-    ) * Vector3::new(cell_size, cell_size, cell_size)
 }
 
 entry!(OctBots);

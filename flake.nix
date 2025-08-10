@@ -34,10 +34,12 @@
             config = "x86_64-w64-mingw32";
             libc = "msvcrt";
           };
+          config.microsoftVisualStudioLicenseAccepted = true;
         };
-        overrides = (builtins.fromTOML (builtins.readFile (self + "/rust-toolchain.toml")));
         toolchain-win = (pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml);
-        toolchain-linux = (native-pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml);
+        toolchain-linux = (
+          native-pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml
+        );
       in
       rec {
         formatter = native-pkgs.nixfmt-rfc-style;
@@ -47,6 +49,31 @@
           };
           packaged-mod = pkgs.callPackage ./packaged-mod.nix { bp-ort = self.packages.${system}.bp-ort; };
           default = self.packages.${system}.bp-ort;
+
+          tracy = native-pkgs.writeShellApplication {
+            name = "tracy";
+
+            runtimeInputs = [
+              native-pkgs.tracy
+            ];
+
+            text = ''
+              capture -o target/trace.tracy
+            '';
+          };
+
+          tracy-open = native-pkgs.writeShellApplication {
+            name = "tracy-open";
+
+            runtimeInputs = [
+              native-pkgs.tracy
+            ];
+
+            text = ''
+              DISPLAY=:0 :w
+              tracy target/trace.tracy
+            '';
+          };
 
           win-shell = devShell.default;
           native-shell = devShell.native;

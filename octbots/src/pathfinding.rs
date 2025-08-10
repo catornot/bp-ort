@@ -57,7 +57,7 @@ pub fn find_path(octtree: &Octree32, start: TUVec3u32, end: TUVec3u32) -> Option
 
     let mut iterations = 0usize;
     while let Some(Reverse(node)) = open_list.pop()
-        && iterations < u16::MAX as usize * 4
+        && iterations < u16::MAX as usize * 10
     {
         iterations += 1;
         let (&node_pos, &(parent, cost, ground_distance)) =
@@ -153,22 +153,29 @@ fn get_neighbors<'a>(
     ]
     .into_iter()
     .map(|offset| {
-        TUVec3u32::new(
-            point.0.x.saturating_add_signed(offset[0]),
-            point.0.y.saturating_add_signed(offset[1]),
-            point.0.z.saturating_add_signed(offset[2]),
+        (
+            TUVec3u32::new(
+                point.0.x.saturating_add_signed(offset[0]),
+                point.0.y.saturating_add_signed(offset[1]),
+                point.0.z.saturating_add_signed(offset[2]),
+            ),
+            visited_list
+                .get(point)
+                .map(|(_, _, distance)| *distance)
+                .unwrap_or_else(|| find_ground_distance(octtree, *point)),
         )
     })
-    .filter(|point| {
-        octtree.get(&point.0).is_none()
-            && pass_ground_distance(
-                visited_list
-                    .get(point)
-                    .map(|(_, _, distance)| *distance)
-                    .unwrap_or_else(|| find_ground_distance(octtree, *point)),
-            )
+    .filter(|(point, ground_distance)| {
+        octtree.get(&point.0).is_none() && pass_ground_distance(*ground_distance)
     })
-    .map(|point| (point, 1.))
+    .map(|(point, ground_distance)| {
+        (
+            point,
+            1. + (1. - (ground_distance / MAX_DISTANCE) as f64)
+                .abs()
+                .clamp(0., 1.),
+        )
+    })
     .collect()
 }
 
@@ -192,7 +199,7 @@ fn get_path(visited_list: VisitedList, mut index: usize, start: usize) -> Option
     Some(path)
 }
 
-const MAX_DISTANCE: u32 = 5;
+const MAX_DISTANCE: u32 = 8;
 fn find_ground_distance(octtree: &Octree<u32, TUVec3u32>, point: TUVec3u32) -> u32 {
     (point.0.z.saturating_sub(MAX_DISTANCE)..point.0.z)
         .position(|z| octtree.get(&TUVec3::new(point.0.x, point.0.y, z)).is_some())

@@ -1,6 +1,5 @@
-use bonsai_bt::{Action, Event, Sequence, Status, UpdateArgs, BT, RUNNING};
+use bonsai_bt::{Action, Event, Sequence, Status, UpdateArgs, BT};
 use itertools::Itertools;
-use oktree::prelude::*;
 use parking_lot::RwLock;
 use rrplug::{
     bindings::class_types::{client::CClient, cplayer::CPlayer},
@@ -13,12 +12,12 @@ use shared::{
 use std::{
     collections::HashMap,
     sync::{Arc, LazyLock},
+    time::Duration,
 };
 
 use crate::{
     async_pathfinding::PathReceiver,
-    loader::{map_to_i32, map_to_u32, Navmesh, NavmeshStatus},
-    ENGINE_INTERFACES,
+    loader::{Navmesh, NavmeshStatus},
 };
 
 static BEHAVIOR: LazyLock<RwLock<HashMap<u16, BT<BotAction, BotBrain>>>> =
@@ -28,9 +27,14 @@ struct BotBrain {
     navmesh: Arc<RwLock<Navmesh>>,
     current_target: Option<i32>,
     path_receiver: Option<PathReceiver>,
+    path_next_request: f32,
     path: Vec<Vector3>,
     next_cmd: CUserCmd,
     last_alive_state: bool,
+    min_time: Duration,
+    max_time: Duration,
+    total_time: Duration,
+    iterations: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -66,6 +70,11 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
             last_alive_state: false,
             path_receiver: None,
             path: Vec::new(),
+            path_next_request: 0.,
+            min_time: Duration::ZERO,
+            max_time: Duration::ZERO,
+            total_time: Duration::ZERO,
+            iterations: 0,
         },
     ));
 }
@@ -85,9 +94,10 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, player: &mut CPla
     }
 
     let e = Event::from(UpdateArgs {
-        dt: helper.globals.tickInterval as f64,
+        dt: dbg!(helper.globals.tickInterval as f64),
     });
 
+    let start = std::time::SystemTime::now();
     bt.tick(&e, &mut |args, brain| match args.action {
         BotAction::FindTarget => 'target: {
             let Some(current_target) = (0..helper.globals.maxPlayers)
@@ -122,33 +132,40 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, player: &mut CPla
             };
 
             let mut v = Vector3::ZERO;
-            let start = vector3_to_tuvec(navmesh.cell_size, unsafe { *player.get_origin(&mut v) });
-            let end = vector3_to_tuvec(navmesh.cell_size, unsafe {
-                *other_player.get_origin(&mut v)
-            });
+            let start = unsafe { *player.get_origin(&mut v) };
+            let end = unsafe { *other_player.get_origin(&mut v) };
 
-            // log::info!("pathfinding from {start:?} to {end:?}");
+            if let None = brain.path_receiver.as_ref()
+                && brain.path_next_request < helper.globals.curTime
+            {
+                // log::info!("pathfinding from {start:?} to {end:?}");
+                brain.path_receiver = crate::PLUGIN.wait().job_market.find_path(start, end);
+            }
 
-            brain.path_receiver = brain
-                .path_receiver
-                .take()
-                .or_else(|| crate::PLUGIN.wait().job_market.find_path(start, end));
+            // let start = std::time::SystemTime::now();
 
+            // log::info!(
+            //     "done path {:?} {}",
+            //     std::time::SystemTime::now()
+            //         .duration_since(start)
+            //         .unwrap_or_default(),
+            //     brain.path.len()
+            // );
             if let Some(path_receiver) = brain.path_receiver.take() {
-                match path_receiver.try_recv() {
-                    Ok(path) => {
-                        brain.path = path
-                            .into_iter()
-                            .flatten()
-                            .map(|point| tuvec_to_vector3(navmesh.cell_size, point))
-                            .collect();
+                match path_receiver.lock_arc().try_recv() {
+                    Ok(Some(path)) => {
+                        brain.path = path;
 
                         (Status::Success, 0.)
+                    }
+                    Ok(None) => {
+                        brain.path_next_request = helper.globals.curTime + 0.1;
+                        (Status::Failure, 0.)
                     }
                     Err(std::sync::mpmc::TryRecvError::Disconnected) => (Status::Failure, 0.),
                     Err(std::sync::mpmc::TryRecvError::Empty) => {
                         brain.path_receiver = Some(path_receiver);
-                        RUNNING
+                        (Status::Success, 0.)
                     }
                 }
             } else {
@@ -160,7 +177,7 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, player: &mut CPla
                 break 'render (Status::Failure, 0.);
             }
 
-            let debug = ENGINE_INTERFACES.wait().debug_overlay;
+            let debug = crate::ENGINE_INTERFACES.wait().debug_overlay;
             brain
                 .path
                 .iter()
@@ -174,6 +191,17 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, player: &mut CPla
         }
     });
 
+    let dif = std::time::SystemTime::now()
+        .duration_since(start)
+        .unwrap_or_default();
+
+    bt.blackboard_mut().total_time += dif;
+    bt.blackboard_mut().max_time = dif.max(bt.blackboard().max_time);
+    bt.blackboard_mut().min_time = dif.min(bt.blackboard().min_time);
+    bt.blackboard_mut().iterations += 1;
+
+    // log::info!("done {dif:?}");
+
     if bt.is_finished() {
         bt.reset_bt();
     }
@@ -181,21 +209,22 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, player: &mut CPla
     bt.blackboard().next_cmd
 }
 
-fn vector3_to_tuvec(cell_size: f32, origin: Vector3) -> TUVec3u32 {
-    let scaled = origin / Vector3::new(cell_size, cell_size, cell_size);
+pub extern "C" fn infodump(helper: &CUserCmdHelper, player: &mut CPlayer) -> CUserCmd {
+    let mut behavior_static = BEHAVIOR.write();
+    let Some(bt) = behavior_static.get_mut(&(player.pl.index as u16)) else {
+        return CUserCmd::new_empty(helper);
+    };
 
-    TUVec3u32::new(
-        map_to_u32(scaled.x as i32),
-        map_to_u32(scaled.y as i32),
-        map_to_u32(scaled.z as i32),
-    )
-}
+    let brain = bt.blackboard_mut();
+    if brain.iterations != 0 {
+        log::info!("min time {:?}", brain.min_time);
+        log::info!("max time {:?}", brain.max_time);
+        log::info!(
+            "average time {:?}",
+            brain.total_time.div_f64(brain.iterations as f64)
+        );
+        brain.iterations = 0;
+    }
 
-fn tuvec_to_vector3(cell_size: f32, point: TUVec3u32) -> Vector3 {
-    Vector3::new(cell_size, cell_size, cell_size)
-        * Vector3::new(
-            map_to_i32(point.0.x) as f32,
-            map_to_i32(point.0.y) as f32,
-            map_to_i32(point.0.z) as f32,
-        )
+    CUserCmd::new_empty(helper)
 }
