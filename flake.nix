@@ -81,6 +81,7 @@
 
         devShell.default = pkgs.mkShell rec {
           nativeBuildInputs = with pkgs; [
+            native-pkgs.bacon
             toolchain-win
             pkg-config
           ];
@@ -98,6 +99,7 @@
 
         devShell.native = pkgs.mkShell rec {
           nativeBuildInputs = with native-pkgs; [
+            bacon
             toolchain-linux
             clang
             cmake
