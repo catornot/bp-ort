@@ -17,6 +17,7 @@ indexmap = "2.*"
 rustc-hash = "2.*"
 itertools = { workspace = true }
 bevy_math = { version = "0.16.1", default-features = false, features = ["std"] }
+# crossbeam = { git = "https://github.com/ibraheemdev/crossbeam.git", version = "0.8.4", features = ["crossbeam-channel"], ref = "5a856843d959ba4c40a7a13e3e338f406f82d409" }
 
 [lib]
 crate-type = ["cdylib"]

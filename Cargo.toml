@@ -14,11 +14,10 @@ windows-sys = { version = "0.48.0", features = ["Win32_System_LibraryLoader", "W
 itertools = "0.14.*"
 
 # for crates that deal with ub a lot 
-[profile.release-ub]
-inherits = "release"
-strip = "true"
-opt-level = 0
-debug-assertions = false
+[profile.release-debug]
+inherits = "dev"
+debug = true
+opt-level = 3
 
 [profile.dev.package."*"]
 opt-level = 2
