@@ -2,7 +2,8 @@
   description = "A collection of plugins for northstar related to bots";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-24.11";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    nixpkgs-win.url = "github:nixos/nixpkgs/24.11";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -16,6 +17,7 @@
     {
       self,
       nixpkgs,
+      nixpkgs-win,
       flake-utils,
       rust-overlay,
       ...
@@ -27,7 +29,7 @@
           inherit system;
           overlays = [ (import rust-overlay) ];
         };
-        pkgs = import nixpkgs {
+        pkgs = import nixpkgs-win {
           inherit system;
           overlays = [ (import rust-overlay) ];
           crossSystem = {
@@ -37,9 +39,10 @@
           config.microsoftVisualStudioLicenseAccepted = true;
         };
         toolchain-win = (pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml);
-        toolchain-linux = (
-          native-pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml
-        );
+        # toolchain-linux = (
+        #   native-pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml
+        # );
+        toolchain-linux = native-pkgs.pkgsBuildBuild.rust-bin.stable.latest.default; 
       in
       rec {
         formatter = native-pkgs.nixfmt-rfc-style;
@@ -88,8 +91,8 @@
 
           buildInputs = with pkgs; [
             windows.mingw_w64_headers
-            windows.mcfgthreads
-            windows.mingw_w64_pthreads
+            # windows.mcfgthreads
+            windows.pthreads
           ];
 
           LD_LIBRARY_PATH = nixpkgs.lib.makeLibraryPath buildInputs;
@@ -108,6 +111,24 @@
           ];
 
           buildInputs = with native-pkgs; [
+              stdenv.cc
+              zstd
+              libxkbcommon
+              vulkan-loader
+              xorg.libX11
+              xorg.libXcursor
+              xorg.libXi
+              xorg.libXrandr
+              alsa-lib-with-plugins
+              wayland
+              glfw-wayland
+              udev
+              pkg-config
+          ];
+
+          runtimeDependencies = with native-pkgs; [
+            libgcc
+            stdenv.cc
             zstd
             libxkbcommon
             vulkan-loader
@@ -115,25 +136,10 @@
             xorg.libXcursor
             xorg.libXi
             xorg.libXrandr
-            alsa-lib
+            alsa-lib-with-plugins
             wayland
             glfw-wayland
             udev
-          ];
-
-          runtimeDependencies = with native-pkgs; [
-            libxkbcommon
-            libgcc
-            glibc.out
-            vulkan-loader
-            alsa-lib
-            udev
-            xorg.libX11
-            xorg.libXcursor
-            xorg.libXi
-            xorg.libXrandr
-            wayland
-            glfw-wayland
           ];
 
           LD_LIBRARY_PATH = nixpkgs.lib.makeLibraryPath runtimeDependencies;
@@ -145,7 +151,7 @@
             export CXX=clang++
             export CMAKE=${native-pkgs.cmake}/bin/cmake
             export WGPU_ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER=1
-            export WGPU_BACKEND=vulkun
+            export WGPU_BACKEND=vulkan
             export RUST_BACKTRACE=1
           '';
         };
