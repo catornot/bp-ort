@@ -9,7 +9,7 @@ in
 rustPlatform.buildRustPackage {
   name = "bp-ort";
 
-  buildType = "debug";
+  # buildType = "debug";
   rustToolchain = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
   buildInputs = [
   ];
