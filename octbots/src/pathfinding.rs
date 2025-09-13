@@ -34,7 +34,8 @@ impl Ord for Node {
 impl Eq for Node {}
 
 pub fn find_path(octtree: &Octree32, start: TUVec3u32, end: TUVec3u32) -> Option<Vec<TUVec3u32>> {
-    if octtree.get(&start.0).is_some() || octtree.get(&start.0).is_some() {
+    log::info!("{start:?} and {end:?}");
+    if octtree.get(&start.0).is_some() || octtree.get(&end.0).is_some() {
         return None;
     }
 
@@ -128,10 +129,11 @@ pub fn find_path(octtree: &Octree32, start: TUVec3u32, end: TUVec3u32) -> Option
 }
 
 fn heuristic(neighbor: TUVec3u32, end: TUVec3u32, start: TUVec3u32) -> Cost {
+    // TODO: is this even the correct way to do distance I am so lost rn
     fn distance3(pos: TUVec3u32, target: TUVec3u32) -> f64 {
-        (((pos.0.x - target.0.x).pow(2)
-            + (pos.0.y - target.0.y).pow(2)
-            + (pos.0.z - target.0.z).pow(2)) as f64)
+        (((pos.0.x as i64 - target.0.x as i64).pow(2)
+            + (pos.0.y as i64 - target.0.y as i64).pow(2)
+            + (pos.0.z as i64 - target.0.z as i64).pow(2)) as f64)
             .sqrt()
     }
 
@@ -152,18 +154,18 @@ fn get_neighbors<'a>(
         [0, 0, -1],
     ]
     .into_iter()
-    .map(|offset| {
-        (
+    .filter_map(|offset| {
+        Some((
             TUVec3u32::new(
-                point.0.x.saturating_add_signed(offset[0]),
-                point.0.y.saturating_add_signed(offset[1]),
-                point.0.z.saturating_add_signed(offset[2]),
+                point.0.x.checked_add_signed(offset[0])?,
+                point.0.y.checked_add_signed(offset[1])?,
+                point.0.z.checked_add_signed(offset[2])?,
             ),
             visited_list
                 .get(point)
                 .map(|(_, _, distance)| *distance)
                 .unwrap_or_else(|| find_ground_distance(octtree, *point)),
-        )
+        ))
     })
     .filter(|(point, ground_distance)| {
         octtree.get(&point.0).is_none() && pass_ground_distance(*ground_distance)

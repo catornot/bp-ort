@@ -184,13 +184,13 @@ fn async_load_worker_builder(id: String) -> impl FnOnce() -> Option<(Octree32, f
 }
 
 fn round_up_to_power_of_2(mut num: u32) -> u32 {
-    num -= 1;
+    num = num.wrapping_sub(1);
     num |= num >> 1;
     num |= num >> 2;
     num |= num >> 4;
     num |= num >> 8;
     num |= num >> 16;
-    num + 1
+    num.wrapping_add(1)
 }
 
 fn round_down_to_power_of_2(num: u32) -> u32 {
