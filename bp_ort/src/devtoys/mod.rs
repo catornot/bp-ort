@@ -1,5 +1,6 @@
 use rrplug::{
-    bindings::cvar::convar::{FCVAR_CHEAT, FCVAR_CLIENTDLL},
+    bindings::cvar::convar::{FCVAR_CHEAT, FCVAR_CLIENTDLL, FCVAR_GAMEDLL_FOR_REMOTE_CLIENTS},
+    mid::engine::concommands::find_concommand,
     prelude::*,
 };
 use std::{cell::RefCell, convert::Infallible};
@@ -72,6 +73,10 @@ impl Plugin for DevToys {
                 let convar = ConVarStruct::find_convar_by_name("enable_debug_overlays", token)
                     .expect("enable_debug_overlays should exist");
                 convar.set_value_i32(cfg!(debug_assertions) as i32, token);
+
+                let cmd = find_concommand("script").expect("script should exist");
+                cmd._base.m_nFlags &= !(FCVAR_GAMEDLL_FOR_REMOTE_CLIENTS as i32)
+                // don't allow random players to execute commands on listen server
             }
             WhichDll::Client => {
                 random_detour::hook_client(dll_ptr.get_dll_ptr());
