@@ -45,7 +45,7 @@
         # toolchain-linux = native-pkgs.pkgsBuildBuild.rust-bin.stable.latest.default;
       in
       rec {
-        formatter = native-pkgs.nixfmt-rfc-style;
+        formatter = native-pkgs.nixfmt-tree;
         packages = {
           bp-ort = pkgs.callPackage ./expressions/default.nix {
             rust-bin = rust-overlay.lib.mkRustBin { } pkgs.buildPackages;
