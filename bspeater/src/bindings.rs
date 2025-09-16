@@ -1,8 +1,10 @@
 #![allow(dead_code, unused, clippy::type_complexity)]
 use bevy::prelude::*;
+use bytemuck::{Pod, Zeroable};
 use modular_bitfield::prelude::*;
 
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)]
+#[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub enum LumpIds {
     ENTITIES = 0x0000,
@@ -136,6 +138,7 @@ pub enum LumpIds {
 }
 
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)]
+#[repr(C)]
 pub enum Contents {
     // r1/scripts/vscripts/_consts.nut:1159
     EMPTY = 0x00,
@@ -172,6 +175,7 @@ pub enum Contents {
 }
 
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)]
+#[repr(C)]
 pub enum MeshFlags {
     // source.Surface (source.TextureInfo rolled into titanfall.TextureData?)
     SKY_2D = 0x0002, // TODO: test overriding sky with this in-game
@@ -190,12 +194,13 @@ pub enum MeshFlags {
 }
 
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)]
+#[repr(C)]
 pub enum MeshMasks {
     MASK_VERTEX = 0x600,
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct BSPHeader {
     pub filemagic: [u8; 4],
     pub version: i32,
@@ -205,7 +210,7 @@ pub struct BSPHeader {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct LumpHeader {
     pub fileofs: i32, // offset into file (bytes)
     pub filelen: i32, // length of lump (bytes)
@@ -214,7 +219,7 @@ pub struct LumpHeader {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct CMGrid {
     pub cell_size: f32,
     pub cell_org: [i32; 2],
@@ -224,7 +229,7 @@ pub struct CMGrid {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct BspMesh {
     pub first_mesh_index: u32,
     pub num_triangles: u16,
@@ -239,7 +244,7 @@ pub struct BspMesh {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct TricollHeader {
     pub flags: i16,         // always 0?
     pub texture_flags: i16, // copy of texture_data.flags
@@ -258,14 +263,14 @@ pub struct TricollHeader {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct GridCell {
     pub geo_set_start: i16,
     pub geo_set_count: i16,
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct GeoSet {
     pub straddle_group: i16,
     pub prim_count: i16,
@@ -273,7 +278,7 @@ pub struct GeoSet {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct GeoSetBounds {
     pub origin: [i16; 3],
     pub cos: i16,
@@ -290,7 +295,7 @@ pub enum PrimitiveType {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct VertexUnlit {
     pub vertex_index: i32,
     pub normal_index: i32,
@@ -299,7 +304,7 @@ pub struct VertexUnlit {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct VertexLitFlat {
     pub vertex_index: u32,
     pub normal_index: u32,
@@ -310,7 +315,7 @@ pub struct VertexLitFlat {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct VertexLitBump {
     pub vertex_index: i32,
     pub normal_index: i32,
@@ -322,7 +327,7 @@ pub struct VertexLitBump {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct VertexUnlitTS {
     pub vertex_index: i32,
     pub normal_index: i32,
@@ -332,7 +337,7 @@ pub struct VertexUnlitTS {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct VertexBlinnPhong {
     pub vertex_index: i32,
     pub normal_index: i32,
@@ -342,7 +347,7 @@ pub struct VertexBlinnPhong {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct Brush {
     pub origin: Vec3,
     pub num_non_axial_do_discard: u8,
@@ -355,7 +360,7 @@ pub struct Brush {
 static ASSERT: () = assert!(std::mem::size_of::<Brush>() == 0x20);
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct MaterialSort {
     pub texture_data: i16,
     pub light_map_header: i16,
@@ -365,43 +370,43 @@ pub struct MaterialSort {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct TricollNode {
     pub vals: [i16; 8], //just a guess because 16bit intrinics are used on this at engine.dll + 0x1D1B10
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct TricollTri {
     pub data: u32, //bitpacked
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct TricollBevelStart {
     pub val: u16,
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct TricollBevelIndex {
     pub gap_0: [u8; 4],
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct ColBrush {
     pub gap_0: [u8; 32],
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct CollPrimitive {
     pub val: u32,
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct Dtexdata {
     pub reflectivity: Vec3,
     pub name_string_table_id: i32,
@@ -413,7 +418,7 @@ pub struct Dtexdata {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct DCollbrush {
     pub origin: Vec3,               // size: 12
     pub non_axial_count: [u8; 2],   // size: 2
@@ -423,7 +428,7 @@ pub struct DCollbrush {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct StaticProp {
     pub origin: Vec3,
     pub angles: Vec3,
@@ -444,7 +449,7 @@ pub struct StaticProp {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct FileHeader {
     // file version as defined by VHV_VERSION
     pub version: i32,
@@ -468,21 +473,21 @@ pub struct FileHeader {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct BodyPartHeader {
     pub num_models: i32,
     pub model_offset: i32,
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct ModelHeader {
     pub num_lods: i32,
     pub lod_offset: i32,
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct ModelLODHeader {
     pub num_meshes: i32,
     pub mesh_offset: i32,
@@ -490,15 +495,16 @@ pub struct ModelLODHeader {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 #[repr(packed)]
 pub struct MeshHeader {
     pub num_strip_groups: i32,
     pub strip_group_header_offset: i32,
     pub flags: u8,
 }
+
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Zeroable)]
 pub struct StripGroupHeader {
     pub num_verts: i32,
     pub vert_offset: i32,
@@ -510,7 +516,7 @@ pub struct StripGroupHeader {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Zeroable)]
 pub struct StripHeader {
     // indexOffset offsets into the mesh's index array.
     pub num_indices: i32,
@@ -534,7 +540,7 @@ pub struct StripHeader {
 const MAX_NUM_BONES_PER_VERT: usize = 3;
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Zeroable)]
 pub struct Vertex {
     // these index into the mesh's vert[origMeshVertID]'s bones
     pub bone_weight_index: [u8; MAX_NUM_BONES_PER_VERT],
@@ -548,7 +554,7 @@ pub struct Vertex {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Zeroable)]
 pub struct Studiohdr {
     pub id: i32,          // Model format ID, such as "IDST" (0x49 0x44 0x53 0x54)
     pub version: i32,     // Format version number, such as 53 (0x35,0x00,0x00,0x00)
@@ -556,7 +562,7 @@ pub struct Studiohdr {
     pub sznameindex: i32, // This has been moved from studiohdr2_t to the front of the main header.
     pub name: [u8; 64],   // The internal name of the model, padding with null chars.
     // Typically "my_model.mdl" will have an internal name of "my_model"
-    pub length: i32, // Data size of MDL file in chars.
+    pub length: u32, // Data size of MDL file in chars.
 
     pub eyeposition: Vec3, // ideal eye position
 
@@ -637,7 +643,7 @@ pub struct Studiohdr {
     pub surfacepropindex: i32,
 
     pub keyvalueindex: i32,
-    pub keyvaluesize: f32,
+    pub keyvaluesize: i32,
 
     pub numlocalikautoplaylocks: i32,
     pub localikautoplaylockindex: i32,
@@ -647,7 +653,7 @@ pub struct Studiohdr {
 
     // external animations, models, etc.
     pub numincludemodels: i32,
-    pub includemodelindex: u8,
+    pub includemodelindex: i32,
 
     // implementation specific back pointer to virtual data
     pub virtual_model: i32,
@@ -662,7 +668,7 @@ pub struct Studiohdr {
     // set during load of mdl data to track *desired* lod configuration (not actual)
     // the *actual* clamped root lod is found in studiohwdata
     // this is stored here as a global store to ensure the staged loading matches the rendering
-    pub root_lod: f32,
+    pub root_lod: u8,
 
     // set in the mdl data to specify that lod configuration should only allow first numAllowRootLODs
     // to be set as root LOD:
@@ -730,8 +736,10 @@ pub struct Studiohdr {
     pub unused1: [i32; 60],
 }
 
+static ASSERT_STUDIO: () = assert!(std::mem::size_of::<Studiohdr>() == 0x2CC);
+
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct PhyHeader {
     pub size: i32, // Size of this header section (generally 16), this is also version.
     pub id: i32,   // Often zero, unknown purpose.
@@ -740,7 +748,7 @@ pub struct PhyHeader {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct PhySection {
     pub surfaceheader: SwapCompactSurfaceheader,
     pub surfaceheader2: LegacySurfaceHeader,
@@ -749,7 +757,7 @@ pub struct PhySection {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct SwapCompactSurfaceheader {
     pub size: i32, // size of the content after this byte
     pub vphysics_id: i32,
@@ -761,7 +769,7 @@ pub struct SwapCompactSurfaceheader {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct LegacySurfaceHeader {
     pub mass_center: Vec3,
     pub rotation_inertia: Vec3,
@@ -776,24 +784,27 @@ pub struct LegacySurfaceHeader {
 }
 
 #[bitfield(bits = 32)]
-#[derive(Debug, Clone, Copy, Specifier)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Specifier, Pod, Zeroable)]
 pub struct BitPackedPart {
     pub max_deviation: B8, // 8
     pub byte_size: B24,    // 24
 }
 
 #[bitfield(bits = 32)]
-#[derive(Debug, Clone, Copy, Specifier)]
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Specifier, Pod, Zeroable)]
 pub struct Compactedge {
     pub start_point_index: B16, // point index
     pub opposite_index: B15, // rel to this // maybe extra array, 3 bits more than tri_index/pierce_index
     pub is_virtual: bool,
 }
+
 // static_assert(sizeof(compactedge_t) == 4);
 
 #[bitfield(bits = 128)]
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct Compacttriangle {
     pub tri_index: B12, // used for upward navigation
     pub pierce_index: B12,
@@ -807,7 +818,7 @@ pub struct Compacttriangle {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct Compactledge {
     pub c_point_offset: i32, // byte offset from 'this' to (ledge) point array
     pub offsets: i32,
@@ -817,7 +828,7 @@ pub struct Compactledge {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct PhyVertex {
     pub pos: Vec3,    // relative to bone
     pub pad: [u8; 4], // align to 16 bytes

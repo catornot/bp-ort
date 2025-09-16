@@ -39,10 +39,10 @@
           config.microsoftVisualStudioLicenseAccepted = true;
         };
         toolchain-win = (pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml);
-        # toolchain-linux = (
-        #   native-pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml
-        # );
-        toolchain-linux = native-pkgs.pkgsBuildBuild.rust-bin.stable.latest.default; 
+        toolchain-linux = (
+          native-pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml
+        );
+        # toolchain-linux = native-pkgs.pkgsBuildBuild.rust-bin.stable.latest.default; 
       in
       rec {
         formatter = native-pkgs.nixfmt-rfc-style;

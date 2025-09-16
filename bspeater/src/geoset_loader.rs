@@ -107,6 +107,7 @@ fn brush_to_mesh(
         })
         .map(|index| brush_planes[index])
         .collect::<Vec<_>>();
+
     #[rustfmt::skip] let extend_planes =[
         Vec4::new(1., 0., 0., brush.extends.x.abs()),
         Vec4::new(-1., 0., 0., brush.extends.x.abs()),
@@ -115,6 +116,7 @@ fn brush_to_mesh(
         Vec4::new(0., 0., 1., brush.extends.z.abs()),
         Vec4::new(0., 0., -1., brush.extends.z.abs()),
     ];
+
     let transform = Transform::from_translation(brush.origin)
         .compute_matrix()
         .inverse()
@@ -124,9 +126,15 @@ fn brush_to_mesh(
         .map(|vec4| transform.mul_vec4(vec4))
         .chain(extend_planes)
         .collect_vec();
+
+    println!();
+    planes
+        .iter()
+        .for_each(|plane| println!("{}x + {}y + {}z = {}", plane.x, plane.y, plane.z, plane.w));
+
     let points = &planes
         .iter()
-        .filter(|plane| plane.w != 0.) // hmm idk
+        // .filter(|plane| plane.w != 0.) // hmm idk
         .tuple_combinations()
         .flat_map(|(p1, p2, p3)| {
             let intersection = calculate_intersection_point([p1, p2, p3])?;
@@ -141,13 +149,16 @@ fn brush_to_mesh(
 
             Some(intersection)
         })
-        // .inspect(|v| println!("({}, {}, {})", v.x, v.y, v.z))
+        .inspect(|v| println!("({}, {}, {})", v.x, v.y, v.z))
         .map(|v| (v.as_vec3() + brush.origin).xzy())
         .map(|v| v.into())
         .collect::<Vec<_>>();
+
     let (vertices, pindices) = avian3d::parry::transformation::try_convex_hull(points).ok()?;
+
     pushing_vertices.extend(vertices.iter().map(|v| Vec3::new(v.x, v.y, v.z)));
     indices.extend(pindices.iter().flatten());
+
     Some(())
 }
 
@@ -229,7 +240,8 @@ fn contains_point(planes: &[Vec4], point: DVec3) -> bool {
     planes
         .iter()
         .map(|v| v.as_dvec4())
-        .all(|plane| plane.dot(point.extend(-1.)) < 0.000001f64)
+        // .all(|plane| plane.dot(point.extend(1.)) < 0.001f64)
+        .all(|plane| plane.xyz().dot(point) - plane.w < 0.001f64)
 }
 
 fn calculate_intersection_point(planes: [&Vec4; 3]) -> Option<DVec3> {

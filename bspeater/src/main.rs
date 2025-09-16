@@ -1,4 +1,6 @@
 #![allow(clippy::type_complexity)]
+#![feature(seek_stream_len, iter_array_chunks)]
+
 use avian3d::prelude::*;
 use bevy::{
     asset::RenderAssetUsages,

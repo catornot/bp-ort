@@ -515,7 +515,7 @@ dependencies = [
  "bevy_window",
  "bitflags 2.9.4",
  "blake3",
- "crossbeam-channel",
+ "crossbeam-channel 0.5.15",
  "derive_more",
  "disqualified",
  "downcast-rs 2.0.2",
@@ -1060,7 +1060,7 @@ dependencies = [
  "bevy_transform",
  "bevy_utils",
  "bevy_window",
- "crossbeam-channel",
+ "crossbeam-channel 0.5.15",
  "tracing",
  "uuid",
 ]
@@ -1285,7 +1285,7 @@ dependencies = [
  "bevy_platform",
  "cfg-if",
  "concurrent-queue",
- "crossbeam-queue",
+ "crossbeam-queue 0.3.12",
  "derive_more",
  "futures-channel",
  "futures-lite",
@@ -1334,7 +1334,7 @@ dependencies = [
  "bevy_ecs",
  "bevy_platform",
  "bevy_reflect",
- "crossbeam-channel",
+ "crossbeam-channel 0.5.15",
  "log",
  "serde",
 ]
@@ -1457,7 +1457,7 @@ dependencies = [
  "bevy_window",
  "bytemuck",
  "cfg-if",
- "crossbeam-channel",
+ "crossbeam-channel 0.5.15",
  "raw-window-handle",
  "tracing",
  "wasm-bindgen",
@@ -1658,6 +1658,7 @@ dependencies = [
  "bevy_fly_camera",
  "bevy_gltf_export",
  "bincode 2.0.1",
+ "bytemuck",
  "clap",
  "itertools 0.14.0",
  "modular-bitfield",
@@ -1878,7 +1879,7 @@ version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ca0197aee26d1ae37445ee532fefce43251d24cc7c166799f4d46817f1d3973"
 dependencies = [
- "crossbeam-utils",
+ "crossbeam-utils 0.8.21",
  "portable-atomic",
 ]
 
@@ -2060,12 +2061,44 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "790eea4361631c5e7d22598ecd5723ff611904e3344ce8720784c93e3d83d40b"
 
 [[package]]
+name = "crossbeam"
+version = "0.8.2"
+source = "git+https://github.com/ibraheemdev/crossbeam.git?branch=try_recv_no_spin#28a3c821aec7fce6f017345894dba2ed80b5cae4"
+dependencies = [
+ "cfg-if",
+ "crossbeam-channel 0.5.8",
+ "crossbeam-deque 0.8.3",
+ "crossbeam-epoch 0.9.15",
+ "crossbeam-queue 0.3.8",
+ "crossbeam-utils 0.8.16",
+]
+
+[[package]]
+name = "crossbeam-channel"
+version = "0.5.8"
+source = "git+https://github.com/ibraheemdev/crossbeam.git?branch=try_recv_no_spin#28a3c821aec7fce6f017345894dba2ed80b5cae4"
+dependencies = [
+ "cfg-if",
+ "crossbeam-utils 0.8.16",
+]
+
+[[package]]
 name = "crossbeam-channel"
 version = "0.5.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "82b8f8f868b36967f9606790d1903570de9ceaf870a7bf9fbbd3016d636a2cb2"
 dependencies = [
- "crossbeam-utils",
+ "crossbeam-utils 0.8.21",
+]
+
+[[package]]
+name = "crossbeam-deque"
+version = "0.8.3"
+source = "git+https://github.com/ibraheemdev/crossbeam.git?branch=try_recv_no_spin#28a3c821aec7fce6f017345894dba2ed80b5cae4"
+dependencies = [
+ "cfg-if",
+ "crossbeam-epoch 0.9.15",
+ "crossbeam-utils 0.8.16",
 ]
 
 [[package]]
@@ -2074,8 +2107,20 @@ version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9dd111b7b7f7d55b72c0a6ae361660ee5853c9af73f70c3c2ef6858b950e2e51"
 dependencies = [
- "crossbeam-epoch",
- "crossbeam-utils",
+ "crossbeam-epoch 0.9.18",
+ "crossbeam-utils 0.8.21",
+]
+
+[[package]]
+name = "crossbeam-epoch"
+version = "0.9.15"
+source = "git+https://github.com/ibraheemdev/crossbeam.git?branch=try_recv_no_spin#28a3c821aec7fce6f017345894dba2ed80b5cae4"
+dependencies = [
+ "autocfg",
+ "cfg-if",
+ "crossbeam-utils 0.8.16",
+ "memoffset",
+ "scopeguard",
 ]
 
 [[package]]
@@ -2084,7 +2129,16 @@ version = "0.9.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b82ac4a3c2ca9c3460964f020e1402edd5753411d7737aa39c3714ad1b5420e"
 dependencies = [
- "crossbeam-utils",
+ "crossbeam-utils 0.8.21",
+]
+
+[[package]]
+name = "crossbeam-queue"
+version = "0.3.8"
+source = "git+https://github.com/ibraheemdev/crossbeam.git?branch=try_recv_no_spin#28a3c821aec7fce6f017345894dba2ed80b5cae4"
+dependencies = [
+ "cfg-if",
+ "crossbeam-utils 0.8.16",
 ]
 
 [[package]]
@@ -2093,7 +2147,15 @@ version = "0.3.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0f58bbc28f91df819d0aa2a2c00cd19754769c2fad90579b3592b1c9ba7a3115"
 dependencies = [
- "crossbeam-utils",
+ "crossbeam-utils 0.8.21",
+]
+
+[[package]]
+name = "crossbeam-utils"
+version = "0.8.16"
+source = "git+https://github.com/ibraheemdev/crossbeam.git?branch=try_recv_no_spin#28a3c821aec7fce6f017345894dba2ed80b5cae4"
+dependencies = [
+ "cfg-if",
 ]
 
 [[package]]
@@ -2359,6 +2421,15 @@ checksum = "4a3d7db9596fecd151c5f638c0ee5d5bd487b6e0ea232e5dc96d5250f6f94b1d"
 dependencies = [
  "crc32fast",
  "miniz_oxide",
+]
+
+[[package]]
+name = "flume"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da0e4dd2a88388a1f4ccc7c9ce104604dab68d9f408dc34cd45823d5a9069095"
+dependencies = [
+ "spin",
 ]
 
 [[package]]
@@ -3160,6 +3231,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "memoffset"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "488016bfae457b036d996092f6cb448677611ce4449e970ceaf42695203f218a"
+dependencies = [
+ "autocfg",
+]
+
+[[package]]
 name = "metal"
 version = "0.31.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3771,6 +3851,8 @@ dependencies = [
  "bevy_math",
  "bincode 2.0.1",
  "bonsai-bt",
+ "crossbeam",
+ "flume",
  "indexmap",
  "itertools 0.14.0",
  "libc",
@@ -4285,8 +4367,8 @@ version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "22e18b0f0062d30d4230b2e85ff77fdfe4326feb054b9783a3460d8435c8ab91"
 dependencies = [
- "crossbeam-deque",
- "crossbeam-utils",
+ "crossbeam-deque 0.8.6",
+ "crossbeam-utils 0.8.21",
 ]
 
 [[package]]
@@ -4765,6 +4847,7 @@ version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
 dependencies = [
+ "lock_api",
  "portable-atomic",
 ]
 
