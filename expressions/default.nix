@@ -10,16 +10,16 @@ rustPlatform.buildRustPackage {
   name = "bp-ort";
 
   # buildType = "debug";
-  rustToolchain = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
+  rustToolchain = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ../rust-toolchain.toml;
   buildInputs = [
   ];
 
   nativeBuildInputs = [
-    (rust-bin.fromRustupToolchainFile ./rust-toolchain.toml)
+    (rust-bin.fromRustupToolchainFile ../rust-toolchain.toml)
     pkgs.pkg-config
   ];
 
-  src = ./.;
+  src = ../.;
 
   meta = {
     description = "A collection of plugins for northstar related to bots";
@@ -32,11 +32,11 @@ rustPlatform.buildRustPackage {
 
   # we need this since bspeater cannot be compiled for windows
   patches = [
-    ./Cargo.toml.patch
+    ./no_bspeater.patch
   ];
 
   cargoLock = {
-    lockFile = ./Cargo.lock;
+    lockFile = ../Cargo.lock;
     outputHashes = {
       "rrplug-4.1.0" = "sha256-YqzKLCNj5TE9QicBvRF0ZtG/yyGt10yO0PFX9HKKUqA=";
       "bevy_gltf_export-0.1.0" = "sha256-eIp8TY96HMpmRpRsryaQzZII5/liCLaScF331GQINfY=";

@@ -47,10 +47,10 @@
       rec {
         formatter = native-pkgs.nixfmt-rfc-style;
         packages = {
-          bp-ort = pkgs.callPackage ./default.nix {
+          bp-ort = pkgs.callPackage ./expressions/default.nix {
             rust-bin = rust-overlay.lib.mkRustBin { } pkgs.buildPackages;
           };
-          packaged-mod = pkgs.callPackage ./packaged-mod.nix { bp-ort = self.packages.${system}.bp-ort; };
+          packaged-mod = pkgs.callPackage ./expressions/packaged-mod.nix { bp-ort = self.packages.${system}.bp-ort; };
           default = self.packages.${system}.bp-ort;
 
           tracy = native-pkgs.writeShellApplication {
@@ -76,6 +76,10 @@
               DISPLAY=:0 :w
               tracy target/trace.tracy
             '';
+          };
+
+          navmeshes =  native-pkgs.stdenv.mkDerivation {
+            
           };
 
           win-shell = devShell.default;
