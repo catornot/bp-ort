@@ -7,7 +7,7 @@ index 32d1d30..89f1661 100644
  
  members = [
 -    "bp_ort", "bspeater", "octbots", "r2mole", "ranim", "shared",
-+    "bp_ort", "octbots", "r2mole", "ranim", "shared",
++    "bspeater"
  ]
  
  [workspace.dependencies]

@@ -42,7 +42,7 @@
         toolchain-linux = (
           native-pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml
         );
-        # toolchain-linux = native-pkgs.pkgsBuildBuild.rust-bin.stable.latest.default; 
+        # toolchain-linux = native-pkgs.pkgsBuildBuild.rust-bin.stable.latest.default;
       in
       rec {
         formatter = native-pkgs.nixfmt-rfc-style;
@@ -50,7 +50,12 @@
           bp-ort = pkgs.callPackage ./expressions/default.nix {
             rust-bin = rust-overlay.lib.mkRustBin { } pkgs.buildPackages;
           };
-          packaged-mod = pkgs.callPackage ./expressions/packaged-mod.nix { bp-ort = self.packages.${system}.bp-ort; };
+          packaged-mod = pkgs.callPackage ./expressions/packaged-mod.nix {
+            bp-ort = self.packages.${system}.bp-ort;
+          };
+          bspeater = native-pkgs.callPackage ./expressions/bspeater.nix {
+            rust-bin = rust-overlay.lib.mkRustBin { } native-pkgs.buildPackages;
+          };
           default = self.packages.${system}.bp-ort;
 
           tracy = native-pkgs.writeShellApplication {
@@ -78,8 +83,8 @@
             '';
           };
 
-          navmeshes =  native-pkgs.stdenv.mkDerivation {
-            
+          navmeshes = native-pkgs.stdenv.mkDerivation {
+
           };
 
           win-shell = devShell.default;
@@ -115,19 +120,19 @@
           ];
 
           buildInputs = with native-pkgs; [
-              stdenv.cc
-              zstd
-              libxkbcommon
-              vulkan-loader
-              xorg.libX11
-              xorg.libXcursor
-              xorg.libXi
-              xorg.libXrandr
-              alsa-lib-with-plugins
-              wayland
-              glfw-wayland
-              udev
-              pkg-config
+            stdenv.cc
+            zstd
+            libxkbcommon
+            vulkan-loader
+            xorg.libX11
+            xorg.libXcursor
+            xorg.libXi
+            xorg.libXrandr
+            alsa-lib-with-plugins
+            wayland
+            glfw-wayland
+            udev
+            pkg-config
           ];
 
           runtimeDependencies = with native-pkgs; [

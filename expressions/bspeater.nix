@@ -5,16 +5,31 @@
   rust-bin,
 }:
 let
+  cargoLock = (import ./cargo_lock.nix { });
 in
 rustPlatform.buildRustPackage (final: {
-  name = "bp-ort";
+  name = "bspeater";
 
   rustToolchain = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ../rust-toolchain.toml;
-  buildInputs = [
+  buildInputs = with pkgs; [
+    libgcc
+    stdenv.cc
+    zstd
+    libxkbcommon
+    vulkan-loader
+    xorg.libX11
+    xorg.libXcursor
+    xorg.libXi
+    xorg.libXrandr
+    alsa-lib-with-plugins
+    wayland
+    glfw-wayland
+    udev
   ];
 
   nativeBuildInputs = [
     (rust-bin.fromRustupToolchainFile ../rust-toolchain.toml)
+    pkgs.autoPatchelfHook
     pkgs.pkg-config
   ];
 
@@ -44,7 +59,7 @@ rustPlatform.buildRustPackage (final: {
     homepage = "https://github.com/catornot/bp-ort";
     license = lib.licenses.unlicense;
     mainProgram = "bspeater";
-    # platforms = [ "x86_64-linux" ];
+    platforms = [ "x86_64-linux" ];
     maintainers = [ "cat_or_not" ];
   };
 
@@ -53,5 +68,5 @@ rustPlatform.buildRustPackage (final: {
     ./only_bspeater.patch
   ];
 
-  cargoLock = pkgs.callPackage ./cargo_lock.nix {};
+  inherit cargoLock;
 })
