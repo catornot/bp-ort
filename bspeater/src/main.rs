@@ -1,6 +1,7 @@
 #![allow(clippy::type_complexity)]
 #![feature(seek_stream_len, iter_array_chunks)]
 
+use anyhow::Context;
 use avian3d::prelude::*;
 use bevy::{
     asset::RenderAssetUsages,
@@ -110,7 +111,7 @@ fn get_lump(header: &BSPHeader, lump: LumpIds) -> &LumpHeader {
     &header.lumps[lump as usize]
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> anyhow::Result<()> {
     let cli::BspeaterCli {
         vpk_dir,
         game_dir,
@@ -128,13 +129,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .to_string();
 
     // put a file to indicate what vpk is open then clean the vpk dir if we are opening another vpk
-    std::fs::create_dir_all(vpk_dir.join(UNPACK_MERGED))?;
+    std::fs::create_dir_all(vpk_dir.join(UNPACK_MERGED))
+        .context("tried creating merged unpack dir")?;
     {
-        std::fs::create_dir_all(vpk_dir.join(UNPACK))?;
+        std::fs::create_dir_all(vpk_dir.join(UNPACK)).context("tried creating unpack dir wow")?;
         _ = File::create_new(&vpk_name_magic);
 
-        if std::fs::read_to_string(&vpk_name_magic)? != map_name {
-            std::fs::remove_dir_all(vpk_dir.join(UNPACK))?;
+        if std::fs::read_to_string(&vpk_name_magic).context("tried reading current vpk name")?
+            != map_name
+        {
+            std::fs::remove_dir_all(vpk_dir.join(UNPACK)).context("tried removing unpack dir")?;
         }
     }
 
@@ -148,11 +152,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .arg("models/")
             .arg(vpk_dir.join(UNPACK_COMMON))
             .arg(game_dir.join("englishclient_mp_common.bsp.pak000_dir.vpk"))
-            .spawn()?
-            .wait_with_output()?;
+            .spawn()
+            .context("tried spawning the unpacking command")?
+            .wait_with_output()
+            .context("tried unpacking common vpk")?;
 
-        std::fs::create_dir_all(vpk_dir.join(UNPACK_MERGED))?;
-        copy_dir_all(vpk_dir.join(UNPACK_COMMON), vpk_dir.join(UNPACK_MERGED))?;
+        std::fs::create_dir_all(vpk_dir.join(UNPACK_MERGED))
+            .context("tried creating merged dir")?;
+        copy_dir_all(vpk_dir.join(UNPACK_COMMON), vpk_dir.join(UNPACK_MERGED))
+            .context("tried merging common vpk")?;
     }
 
     let mut bsp = if !vpk_dir.join(&map_name).with_extension("bsp").exists() {
@@ -166,9 +174,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .arg(vpk_dir.join(UNPACK))
             .arg(game_dir.join(name))
             .spawn()?
-            .wait_with_output()?;
+            .wait_with_output()
+            .context("tried unpacking vpks")?;
 
-        copy_dir_all(vpk_dir.join(UNPACK), vpk_dir.join(UNPACK_MERGED))?;
+        copy_dir_all(vpk_dir.join(UNPACK), vpk_dir.join(UNPACK_MERGED))
+            .context("tried merging vpks")?;
 
         File::open(
             vpk_dir
@@ -176,15 +186,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .join("maps")
                 .join(&map_name)
                 .with_extension("bsp"),
-        )?
+        )
+        .context("tried getting unpacked map")?
     } else {
-        std::fs::create_dir_all(vpk_dir.join(UNPACK))?;
-        File::open(vpk_dir.join(&map_name).with_extension("bsp"))?
+        std::fs::create_dir_all(vpk_dir.join(UNPACK)).context("tried creating unpack dir")?;
+        File::open(vpk_dir.join(&map_name).with_extension("bsp"))
+            .context("tried getting custom bsp")?
     };
 
     {
-        let mut current_vpk = File::create(&vpk_name_magic)?;
-        _ = current_vpk.write(map_name.as_bytes())?;
+        let mut current_vpk =
+            File::create(&vpk_name_magic).context("tried creating current vpk")?;
+        _ = current_vpk
+            .write(map_name.as_bytes())
+            .context("tried setting current vpk")?;
     }
 
     assert!(std::mem::size_of::<Vec3>() == std::mem::size_of::<f32>() * 3);
@@ -220,7 +235,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let grid = read_lump_data::<CMGrid>(&mut bsp, &header, LumpIds::CM_GRID)?
         .first()
         .cloned()
-        .ok_or("isn't there supposed to be only one grid thing")?;
+        .ok_or_else(|| anyhow::format_err!("isn't there supposed to be only one grid thing"))?;
 
     let game_lump = read_lump_data::<u8>(&mut bsp, &header, LumpIds::GAME_LUMP)?;
 

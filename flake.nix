@@ -92,8 +92,9 @@
             let
               bspeater = self.packages.${system}.bspeater;
               titanfall2 = catornot-flakes.packages.${system}.titanfall2;
+              tf2vpk = catornot-flakes.packages.${system}.tf2vpk;
             in
-            native-pkgs.callPackage ./expressions/navmeshes.nix { inherit bspeater titanfall2; };
+            native-pkgs.callPackage ./expressions/navmeshes.nix { inherit bspeater titanfall2 tf2vpk; };
 
           win-shell = devShell.default;
           native-shell = devShell.native;

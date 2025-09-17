@@ -8,11 +8,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1758047495,
-        "narHash": "sha256-G7p/aOFQzRvU3m7s0DDJzR0ifK8q6KBXaHfgnwZdM4E=",
+        "lastModified": 1758075097,
+        "narHash": "sha256-o1vQLadRM+kFICWH8Jpbege6cG/JqEvWbUwRPtGpXSc=",
         "owner": "catornot",
         "repo": "catornot-flakes",
-        "rev": "b6589d7decad57e4bf839f937a0fe4cd30ed2408",
+        "rev": "fef5e697c2b82b43542813f6c20645f65196aab3",
         "type": "github"
       },
       "original": {

@@ -17,3 +17,4 @@ oktree = { version = "0.5.*", features = ["bevy"] }
 rayon = "1.*"
 serde = { version = "1.*", features = ["derive"] }
 bytemuck = { version = "1.23.1", features = ["derive", "pod_saturating"] }
+anyhow = { version = "1.0.99", features = ["backtrace"] }
