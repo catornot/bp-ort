@@ -9,6 +9,7 @@ let
 in
 rustPlatform.buildRustPackage (final: {
   name = "bspeater";
+  version = "0.1.0";
 
   rustToolchain = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ../rust-toolchain.toml;
   buildInputs = with pkgs; [

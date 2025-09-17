@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bincode::Encode;
-use std::fs;
+use std::{fs, path::Path};
 
 #[derive(Encode)]
 pub struct Navmesh {
@@ -15,6 +15,7 @@ pub fn save_navmesh_to_disk(
     extends: (IVec3, IVec3),
     cell_size: f32,
     map_name: &str,
+    output: &Path,
 ) {
     match bincode::encode_to_vec(
         Navmesh {
@@ -26,12 +27,19 @@ pub fn save_navmesh_to_disk(
         bincode::config::standard(),
     ) {
         Ok(serialized) => {
-            fs::create_dir_all("output").expect("couldn't create ouput dir");
-            let path = format!("output/{map_name}.navmesh");
+            if let Err(err) = fs::create_dir_all(output) {
+                bevy::log::error!(
+                    "coudln't create ouput dir at {} : {}",
+                    output.display(),
+                    err.to_string()
+                );
+            }
+
+            let path = output.join(map_name).with_extension("navmesh");
             if let Err(err) = fs::write(&path, serialized) {
                 bevy::log::error!("failed to save navmesh: {err:?}");
             } else {
-                bevy::log::info!("saved to {path}");
+                bevy::log::info!("saved to {}", path.display());
             }
         }
         Err(err) => bevy::log::error!("failed to serialize navmesh: {err:?}"),

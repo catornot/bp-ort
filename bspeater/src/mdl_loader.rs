@@ -1,16 +1,13 @@
-use std::mem::size_of;
+use std::{mem::size_of, path::PathBuf};
 
 use bevy::prelude::*;
 use bytemuck::offset_of;
-use itertools::Itertools;
 
-use crate::{
-    Compacttriangle, PhyHeader, PhySection, PhyVertex, SeekRead, StaticProp, Studiohdr,
-    UNPACK_MERGED,
-};
+use crate::{Compacttriangle, PhyHeader, PhySection, PhyVertex, SeekRead, StaticProp, Studiohdr};
 
 pub fn extract_game_lump_models(
     game_lump: Vec<u8>,
+    merged_dir: PathBuf,
 ) -> (Vec<StaticProp>, Vec<Option<(Vec<Vec3>, Vec<u32>)>>) {
     let mut game_lump = game_lump.into_iter().skip(20);
 
@@ -36,7 +33,7 @@ pub fn extract_game_lump_models(
                 .unwrap_or(name)
                 .to_lowercase()
         })
-        .map(|name| (std::fs::File::open(format!("{UNPACK_MERGED}/{name}")), name))
+        .map(|name| (std::fs::File::open(merged_dir.join(&name)), name))
         .map(|(err, name)| {
             if err.is_err() {
                 println!("failed to load: {name} because of {err:?}");

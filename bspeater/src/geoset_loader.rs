@@ -127,11 +127,6 @@ fn brush_to_mesh(
         .chain(extend_planes)
         .collect_vec();
 
-    println!();
-    planes
-        .iter()
-        .for_each(|plane| println!("{}x + {}y + {}z = {}", plane.x, plane.y, plane.z, plane.w));
-
     let points = &planes
         .iter()
         // .filter(|plane| plane.w != 0.) // hmm idk
@@ -140,16 +135,11 @@ fn brush_to_mesh(
             let intersection = calculate_intersection_point([p1, p2, p3])?;
             // If the intersection does not exist within the bounds the hull, discard it
             if !contains_point(&planes, intersection) {
-                // println!(
-                //     "({}, {}, {})",
-                //     intersection.x, intersection.y, intersection.z
-                // );
                 return None;
             }
 
             Some(intersection)
         })
-        .inspect(|v| println!("({}, {}, {})", v.x, v.y, v.z))
         .map(|v| (v.as_vec3() + brush.origin).xzy())
         .map(|v| v.into())
         .collect::<Vec<_>>();

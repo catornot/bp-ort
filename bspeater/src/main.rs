@@ -31,9 +31,9 @@ mod geoset_loader;
 mod mdl_loader;
 mod saving;
 
-pub const UNPACK: &str = "target/vpk";
-pub const UNPACK_MERGED: &str = "target/vpk_merged";
-pub const UNPACK_COMMON: &str = "target/common_vpk";
+pub const UNPACK: &str = "vpk";
+pub const UNPACK_MERGED: &str = "vpk_merged";
+pub const UNPACK_COMMON: &str = "common_vpk";
 
 trait SeekRead: Seek + Read {}
 impl<T: Seek + Read> SeekRead for T {}
@@ -112,28 +112,33 @@ fn get_lump(header: &BSPHeader, lump: LumpIds) -> &LumpHeader {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli::BspeaterCli {
-        vpk_dir: _,
+        vpk_dir,
         game_dir,
         display,
         map_name,
         show_octtree,
+        output,
     } = cli::BspeaterCli::parse();
 
     let name = format!("englishclient_{map_name}.bsp.pak000_dir.vpk");
-    let vpk_name_magic = format!("{UNPACK}/current_vpk");
+    let vpk_name_magic = vpk_dir
+        .join(UNPACK)
+        .join("current_vpk")
+        .display()
+        .to_string();
 
     // put a file to indicate what vpk is open then clean the vpk dir if we are opening another vpk
-    std::fs::create_dir_all(UNPACK_MERGED)?;
+    std::fs::create_dir_all(vpk_dir.join(UNPACK_MERGED))?;
     {
-        std::fs::create_dir_all(UNPACK)?;
+        std::fs::create_dir_all(vpk_dir.join(UNPACK))?;
         _ = File::create_new(&vpk_name_magic);
 
         if std::fs::read_to_string(&vpk_name_magic)? != map_name {
-            std::fs::remove_dir_all(UNPACK)?;
+            std::fs::remove_dir_all(vpk_dir.join(UNPACK))?;
         }
     }
 
-    if !std::path::PathBuf::from(UNPACK_COMMON).is_dir() {
+    if !vpk_dir.join(UNPACK_COMMON).is_dir() {
         let lumps = (0..128).flat_map(|i| ["--exclude-bsp-lump".to_string(), i.to_string()]);
         Command::new("tf2-vpkunpack")
             .args(lumps)
@@ -141,16 +146,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .arg("*")
             .arg("--include")
             .arg("models/")
-            .arg(UNPACK_COMMON)
+            .arg(vpk_dir.join(UNPACK_COMMON))
             .arg(game_dir.join("englishclient_mp_common.bsp.pak000_dir.vpk"))
             .spawn()?
             .wait_with_output()?;
 
-        std::fs::create_dir_all(UNPACK_MERGED)?;
-        copy_dir_all(UNPACK_COMMON, UNPACK_MERGED)?;
+        std::fs::create_dir_all(vpk_dir.join(UNPACK_MERGED))?;
+        copy_dir_all(vpk_dir.join(UNPACK_COMMON), vpk_dir.join(UNPACK_MERGED))?;
     }
 
-    let mut bsp = if !PathBuf::from(format!("target/{map_name}.bsp")).exists() {
+    let mut bsp = if !vpk_dir.join(&map_name).with_extension("bsp").exists() {
         Command::new("tf2-vpkunpack")
             .arg("--exclude")
             .arg("*")
@@ -158,16 +163,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .arg("maps")
             .arg("--include")
             .arg("models")
-            .arg(UNPACK)
+            .arg(vpk_dir.join(UNPACK))
             .arg(game_dir.join(name))
             .spawn()?
             .wait_with_output()?;
 
-        copy_dir_all(UNPACK, UNPACK_MERGED)?;
-        File::open(format!("{UNPACK_MERGED}/maps/{map_name}.bsp"))?
+        copy_dir_all(vpk_dir.join(UNPACK), vpk_dir.join(UNPACK_MERGED))?;
+
+        File::open(
+            vpk_dir
+                .join(UNPACK_MERGED)
+                .join("maps")
+                .join(&map_name)
+                .with_extension("bsp"),
+        )?
     } else {
-        std::fs::create_dir_all(UNPACK)?;
-        File::open(format!("target/{map_name}.bsp"))?
+        std::fs::create_dir_all(vpk_dir.join(UNPACK))?;
+        File::open(vpk_dir.join(&map_name).with_extension("bsp"))?
     };
 
     {
@@ -212,7 +224,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let game_lump = read_lump_data::<u8>(&mut bsp, &header, LumpIds::GAME_LUMP)?;
 
-    let (props, model_data) = mdl_loader::extract_game_lump_models(game_lump);
+    let (props, model_data) =
+        mdl_loader::extract_game_lump_models(game_lump, vpk_dir.join(UNPACK_MERGED));
 
     println!("vertices {:#?}", vertices.len());
     println!("normals {:#?}", normals.len());
@@ -256,7 +269,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     .init_resource::<WireframeConfig>()
     .init_resource::<ChunkCells>()
     .add_systems(Startup, setup)
-    .insert_resource(WorldName(map_name.to_owned()))
+    .insert_resource(WorldName {
+        map_name: map_name.to_owned(),
+        output,
+    })
     .insert_resource(EarlyExit(!display))
     .insert_resource(DebugAmount {
         octree: show_octtree,
@@ -339,7 +355,10 @@ struct DebugAmount {
 }
 
 #[derive(Resource, Clone, PartialEq)]
-struct WorldName(String);
+struct WorldName {
+    map_name: String,
+    output: PathBuf,
+}
 
 #[derive(Resource, Clone, PartialEq)]
 struct EarlyExit(bool);
@@ -565,7 +584,8 @@ fn save_navmesh(
             (extends.1 / Vec3::splat(CELL_SIZE)).as_ivec3(),
         ),
         CELL_SIZE,
-        &map_name.0,
+        &map_name.map_name,
+        map_name.output.as_path(),
     );
 
     next_state.set(ProcessingStep::Done);
@@ -639,7 +659,7 @@ fn save_meshes(
                         .with_scale(Vec3::NEG_ONE),
                 ),
             }),
-        Some(map_name.0.clone()),
+        Some(map_name.map_name.clone()),
         |_| None,
         bevy_gltf_export::CompressGltfOptions {
             skip_materials: true,
@@ -651,7 +671,13 @@ fn save_meshes(
         Ok(gltf) => {
             match gltf.to_bytes() {
                 Ok(bytes) => {
-                    if let Err(err) = fs::write(format!("output/{}.glb", map_name.0), bytes) {
+                    if let Err(err) = fs::write(
+                        map_name
+                            .output
+                            .join(&map_name.map_name)
+                            .with_extension("glb"),
+                        bytes,
+                    ) {
                         bevy::log::error!("false we didn't save {err:?}")
                     }
                 }

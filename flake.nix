@@ -11,6 +11,10 @@
     flake-utils = {
       url = "github:numtide/flake-utils";
     };
+    catornot-flakes = {
+      url = "github:catornot/catornot-flakes";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -20,6 +24,7 @@
       nixpkgs-win,
       flake-utils,
       rust-overlay,
+      catornot-flakes,
       ...
     }:
     flake-utils.lib.eachDefaultSystem (
@@ -83,9 +88,12 @@
             '';
           };
 
-          navmeshes = native-pkgs.stdenv.mkDerivation {
-
-          };
+          navmeshes =
+            let
+              bspeater = self.packages.${system}.bspeater;
+              titanfall2 = catornot-flakes.packages.${system}.titanfall2;
+            in
+            native-pkgs.callPackage ./expressions/navmeshes.nix { inherit bspeater titanfall2; };
 
           win-shell = devShell.default;
           native-shell = devShell.native;
