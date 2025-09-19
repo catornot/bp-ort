@@ -1,6 +1,5 @@
 #![feature(let_chains, mpmc_channel)]
 
-use bincode::Decode;
 use once_cell::sync::OnceCell;
 use parking_lot::{Mutex, RwLock};
 use rrplug::{
