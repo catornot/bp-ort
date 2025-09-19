@@ -10,12 +10,10 @@ use bevy::{
     render::{RenderPlugin, settings::WgpuSettings},
 };
 use bevy_fly_camera::{FlyCamera, FlyCameraPlugin};
-use bincode::{Decode, Encode};
 use clap::Parser;
 use itertools::Itertools;
 use oktree::{prelude::*, tree::Octree};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File},
     io::{self, Read, Seek, SeekFrom, Write},
@@ -543,7 +541,7 @@ fn raycast_world(
         .filter(|(_, hit, _, _)| *hit)
         .map(move |([x, y, z], _, _near_wall, height)| ChunkCell {
             cord: [x + OFFSET, y + OFFSET, z + OFFSET].map(|v| v as u32),
-            floor_distance: height,
+            _floor_distance: height,
         })
         .collect::<Vec<ChunkCell>>();
     for cell in full_vec.iter().cloned() {
@@ -562,10 +560,10 @@ fn raycast_world(
     next_state.set(ProcessingStep::Saving);
 }
 
-#[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, Encode, Decode)]
+#[derive(Debug, Default, Clone, Copy)]
 struct ChunkCell {
     cord: [u32; 3],
-    floor_distance: f32,
+    _floor_distance: f32,
 }
 
 #[derive(Resource, Default, Debug, Clone)]
