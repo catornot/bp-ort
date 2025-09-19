@@ -1,4 +1,4 @@
-use bonsai_bt::{Action, Event, Sequence, Status, UpdateArgs, BT};
+use bonsai_bt::{Action, Event, Sequence, Status, UpdateArgs, BT, RUNNING};
 use itertools::Itertools;
 use parking_lot::RwLock;
 use rrplug::{
@@ -151,8 +151,8 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, player: &mut CPla
             //         .unwrap_or_default(),
             //     brain.path.len()
             // );
-            if let Some(path_receiver) = brain.path_receiver.take() {
-                match path_receiver.lock_arc().try_recv() {
+            let status = if let Some(path_receiver) = brain.path_receiver.as_ref() {
+                match path_receiver.try_recv() {
                     Ok(Some(path)) => {
                         brain.path = path;
 
@@ -162,15 +162,17 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, player: &mut CPla
                         brain.path_next_request = helper.globals.curTime + 0.1;
                         (Status::Failure, 0.)
                     }
-                    Err(std::sync::mpmc::TryRecvError::Disconnected) => (Status::Failure, 0.),
-                    Err(std::sync::mpmc::TryRecvError::Empty) => {
-                        brain.path_receiver = Some(path_receiver);
-                        (Status::Success, 0.)
-                    }
+                    Err(crossbeam::channel::TryRecvError::Disconnected) => (Status::Failure, 0.),
+                    Err(crossbeam::channel::TryRecvError::Empty) => RUNNING,
                 }
             } else {
                 (Status::Failure, 0.)
+            };
+
+            if status != RUNNING {
+                brain.path_receiver.take();
             }
+            status
         }
         BotAction::RenderPath => 'render: {
             if brain.path.is_empty() {

@@ -4,7 +4,7 @@ use oktree::prelude::*;
 use parking_lot::{Mutex, RwLock};
 use rrplug::prelude::*;
 use std::{
-    sync::{mpsc, Arc},
+    sync::Arc,
     thread::{self, available_parallelism, JoinHandle},
     time::Duration,
 };
@@ -14,12 +14,12 @@ use crate::{
     pathfinding::find_path,
 };
 
-pub type PathReceiver = Arc<Mutex<mpsc::Receiver<Option<Vec<Vector3>>>>>;
+pub type PathReceiver = crossbeam::channel::Receiver<Option<Vec<Vector3>>>;
 
 pub struct Work {
     pub start: Vector3,
     pub end: Vector3,
-    pub return_sender: mpsc::Sender<Option<Vec<Vector3>>>,
+    pub return_sender: crossbeam::channel::Sender<Option<Vec<Vector3>>>,
 }
 
 enum JobMessage {
@@ -29,12 +29,12 @@ enum JobMessage {
 
 pub struct JobMarket {
     workers: Vec<JoinHandle<()>>,
-    job_sender: mpsc::Sender<JobMessage>,
+    job_sender: crossbeam::channel::Sender<JobMessage>,
 }
 
 impl JobMarket {
     pub fn new(navmesh: Arc<RwLock<Navmesh>>) -> JobMarket {
-        let (sender, receiver) = mpsc::channel();
+        let (sender, receiver) = crossbeam::channel::unbounded();
         let receiver = Arc::new(Mutex::new(receiver));
         JobMarket {
             workers: (0..available_parallelism()
@@ -47,7 +47,7 @@ impl JobMarket {
     }
 
     pub fn find_path(&self, start: Vector3, end: Vector3) -> Option<PathReceiver> {
-        let (sender, receiver) = mpsc::channel();
+        let (sender, receiver) = crossbeam::channel::unbounded();
 
         self.job_sender
             .send(JobMessage::Work(Work {
@@ -60,7 +60,7 @@ impl JobMarket {
 
         check_sync::<PathReceiver>();
 
-        Some(Arc::new(Mutex::new(receiver)))
+        Some(receiver)
     }
 
     pub fn stop(&self) {
@@ -83,7 +83,7 @@ impl JobMarket {
 }
 
 fn worker(
-    job_receiver: Arc<Mutex<mpsc::Receiver<JobMessage>>>,
+    job_receiver: Arc<Mutex<crossbeam::channel::Receiver<JobMessage>>>,
     navmesh: Arc<RwLock<Navmesh>>,
 ) -> impl Fn() {
     move || {
@@ -106,12 +106,12 @@ fn worker(
                     vector3_to_tuvec(navmesh.cell_size, end),
                 )
                 .map(|points| {
-                    string_pulling(
-                        points
-                            .into_iter()
-                            .map(|point| tuvec_to_vector3(navmesh.cell_size, point))
-                            .collect(),
-                    )
+                    // string_pulling(
+                    points
+                        .into_iter()
+                        .map(|point| tuvec_to_vector3(navmesh.cell_size, point))
+                        .collect()
+                    // )
                 }),
             );
         }
