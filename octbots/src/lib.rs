@@ -38,14 +38,6 @@ pub struct SourceInterfaces {
 unsafe impl Sync for SourceInterfaces {}
 unsafe impl Send for SourceInterfaces {}
 
-#[derive(Decode)]
-pub struct NavmeshBin {
-    min: [i32; 3],
-    max: [i32; 3],
-    cell_size: f32,
-    filled_pos: Vec<[i32; 3]>,
-}
-
 pub struct OctBots {
     #[allow(clippy::type_complexity)]
     navmesh: Arc<RwLock<loader::Navmesh>>,

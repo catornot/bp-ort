@@ -1,12 +1,27 @@
 use oktree::prelude::*;
+use rkyv::{api::low::from_bytes, Archive, Deserialize, Serialize};
 use std::{
+    io::Read,
     sync::atomic::{AtomicI32, Ordering},
     thread::{Builder, JoinHandle},
 };
 
-use crate::NavmeshBin;
-
 pub type Octree32 = Octree<u32, TUVec3u32>;
+
+#[derive(Archive, Deserialize, Serialize, Debug, PartialEq)]
+#[rkyv(
+    // This will generate a PartialEq impl between our unarchived
+    // and archived types
+    compare(PartialEq),
+    // Derives can be passed through to the generated type:
+    derive(Debug),
+)]
+pub struct NavmeshBin {
+    min: [i32; 3],
+    max: [i32; 3],
+    cell_size: f32,
+    filled_pos: Vec<[i32; 3]>,
+}
 
 #[derive(Default, Debug)]
 pub struct Navmesh {
@@ -109,14 +124,17 @@ impl Navmesh {
 
 fn async_load_worker_builder(id: String) -> impl FnOnce() -> Option<(Octree32, f32)> {
     move || {
-        let navmesh = bincode::decode_from_std_read::<NavmeshBin, _, _>(
-            &mut std::fs::File::open(format!("output/{id}.navmesh"))
-                .inspect_err(|err| log::error!("failed loading {id}: {err}"))
-                .ok()?,
-            bincode::config::standard(),
-        )
-        .inspect_err(|err| log::error!("failed parsing {id}: {err}"))
-        .ok()?;
+        let mut file = std::fs::File::open(format!("output/{id}.navmesh"))
+            .inspect_err(|err| log::error!("failed loading {id}: {err}"))
+            .ok()?;
+        let mut buf = Vec::with_capacity(10000);
+        file.read_to_end(&mut buf)
+            .inspect_err(|err| log::error!("failed reading during loading {id}: {err}"))
+            .ok()?;
+
+        let navmesh = from_bytes::<NavmeshBin, rkyv::rancor::Error>(&buf)
+            .inspect_err(|err| log::error!("failed parsing {id}: {err}"))
+            .ok()?;
 
         OFFSET.store(
             navmesh

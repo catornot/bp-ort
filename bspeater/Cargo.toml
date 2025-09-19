@@ -9,12 +9,11 @@ avian3d = { version = "0.3.*", features = ["simd", "debug-plugin"] }
 bevy = { version = "0.16.*", features = ["wayland", "x11"] }
 bevy_fly_camera = "0.16.*"
 bevy_gltf_export = { git = "https://github.com/luca-della-vedova/bevy_gltf_export.git", version = "0.1.0" }
-bincode = { version = "2.*", features = ["derive", "serde"] }
 clap = { version = "4.5.39", features = ["derive"] }
 itertools = { workspace = true }
 modular-bitfield = "0.12.0"
 oktree = { version = "0.5.*", features = ["bevy"] }
 rayon = "1.*"
-serde = { version = "1.*", features = ["derive"] }
 bytemuck = { version = "1.23.1", features = ["derive", "pod_saturating"] }
 anyhow = { version = "1.0.99", features = ["backtrace"] }
+rkyv = "=0.8.10"

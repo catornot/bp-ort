@@ -10,7 +10,6 @@ shared = { workspace = true }
 parking_lot = "*"
 once_cell = "*"
 libc = "0.2.*"
-bincode = { version = "2.0.1", features = ["derive"] }
 oktree = { version = "0.5.0", default-features = false, features = ["std"] }
 bonsai-bt = { version = "0.10.0", features = [] }
 indexmap = "2.*"
@@ -19,6 +18,7 @@ itertools = { workspace = true }
 bevy_math = { version = "0.16.1", default-features = false, features = ["std"] }
 flume = { version = "0.11.1", default-features = false }
 crossbeam = { git = "https://github.com/ibraheemdev/crossbeam.git", version = "0.8.*", features = ["crossbeam-channel"], branch = "try_recv_no_spin" } # rev = "28a3c821aec7fce6f017345894dba2ed80b5cae4",
+rkyv = "=0.8.10"
 
 [lib]
 crate-type = ["cdylib"]
