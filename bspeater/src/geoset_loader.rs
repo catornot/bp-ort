@@ -30,7 +30,7 @@ pub fn geoset_to_meshes(
         })
         .filter_map(|primative| {
             let flag = Contents::SOLID as i32 | Contents::PLAYER_CLIP as i32;
-            // if it doesn't containt any
+            // if it doesn't contain any
             if unique_contents[primative as usize & 0xFF] & flag == 0 {
                 None
             } else {
