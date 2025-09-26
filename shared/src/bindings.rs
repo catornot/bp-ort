@@ -460,6 +460,12 @@ offset_functions! {
         some_global_for_threads = *mut c_void where offset(0x23683c8);
         fun_180042560 = unsafe extern "C" fn(*const *mut (), f32) -> *const HSquirrelVM where offset(0x42560);
         somehow_suspend_thread = unsafe extern "C" fn(*const HSquirrelVM) where offset(0x44660);
+
+        decoy_set_state = unsafe extern "C" fn(*mut CPlayerDecoy, i32) where offset(0x1c7af0);
+        decoy_set_orientation = unsafe extern "C" fn(*const CPlayerDecoy, *mut [Vector3;8], *const Vector3, *const Vector3) where offset(0x4320e0);
+        decoy_set_modifiers = unsafe extern "C" fn(*const CPlayerDecoy, i32) where offset(0x1c34d0);
+        direction_to_angles = unsafe extern "C" fn(*const Vector3, *mut Vector3, *mut Vector3) where offset(0x6f8f20);
+        is_in_some_busy_interaction = unsafe extern "C" fn(*const CPlayer) -> bool where offset(0x5d4d40);
     }
 }
 // very intersting call at server.dll + 0x151782

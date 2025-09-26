@@ -7,6 +7,7 @@
 )]
 #![allow(clippy::missing_transmute_annotations)] // too lazy to fix rn
 
+use holoplus::HoloPlus;
 use rrplug::{bindings::plugin_abi::PluginColor, prelude::*};
 
 use crate::{
@@ -30,13 +31,13 @@ mod bindings;
 mod bots;
 mod devtoys;
 mod disguise;
+mod holoplus;
 mod interfaces;
 mod navmesh;
 mod screen_detour;
 mod scripts;
 mod utils;
 
-#[derive(Debug)]
 pub struct HooksPlugin {
     pub bots: Bots,
     pub disguise: Disguise,
@@ -45,6 +46,7 @@ pub struct HooksPlugin {
     pub devtoys: DevToys,
     pub scripts: Scripts,
     pub navigation: NavigationPlugin,
+    pub holoplus: HoloPlus,
     is_dedicated_server: bool,
 }
 
@@ -74,17 +76,12 @@ impl Plugin for HooksPlugin {
             devtoys: DevToys::new(reloaded),
             scripts: Scripts::new(reloaded),
             navigation: NavigationPlugin::new(reloaded),
+            holoplus: HoloPlus::new(reloaded),
             is_dedicated_server: std::env::args().any(|cmd| cmd.starts_with("-dedicated")),
         }
     }
 
     fn on_dll_load(&self, engine: Option<&EngineData>, dll_ptr: &DLLPointer, token: EngineToken) {
-        self.bots.on_dll_load(engine, dll_ptr, token);
-        self.disguise.on_dll_load(engine, dll_ptr, token);
-        self.interfaces.on_dll_load(engine, dll_ptr, token);
-        self.admin_abuse.on_dll_load(engine, dll_ptr, token);
-        self.devtoys.on_dll_load(engine, dll_ptr, token);
-
         unsafe {
             EngineFunctions::try_init(dll_ptr, &ENGINE_FUNCTIONS);
             ClientFunctions::try_init(dll_ptr, &CLIENT_FUNCTIONS);
@@ -124,22 +121,32 @@ impl Plugin for HooksPlugin {
             },
             _ => {}
         }
+
+        self.bots.on_dll_load(engine, dll_ptr, token);
+        self.disguise.on_dll_load(engine, dll_ptr, token);
+        self.interfaces.on_dll_load(engine, dll_ptr, token);
+        self.admin_abuse.on_dll_load(engine, dll_ptr, token);
+        self.devtoys.on_dll_load(engine, dll_ptr, token);
+        self.holoplus.on_dll_load(engine, dll_ptr, token);
     }
 
     fn on_sqvm_created(&self, sqvm_handle: &CSquirrelVMHandle, token: EngineToken) {
         self.bots.on_sqvm_created(sqvm_handle, token);
         self.interfaces.on_sqvm_created(sqvm_handle, token);
         self.admin_abuse.on_sqvm_created(sqvm_handle, token);
+        self.holoplus.on_sqvm_created(sqvm_handle, token);
     }
 
     fn on_sqvm_destroyed(&self, sqvm_handle: &CSquirrelVMHandle, token: EngineToken) {
-        self.bots.on_sqvm_destroyed(sqvm_handle, token)
+        self.bots.on_sqvm_destroyed(sqvm_handle, token);
+        self.holoplus.on_sqvm_destroyed(sqvm_handle, token);
     }
 
     fn runframe(&self, token: EngineToken) {
         self.interfaces.runframe(token);
         self.devtoys.runframe(token);
         self.bots.runframe(token);
+        self.holoplus.runframe(token);
     }
 }
 

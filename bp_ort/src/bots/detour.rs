@@ -29,6 +29,7 @@ static_detour! {
 
 fn physics_run_think_functions_hook(paused: bool) {
     run_bots_cmds(paused);
+    crate::holoplus::runholoframe();
 
     unsafe { Physics_RunThinkFunctions.call(paused) }
 }
