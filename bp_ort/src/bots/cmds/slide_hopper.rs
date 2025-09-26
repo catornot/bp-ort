@@ -1,4 +1,8 @@
-use rrplug::{bindings::class_types::cplayer::CPlayer, prelude::*};
+use rrplug::{
+    bindings::class_types::{cbaseentity::CBaseEntity, cplayer::CPlayer},
+    prelude::*,
+};
+use shared::utils::nudge_type;
 
 use crate::{
     bindings::{Action, CUserCmd},
@@ -21,7 +25,8 @@ pub(crate) fn slide_hopper(
 
     if let Some(target) = target {
         let length = get_velocity_length(helper, player, v);
-        let touching_ground = unsafe { (helper.sv_funcs.is_on_ground)(player) } != 0;
+        let touching_ground =
+            unsafe { (helper.sv_funcs.is_on_ground)(nudge_type::<&CBaseEntity>(player)) } != 0;
 
         if length <= 50. && local_data.has_started_to_slide_hop {
             local_data.has_started_to_slide_hop = false;

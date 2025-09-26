@@ -1,4 +1,8 @@
-use rrplug::{bindings::class_types::cplayer::CPlayer, prelude::*};
+use rrplug::{
+    bindings::class_types::{cbaseentity::CBaseEntity, cplayer::CPlayer},
+    prelude::*,
+};
+use shared::utils::nudge_type;
 
 use crate::{
     bindings::{Action, CUserCmd},
@@ -42,7 +46,9 @@ pub(crate) fn battery_yoinker(
                 &origin,
                 enemy_player_iterator(team, helper)
                     .chain(enemy_titan_iterator(helper, team))
-                    .filter(|ent| unsafe { (helper.sv_funcs.is_titan)(*ent) }),
+                    .filter(|ent| unsafe {
+                        (helper.sv_funcs.is_titan)(nudge_type::<&CBaseEntity>(ent))
+                    }),
             )
             .reduce(|closer, other| if closer.0 < other.0 { other } else { closer })
             .map(|(_, player)| unsafe { *player.get_origin(v) })
@@ -52,7 +58,9 @@ pub(crate) fn battery_yoinker(
                 &origin,
                 player_iterator(&is_team, helper)
                     .chain(titan_iterator(&is_team, helper))
-                    .filter(|ent| unsafe { (helper.sv_funcs.is_titan)(*ent) }),
+                    .filter(|ent| unsafe {
+                        (helper.sv_funcs.is_titan)(nudge_type::<&CBaseEntity>(ent))
+                    }),
             )
             .reduce(|closer, other| if closer.0 < other.0 { other } else { closer })
             .map(|(_, player)| unsafe { *player.get_origin(v) })
@@ -61,7 +69,7 @@ pub(crate) fn battery_yoinker(
     if let Some(rodeo_target) = maybe_rodeo_target {
         if distance(origin, rodeo_target) > 100. {
             path_to_target(&mut cmd, local_data, origin, rodeo_target, false, helper);
-        } else if unsafe { (helper.sv_funcs.is_on_ground)(player) } != 0
+        } else if unsafe { (helper.sv_funcs.is_on_ground)(nudge_type::<&CBaseEntity>(player)) } != 0
             && local_data.counter / 10 % 4 == 0
         {
             cmd.buttons |= Action::Jump as u32;

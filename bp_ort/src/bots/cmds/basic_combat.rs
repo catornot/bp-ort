@@ -7,6 +7,7 @@ use rrplug::{
     high::UnsafeHandle,
     prelude::{EngineToken, *},
 };
+use shared::utils::nudge_type;
 use std::{cell::UnsafeCell, sync::atomic::Ordering};
 
 use crate::{
@@ -54,7 +55,7 @@ pub(crate) fn basic_combat(
     let v = &mut v;
     let origin = unsafe { *player.get_origin(v) };
     let team = player.m_iTeamNum;
-    let is_titan = unsafe { (helper.sv_funcs.is_titan)(player) };
+    let is_titan = unsafe { (helper.sv_funcs.is_titan)(nudge_type::<&CBaseEntity>(player)) };
 
     let target = unsafe {
         find_player_in_view(
@@ -328,7 +329,8 @@ pub(crate) fn basic_combat(
                 target
             };
 
-        let enemy_is_titan = unsafe { (helper.sv_funcs.is_titan)(target_player) };
+        let enemy_is_titan =
+            unsafe { (helper.sv_funcs.is_titan)(nudge_type::<&mut CBaseEntity>(target_player)) };
 
         if should_shoot || sim_type == 5 || sim_type == 4 {
             // for some reason this makes the game freeze later in the frame????

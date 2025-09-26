@@ -1,8 +1,9 @@
 use parking_lot::{RwLock, RwLockReadGuard};
 use rrplug::{
-    bindings::class_types::{client::SignonState, cplayer::CPlayer},
+    bindings::class_types::{cbaseentity::CBaseEntity, client::SignonState, cplayer::CPlayer},
     prelude::*,
 };
+use shared::utils::nudge_type;
 
 use crate::{
     bindings::{EngineFunctions, ServerFunctions, ENGINE_FUNCTIONS},
@@ -191,7 +192,9 @@ pub fn execute_for_matches(
                 get_c_char_array_lossy(&client.m_szServerName),
             ))
         })
-        .filter(|(player, _)| unsafe { !should_live || (server_funcs.is_alive)(*player) != 0 })
+        .filter(|(player, _)| unsafe {
+            !should_live || (server_funcs.is_alive)(nudge_type::<&CBaseEntity>(player)) != 0
+        })
         .filter(|(player, name)| filter_target(filter, player, name))
         .for_each(|(player, _)| execution(player));
 }

@@ -2,7 +2,7 @@ use rrplug::{
     bindings::{
         class_types::{
             c_player::C_Player, cbaseentity::CBaseEntity, client::CClient, cplayer::CPlayer,
-            globalvars::CGlobalVars,
+            cplayerdecoy::CPlayerDecoy, globalvars::CGlobalVars,
         },
         cvar::{
             command::{CCommand, ConCommand, FnCommandCallback_t},
@@ -419,9 +419,9 @@ offset_functions! {
         perform_collision_check = unsafe extern "C" fn(*const CPlayer, u32) where offset(0x441480);
         another_perform_collision_check = unsafe extern "C" fn(*const CPlayer, *const CPlayer) where offset(0x443bd0);
 
-        is_on_ground = unsafe extern "C" fn(*const CPlayer) -> usize where offset(0x441c60);
-        is_alive = unsafe extern "C" fn(*const CPlayer) -> usize where offset(0x4461e0);
-        is_titan = unsafe extern "C" fn(*const CPlayer) -> bool where offset(0x406a70);
+        is_on_ground = unsafe extern "C" fn(*const CBaseEntity) -> usize where offset(0x441c60);
+        is_alive = unsafe extern "C" fn(*const CBaseEntity) -> usize where offset(0x4461e0);
+        is_titan = unsafe extern "C" fn(*const CBaseEntity) -> bool where offset(0x406a70);
         set_health = unsafe extern "C" fn(*mut CPlayer, i32, usize, usize) -> () where offset(0x42d7f0);
         create_script_instance = unsafe extern "C" fn(*mut CBaseEntity) -> *const SQObject where offset(0x43f2f0);
         get_player_net_int = unsafe extern "C" fn(*const CPlayer, *const c_char) -> i32 where offset(0x5ddc30);

@@ -228,3 +228,7 @@ pub fn get_weaponx_name<'a>(
         ))
     }
 }
+
+pub const fn nudge_type<O>(input: O) -> O {
+    input
+}

@@ -2,12 +2,13 @@ use bonsai_bt::{Action, Event, Sequence, Status, UpdateArgs, BT, RUNNING};
 use itertools::Itertools;
 use parking_lot::RwLock;
 use rrplug::{
-    bindings::class_types::{client::CClient, cplayer::CPlayer},
+    bindings::class_types::{cbaseentity::CBaseEntity, client::CClient, cplayer::CPlayer},
     prelude::*,
 };
 use shared::{
     bindings::{CUserCmd, SERVER_FUNCTIONS},
     cmds_helper::CUserCmdHelper,
+    utils::nudge_type,
 };
 use std::{
     collections::HashMap,
@@ -87,7 +88,7 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, player: &mut CPla
 
     bt.blackboard_mut().next_cmd = CUserCmd::new_empty(helper);
 
-    let is_alive = unsafe { (helper.sv_funcs.is_alive)(player) } == 1;
+    let is_alive = unsafe { (helper.sv_funcs.is_alive)(nudge_type::<&CBaseEntity>(player)) } == 1;
     if is_alive != bt.blackboard().last_alive_state {
         bt.reset_bt();
         bt.blackboard_mut().last_alive_state = is_alive;

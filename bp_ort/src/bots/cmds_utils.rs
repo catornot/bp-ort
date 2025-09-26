@@ -3,6 +3,7 @@ use rrplug::{
     bindings::class_types::{cbaseentity::CBaseEntity, cplayer::CPlayer},
     high::vector::Vector3,
 };
+use shared::utils::nudge_type;
 use std::mem::MaybeUninit;
 
 use crate::{
@@ -170,7 +171,7 @@ pub unsafe fn find_player_in_view<'a>(
         possible_targets
             .into_iter()
             .filter(|(_, target, _)| {
-                (helper.sv_funcs.is_titan)(*target)
+                (helper.sv_funcs.is_titan)(nudge_type::<&CBaseEntity>(target))
                     || targets_locks
                         .and_then(|l| l.get(target.pl.index as usize))
                         .copied()
@@ -222,7 +223,9 @@ pub fn enemy_player_iterator<'b, 'a: 'b>(
     (0..32)
         .filter_map(|i| unsafe { (helper.sv_funcs.get_player_by_index)(i + 1).as_mut() })
         .filter(move |player| player.m_iTeamNum != team && player.m_iTeamNum != 0)
-        .filter(|player| unsafe { (helper.sv_funcs.is_alive)(*player) != 0 })
+        .filter(|player| unsafe {
+            (helper.sv_funcs.is_alive)(nudge_type::<&CBaseEntity>(player)) != 0
+        })
 }
 
 pub fn enemy_titan_iterator<'b, 'a: 'b>(
@@ -238,7 +241,11 @@ pub fn enemy_titan_iterator<'b, 'a: 'b>(
                     .cast::<CPlayer>()
                     .cast_mut()
                     .as_mut()
-                    .and_then(|titan| (helper.sv_funcs.is_alive)(titan).eq(&1).then_some(titan))
+                    .and_then(|titan| {
+                        (helper.sv_funcs.is_alive)(nudge_type::<&CBaseEntity>(titan))
+                            .eq(&1)
+                            .then_some(titan)
+                    })
             } // probably safe since the functions should be the same in the vtale, right?
         })
 }
@@ -250,7 +257,9 @@ pub fn player_iterator<'b, 'a: 'b>(
     (0..32)
         .filter_map(|i| unsafe { (helper.sv_funcs.get_player_by_index)(i + 1).as_mut() })
         .filter(|player| predicate(player))
-        .filter(|player| unsafe { (helper.sv_funcs.is_alive)(*player) != 0 })
+        .filter(|player| unsafe {
+            (helper.sv_funcs.is_alive)(nudge_type::<&CBaseEntity>(player)) != 0
+        })
 }
 
 pub fn titan_iterator<'b, 'a: 'b>(

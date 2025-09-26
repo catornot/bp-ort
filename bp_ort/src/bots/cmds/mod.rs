@@ -1,4 +1,8 @@
-use rrplug::{bindings::class_types::cplayer::CPlayer, prelude::*};
+use rrplug::{
+    bindings::class_types::{cbaseentity::CBaseEntity, cplayer::CPlayer},
+    prelude::*,
+};
+use shared::utils::nudge_type;
 
 use crate::{
     bindings::{Action, CUserCmd},
@@ -34,11 +38,12 @@ pub(super) fn get_cmd(
     };
 
     {
-        let desired_hull = if unsafe { (helper.sv_funcs.is_titan)(player) } {
-            Hull::Titan
-        } else {
-            Hull::Human
-        };
+        let desired_hull =
+            if unsafe { (helper.sv_funcs.is_titan)(nudge_type::<&CBaseEntity>(player)) } {
+                Hull::Titan
+            } else {
+                Hull::Human
+            };
         if Some(desired_hull) != local_data.nav_query.as_ref().map(|q| q.hull)
             && let Some(ref mut query) = local_data.nav_query
         {
@@ -69,7 +74,7 @@ pub(super) fn get_cmd(
             cmd_func(&helper, player)
         }
 
-        _ if unsafe { (helper.sv_funcs.is_alive)(player) == 0 } => {
+        _ if unsafe { (helper.sv_funcs.is_alive)(nudge_type::<&CBaseEntity>(player)) == 0 } => {
             if let Some(query) = local_data.nav_query.as_mut() {
                 query.path_points.clear()
             }
@@ -79,7 +84,7 @@ pub(super) fn get_cmd(
         }
         1 | 12 => {
             local_data.counter += 1;
-            if unsafe { (helper.sv_funcs.is_on_ground)(player) } != 0
+            if unsafe { (helper.sv_funcs.is_on_ground)(nudge_type::<&CBaseEntity>(player)) } != 0
                 && local_data.counter / 10 % 4 == 0
             {
                 CUserCmd::new_basic_move(Vector3::new(0., 0., 1.), Action::Jump as u32, &helper)
@@ -165,7 +170,9 @@ pub(super) fn get_cmd(
 
                     let can_jump = *counter % 5 == 0;
 
-                    if (helper.sv_funcs.is_on_ground)(player) != 0 && can_jump {
+                    if (helper.sv_funcs.is_on_ground)(nudge_type::<&CBaseEntity>(player)) != 0
+                        && can_jump
+                    {
                         cmd.buttons |= Action::Jump as u32;
                     }
                     cmd.buttons |= Action::Duck as u32;
