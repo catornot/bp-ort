@@ -12,6 +12,7 @@ pub struct BotBrain {
     _navmesh: Arc<Navmesh>,
     path_receiver: Option<PathReceiver>,
     path: Vec<Vec3>,
+    color: Color,
 }
 
 #[derive(Debug, Clone)]
@@ -36,6 +37,7 @@ pub fn init_pathfinding(navmesh: Arc<Navmesh>) -> Behavior {
             _navmesh: navmesh,
             path_receiver: None,
             path: Vec::new(),
+            color: Color::linear_rgba(0.0, 0.9, 0.1, 1.0),
         },
     )
 }
@@ -85,20 +87,26 @@ pub fn run_behavior(
         }
         BotAction::RenderPath => 'render: {
             if brain.path.is_empty() {
-                break 'render (Status::Failure, 0.);
+                break 'render (Status::Failure, args.dt);
             }
 
-            bevy::log::info!("path render");
-            brain
-                .path
-                .iter()
-                .cloned()
-                .tuple_windows()
-                .for_each(|(p1, p2)| gizmos.line(p1, p2, Color::linear_rgba(0., 0.9, 0.1, 1.0)));
+            let color = Hsva::from(brain.color);
+            brain.color = Color::Hsva(color.with_hue(if color.hue >= 1. {
+                0.5
+            } else {
+                color.hue + 0.1
+            }));
 
-            (Status::Success, 0.)
+            (Status::Success, args.dt)
         }
     });
+
+    bt.blackboard()
+        .path
+        .iter()
+        .cloned()
+        .tuple_windows()
+        .for_each(|(p1, p2)| gizmos.line(p1, p2, Color::linear_rgba(0., 0.9, 0.1, 1.0)));
 
     if bt.is_finished() {
         bt.reset_bt();

@@ -4,7 +4,7 @@ use oktree::prelude::*;
 use std::sync::Arc;
 
 use crate::{
-    CELL_SIZE, ChunkCells, DebugAmount, OFFSET, ProcessingStep, WireMe,
+    CELL_SIZE, ChunkCells, DebugAmount, OFFSET, ProcessingStep, WireMe, WorlExtends,
     async_pathfinding::JobMarket,
     behavior::{self, Behavior, init_pathfinding},
 };
@@ -189,7 +189,7 @@ fn add_pathfinding_points(
     camera: Query<&Transform, (With<FlyCamera>, Without<WireMe>)>,
     mut points: ResMut<PathfindingPoints>,
 ) -> Result<(), BevyError> {
-    let origin = camera.single()?.translation;
+    let origin = camera.single()?.translation.trunc();
 
     if points.building[0].is_none() {
         _ = points.building[0].replace(origin);
@@ -207,69 +207,12 @@ fn add_pathfinding_points(
 }
 
 fn add_navmesh_resource(mut commands: Commands, cells: Res<ChunkCells>) {
-    let (min, max) = (
-        cells
-            .collied_vec
-            .iter()
-            .flat_map(|cell| cell.cord)
-            .min()
-            .unwrap_or(0),
-        cells
-            .collied_vec
-            .iter()
-            .flat_map(|cell| cell.cord)
-            .max()
-            .unwrap_or_else(|| unreachable!()),
-    );
-
-    let mut octree: Octree32 = Octree::from_aabb_with_capacity(
-        dbg!(Aabb::from_min_max(
-            TUVec3 {
-                x: round_down_to_power_of_2(min),
-                y: round_down_to_power_of_2(min),
-                z: round_down_to_power_of_2(min),
-            },
-            TUVec3 {
-                x: round_up_to_power_of_2(max),
-                y: round_up_to_power_of_2(max),
-                z: round_up_to_power_of_2(max),
-            },
-        )),
-        cells.collied_vec.len(),
-    );
-
-    let mut err = String::new();
-    cells
-        .collied_vec
-        .iter()
-        .map(|cell| cell.cord)
-        // swizzle here too
-        .for_each(|pos| {
-            _ = octree
-                .insert(TUVec3u32::new(pos[0], pos[2], pos[1]))
-                .inspect_err(|thiserr| err = thiserr.to_string());
-        });
-
     let navmesh = Arc::new(Navmesh {
-        navmesh_tree: octree,
+        navmesh_tree: cells.tree.clone(),
         cell_size: CELL_SIZE,
     });
     commands.insert_resource(NavmeshRes(
         init_pathfinding(Arc::clone(&navmesh)),
         JobMarket::new(navmesh),
     ));
-}
-
-fn round_up_to_power_of_2(mut num: u32) -> u32 {
-    num = num.wrapping_sub(1);
-    num |= num >> 1;
-    num |= num >> 2;
-    num |= num >> 4;
-    num |= num >> 8;
-    num |= num >> 16;
-    num.wrapping_add(1)
-}
-
-fn round_down_to_power_of_2(num: u32) -> u32 {
-    round_up_to_power_of_2(num) >> 1
 }

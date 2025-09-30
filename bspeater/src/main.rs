@@ -364,7 +364,7 @@ fn main() -> anyhow::Result<()> {
 }
 
 #[derive(Resource, Clone, Copy, PartialEq)]
-struct WorlExtends(Vec3, Vec3);
+pub struct WorlExtends(Vec3, Vec3);
 
 #[derive(Resource, Clone, Copy, PartialEq)]
 struct DebugAmount {
@@ -478,20 +478,30 @@ fn raycast_world(
     }
 
     let (min, max) = (
-        ((extends.0 / Vec3::splat(CELL_SIZE)).as_ivec3() + IVec3::splat(OFFSET)).as_uvec3(),
-        ((extends.1 / Vec3::splat(CELL_SIZE)).as_ivec3() + IVec3::splat(OFFSET)).as_uvec3(),
+        ((extends.0 / Vec3::splat(CELL_SIZE)).as_ivec3() + IVec3::splat(OFFSET))
+            .as_uvec3()
+            .to_array()
+            .into_iter()
+            .min()
+            .expect("bruh how"),
+        ((extends.1 / Vec3::splat(CELL_SIZE)).as_ivec3() + IVec3::splat(OFFSET))
+            .as_uvec3()
+            .to_array()
+            .into_iter()
+            .max()
+            .expect("bruh how"),
     );
 
     let mut octtree = Octree::<u32, TUVec3u32>::from_aabb(Aabb::from_min_max(
         TUVec3 {
-            x: round_down_to_power_of_2(min[0]),
-            y: round_down_to_power_of_2(min[2]),
-            z: round_down_to_power_of_2(min[1]),
+            x: round_down_to_power_of_2(min),
+            y: round_down_to_power_of_2(min),
+            z: round_down_to_power_of_2(min),
         },
         TUVec3 {
-            x: round_up_to_power_of_2(max[0]),
-            y: round_up_to_power_of_2(max[2]),
-            z: round_up_to_power_of_2(max[1]),
+            x: round_up_to_power_of_2(max),
+            y: round_up_to_power_of_2(max),
+            z: round_up_to_power_of_2(max),
         },
     ));
 
@@ -677,13 +687,13 @@ fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> 
 }
 
 fn round_up_to_power_of_2(mut num: u32) -> u32 {
-    num -= 1;
+    num = num.wrapping_sub(1);
     num |= num >> 1;
     num |= num >> 2;
     num |= num >> 4;
     num |= num >> 8;
     num |= num >> 16;
-    num + 1
+    num.wrapping_add(1)
 }
 
 fn round_down_to_power_of_2(num: u32) -> u32 {

@@ -1,4 +1,4 @@
-use bevy::math::Vec3;
+use bevy::math::{IVec3, Vec3};
 use oktree::prelude::*;
 use parking_lot::Mutex;
 use std::{
@@ -95,12 +95,10 @@ fn worker(
                     vector3_to_tuvec(navmesh.cell_size, end),
                 )
                 .map(|points| {
-                    // string_pulling(
                     points
                         .into_iter()
                         .map(|point| tuvec_to_vector3(navmesh.cell_size, point))
                         .collect()
-                    // )
                 }),
             );
         }
@@ -108,20 +106,21 @@ fn worker(
 }
 
 fn vector3_to_tuvec(cell_size: f32, origin: Vec3) -> TUVec3u32 {
-    let scaled = origin / Vec3::new(cell_size, cell_size, cell_size);
+    let scaled = (origin / Vec3::splat(cell_size)).as_ivec3();
 
     TUVec3u32::new(
-        map_to_u32(scaled.x as i32),
-        map_to_u32(scaled.y as i32),
-        map_to_u32(scaled.z as i32),
+        map_to_u32(scaled.x),
+        map_to_u32(scaled.y),
+        map_to_u32(scaled.z),
     )
 }
 
 fn tuvec_to_vector3(cell_size: f32, point: TUVec3u32) -> Vec3 {
-    Vec3::new(cell_size, cell_size, cell_size)
-        * Vec3::new(
-            map_to_i32(point.0.x) as f32,
-            map_to_i32(point.0.y) as f32,
-            map_to_i32(point.0.z) as f32,
+    Vec3::splat(cell_size)
+        * IVec3::new(
+            map_to_i32(point.0.x),
+            map_to_i32(point.0.y),
+            map_to_i32(point.0.z),
         )
+        .as_vec3()
 }
