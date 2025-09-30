@@ -4,7 +4,7 @@ use oktree::prelude::*;
 use std::sync::Arc;
 
 use crate::{
-    CELL_SIZE, ChunkCells, DebugAmount, OFFSET, ProcessingStep, WireMe, WorlExtends,
+    CELL_SIZE, ChunkCells, DebugAmount, OFFSET, ProcessingStep, WireMe,
     async_pathfinding::JobMarket,
     behavior::{self, Behavior, init_pathfinding},
 };

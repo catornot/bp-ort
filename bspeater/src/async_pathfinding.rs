@@ -4,7 +4,6 @@ use parking_lot::Mutex;
 use std::{
     sync::Arc,
     thread::{self, JoinHandle, available_parallelism},
-    time::Duration,
 };
 
 use crate::{debug::Navmesh, map_to_i32, map_to_u32, pathfinding::find_path};
@@ -19,11 +18,10 @@ pub struct Work {
 
 enum JobMessage {
     Work(Work),
-    Stop,
 }
 
 pub struct JobMarket {
-    workers: Vec<JoinHandle<()>>,
+    _workers: Vec<JoinHandle<()>>,
     job_sender: flume::Sender<JobMessage>,
 }
 
@@ -32,7 +30,7 @@ impl JobMarket {
         let (sender, receiver) = flume::unbounded();
         let receiver = Arc::new(Mutex::new(receiver));
         JobMarket {
-            workers: (0..available_parallelism()
+            _workers: (0..available_parallelism()
                 .map(|cores| cores.get())
                 .unwrap_or(8))
                 .map(|_| thread::spawn(worker(Arc::clone(&receiver), Arc::clone(&navmesh))))
@@ -56,24 +54,6 @@ impl JobMarket {
         check_sync::<PathReceiver>();
 
         Some(receiver)
-    }
-
-    pub fn _stop(&self) {
-        for _ in 0..self.workers.len() {
-            _ = self.job_sender.send(JobMessage::Stop);
-        }
-
-        // give threads time to end
-        thread::sleep(Duration::from_secs(1));
-
-        // self.workers.iter().for_each(|worker| {
-        //     let start = SystemTime::now();
-        //     while !worker.is_finished()
-        //     && start.elapsed().unwrap_or(Duration::new(1, 0)) >= Duration::new(1, 0)
-        //     {
-        //         thread::sleep(Duration::from_millis(10));
-        //     }
-        // });
     }
 }
 
