@@ -17,3 +17,8 @@ rayon = "1.*"
 bytemuck = { version = "1.23.1", features = ["derive", "pod_saturating"] }
 anyhow = { version = "1.0.99", features = ["backtrace"] }
 rkyv = "=0.8.10"
+parking_lot = "0.12.4"
+flume = { version = "0.11.1", default-features = false }
+bonsai-bt = "0.10.0"
+indexmap = "2.11.4"
+rustc-hash = "2.1.1"

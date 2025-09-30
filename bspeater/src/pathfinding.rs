@@ -1,9 +1,9 @@
-use indexmap::{map::Entry, IndexMap};
+use indexmap::{IndexMap, map::Entry};
 use oktree::prelude::*;
 use rustc_hash::FxHasher;
 use std::{cmp::Reverse, collections::BinaryHeap, hash::BuildHasherDefault};
 
-use crate::loader::Octree32;
+use crate::debug::Octree32;
 
 type FxIndexMap<K, V> = IndexMap<K, V, BuildHasherDefault<FxHasher>>;
 type Cost = f64;
@@ -34,8 +34,9 @@ impl Ord for Node {
 impl Eq for Node {}
 
 pub fn find_path(octtree: &Octree32, start: TUVec3u32, end: TUVec3u32) -> Option<Vec<TUVec3u32>> {
-    log::info!("{start:?} and {end:?}");
+    bevy::log::info!("{start:?} and {end:?}");
     if octtree.get(&start.0).is_some() || octtree.get(&end.0).is_some() {
+        bevy::log::warn!("invalid pos");
         return None;
     }
 
@@ -125,6 +126,7 @@ pub fn find_path(octtree: &Octree32, start: TUVec3u32, end: TUVec3u32) -> Option
         }
     }
 
+    bevy::log::warn!("exhausted all points");
     None
 }
 
@@ -189,11 +191,13 @@ fn get_path(visited_list: VisitedList, mut index: usize, start: usize) -> Option
             path.push(*pos);
             index = parent_index
         } else {
+            bevy::log::warn!("incomplete path");
             return None;
         }
     }
 
     if path.is_empty() {
+        bevy::log::warn!("empty path");
         return None;
     }
 
@@ -201,7 +205,7 @@ fn get_path(visited_list: VisitedList, mut index: usize, start: usize) -> Option
     Some(path)
 }
 
-const MAX_DISTANCE: u32 = 8;
+const MAX_DISTANCE: u32 = 1000;
 fn find_ground_distance(octtree: &Octree<u32, TUVec3u32>, point: TUVec3u32) -> u32 {
     (point.0.z.saturating_sub(MAX_DISTANCE)..point.0.z)
         .position(|z| octtree.get(&TUVec3::new(point.0.x, point.0.y, z)).is_some())

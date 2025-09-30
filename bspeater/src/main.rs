@@ -24,10 +24,14 @@ use std::{
 
 pub use bindings::*;
 
+mod async_pathfinding;
+mod behavior;
 mod bindings;
 mod cli;
+mod debug;
 mod geoset_loader;
 mod mdl_loader;
+mod pathfinding;
 mod saving;
 
 pub const UNPACK: &str = "vpk";
@@ -341,7 +345,8 @@ fn main() -> anyhow::Result<()> {
         app.world_mut().spawn(mesh);
     }
 
-    app.add_systems(Startup, calc_extents)
+    app.add_plugins(debug::debug_plugin)
+        .add_systems(Startup, calc_extents)
         .add_systems(
             Update,
             (
@@ -351,7 +356,6 @@ fn main() -> anyhow::Result<()> {
                 exit_app_system
                     .run_if(in_state(ProcessingStep::Exit))
                     .run_if(|exit: Res<EarlyExit>| exit.0),
-                debug_world,
             ),
         )
         .run();
@@ -602,56 +606,6 @@ fn save_navmesh(
     );
 
     next_state.set(ProcessingStep::Done);
-}
-
-fn debug_world(
-    camera: Query<&Transform, (With<FlyCamera>, Without<WireMe>)>,
-    debug_amount: Res<DebugAmount>,
-    cells: Res<ChunkCells>,
-    mut gizmos: Gizmos,
-) -> Result<(), BevyError> {
-    let origin = camera.single()?.translation;
-
-    for pos in cells
-        .collied_vec
-        .iter()
-        .map(|inter| {
-            (UVec3::from_array(inter.cord).as_ivec3() - IVec3::splat(OFFSET)).as_vec3()
-                * Vec3::splat(CELL_SIZE)
-        })
-        .filter(|pos| pos.distance(origin) < 500.)
-    {
-        gizmos.cuboid(
-            Transform::from_translation(pos).with_scale(Vec3::splat(CELL_SIZE)),
-            Color::srgba_u8(255, 0, 0, 255),
-        );
-    }
-
-    if !debug_amount.octree {
-        return Ok(());
-    }
-
-    for (center, scale) in cells
-        .tree
-        .iter_nodes()
-        .map(|node| (node.aabb.center(), node.aabb.size()))
-        .map(|(center, scale)| ([center.x, center.y, center.z], UVec3::splat(scale)))
-        .map(|(center, scale)| {
-            (
-                (UVec3::from_array(center).as_ivec3() - IVec3::splat(OFFSET)).as_vec3()
-                    * Vec3::splat(CELL_SIZE),
-                (scale.as_vec3() * Vec3::splat(CELL_SIZE)),
-            )
-        })
-        .filter(|(center, _)| center.distance(origin) < 500.)
-    {
-        gizmos.cuboid(
-            Transform::from_translation(center).with_scale(scale),
-            Color::srgba_u8(255, 255, 0, 255),
-        );
-    }
-
-    Ok(())
 }
 
 fn save_meshes(

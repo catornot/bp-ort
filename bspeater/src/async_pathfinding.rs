@@ -1,25 +1,20 @@
-use bevy_math::{NormedVectorSpace, Vec3};
-use itertools::Itertools;
+use bevy::math::Vec3;
 use oktree::prelude::*;
-use parking_lot::{Mutex, RwLock};
-use rrplug::prelude::*;
+use parking_lot::Mutex;
 use std::{
     sync::Arc,
-    thread::{self, available_parallelism, JoinHandle},
+    thread::{self, JoinHandle, available_parallelism},
     time::Duration,
 };
 
-use crate::{
-    loader::{map_to_i32, map_to_u32, Navmesh, NavmeshStatus},
-    pathfinding::find_path,
-};
+use crate::{debug::Navmesh, map_to_i32, map_to_u32, pathfinding::find_path};
 
-pub type PathReceiver = flume::Receiver<Option<Vec<Vector3>>>;
+pub type PathReceiver = flume::Receiver<Option<Vec<Vec3>>>;
 
 pub struct Work {
-    pub start: Vector3,
-    pub end: Vector3,
-    pub return_sender: flume::Sender<Option<Vec<Vector3>>>,
+    pub start: Vec3,
+    pub end: Vec3,
+    pub return_sender: flume::Sender<Option<Vec<Vec3>>>,
 }
 
 enum JobMessage {
@@ -33,7 +28,7 @@ pub struct JobMarket {
 }
 
 impl JobMarket {
-    pub fn new(navmesh: Arc<RwLock<Navmesh>>) -> JobMarket {
+    pub fn new(navmesh: Arc<Navmesh>) -> JobMarket {
         let (sender, receiver) = flume::unbounded();
         let receiver = Arc::new(Mutex::new(receiver));
         JobMarket {
@@ -46,7 +41,7 @@ impl JobMarket {
         }
     }
 
-    pub fn find_path(&self, start: Vector3, end: Vector3) -> Option<PathReceiver> {
+    pub fn find_path(&self, start: Vec3, end: Vec3) -> Option<PathReceiver> {
         let (sender, receiver) = flume::unbounded();
 
         self.job_sender
@@ -63,7 +58,7 @@ impl JobMarket {
         Some(receiver)
     }
 
-    pub fn stop(&self) {
+    pub fn _stop(&self) {
         for _ in 0..self.workers.len() {
             _ = self.job_sender.send(JobMessage::Stop);
         }
@@ -84,7 +79,7 @@ impl JobMarket {
 
 fn worker(
     job_receiver: Arc<Mutex<flume::Receiver<JobMessage>>>,
-    navmesh: Arc<RwLock<Navmesh>>,
+    navmesh: Arc<Navmesh>,
 ) -> impl Fn() {
     move || {
         while let Ok(JobMessage::Work(Work {
@@ -93,15 +88,9 @@ fn worker(
             return_sender,
         })) = job_receiver.lock_arc().recv()
         {
-            let navmesh = navmesh.read();
-            let NavmeshStatus::Loaded(navmesh_tree) = &navmesh.navmesh else {
-                log::warn!("tried pathfinding without a navmesh");
-                continue;
-            };
-
             _ = return_sender.send(
                 find_path(
-                    navmesh_tree,
+                    &navmesh.navmesh_tree,
                     vector3_to_tuvec(navmesh.cell_size, start),
                     vector3_to_tuvec(navmesh.cell_size, end),
                 )
@@ -118,77 +107,8 @@ fn worker(
     }
 }
 
-fn string_pulling(mut positions: Vec<Vector3>) -> Vec<Vector3> {
-    let positions_vec3 = positions
-        .iter()
-        .map(|point| Vec3::from_array([point.x, point.y, point.z]))
-        .collect_vec();
-    douglas_peucker(&positions_vec3, &mut positions)
-        .map(|_| positions)
-        .unwrap_or_else(|| {
-            positions_vec3
-                .into_iter()
-                .map(|point| Vector3::from(point.to_array()))
-                .collect_vec()
-        })
-    // positions
-    //     .into_iter()
-    //     .tuple_windows()
-    //     .filter_map(|(p1, p2, p3)| ((p1 - p2) != (p2 - p3)).then_some(p2))
-    //     .collect()
-}
-
-const EPSILON: f32 = 0.01;
-fn douglas_peucker(points: &[Vec3], output: &mut Vec<Vector3>) -> Option<()> {
-    if points.len() < 3 {
-        output.extend(points.iter().map(|points| Vector3::from(points.to_array())));
-        return Some(());
-    }
-
-    let (index, max_distance) = points
-        .iter()
-        .skip(1)
-        .take(points.len().saturating_sub(1))
-        .copied()
-        .enumerate()
-        .filter_map(|(i, point)| {
-            Some((
-                i + 1,
-                perpendicular_distance([*points.first()?, *points.last()?], point),
-            ))
-        })
-        .fold(
-            (0, f32::MIN),
-            |(index_max, max_distance), (index, distance)| {
-                if max_distance < distance {
-                    (index, distance)
-                } else {
-                    (index_max, max_distance)
-                }
-            },
-        );
-
-    if max_distance > EPSILON {
-        douglas_peucker(points.get(..=index).expect("index oob"), output)?;
-        douglas_peucker(points.get(index..).expect("first index oob"), output)?;
-    } else if !points.is_empty() {
-        output.push(Vector3::from(points.first()?.to_array()));
-        output.push(Vector3::from(points.last()?.to_array()));
-    }
-
-    Some(())
-}
-
-fn perpendicular_distance(line: [Vec3; 2], off_point: Vec3) -> f32 {
-    if line[1] == line[0] {
-        return (off_point - line[0]).norm();
-    }
-
-    (line[1] - line[0]).cross(line[0] - off_point).norm().abs() / (line[1] - line[0]).norm()
-}
-
-fn vector3_to_tuvec(cell_size: f32, origin: Vector3) -> TUVec3u32 {
-    let scaled = origin / Vector3::new(cell_size, cell_size, cell_size);
+fn vector3_to_tuvec(cell_size: f32, origin: Vec3) -> TUVec3u32 {
+    let scaled = origin / Vec3::new(cell_size, cell_size, cell_size);
 
     TUVec3u32::new(
         map_to_u32(scaled.x as i32),
@@ -197,9 +117,9 @@ fn vector3_to_tuvec(cell_size: f32, origin: Vector3) -> TUVec3u32 {
     )
 }
 
-fn tuvec_to_vector3(cell_size: f32, point: TUVec3u32) -> Vector3 {
-    Vector3::new(cell_size, cell_size, cell_size)
-        * Vector3::new(
+fn tuvec_to_vector3(cell_size: f32, point: TUVec3u32) -> Vec3 {
+    Vec3::new(cell_size, cell_size, cell_size)
+        * Vec3::new(
             map_to_i32(point.0.x) as f32,
             map_to_i32(point.0.y) as f32,
             map_to_i32(point.0.z) as f32,
