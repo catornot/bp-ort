@@ -198,9 +198,7 @@ impl Plugin for OctBots {
                 self.navmesh.write().load_navmesh(current_name.as_ref());
 
                 *load_nav = current_name.to_string();
-            } else {
-                let mut navmesh = self.navmesh.write();
-
+            } else if let Some(mut navmesh) = self.navmesh.try_write() {
                 match &navmesh.navmesh {
                     loader::NavmeshStatus::Unloaded => {}
                     loader::NavmeshStatus::Loading => {

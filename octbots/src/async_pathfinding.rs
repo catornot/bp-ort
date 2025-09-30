@@ -14,12 +14,12 @@ use crate::{
     pathfinding::find_path,
 };
 
-pub type PathReceiver = crossbeam::channel::Receiver<Option<Vec<Vector3>>>;
+pub type PathReceiver = flume::Receiver<Option<Vec<Vector3>>>;
 
 pub struct Work {
     pub start: Vector3,
     pub end: Vector3,
-    pub return_sender: crossbeam::channel::Sender<Option<Vec<Vector3>>>,
+    pub return_sender: flume::Sender<Option<Vec<Vector3>>>,
 }
 
 enum JobMessage {
@@ -29,17 +29,19 @@ enum JobMessage {
 
 pub struct JobMarket {
     workers: Vec<JoinHandle<()>>,
-    job_sender: crossbeam::channel::Sender<JobMessage>,
+    job_sender: flume::Sender<JobMessage>,
 }
 
 impl JobMarket {
     pub fn new(navmesh: Arc<RwLock<Navmesh>>) -> JobMarket {
-        let (sender, receiver) = crossbeam::channel::unbounded();
-        let receiver = Arc::new(Mutex::new(receiver));
+        let (sender, receiver) = flume::unbounded();
+        let receiver = Arc::new(receiver);
+        let cores = available_parallelism()
+            .map(|cores| cores.get())
+            .unwrap_or(8);
+        log::info!("spawning {cores} worker threads");
         JobMarket {
-            workers: (0..available_parallelism()
-                .map(|cores| cores.get())
-                .unwrap_or(8))
+            workers: (0..cores)
                 .map(|_| thread::spawn(worker(Arc::clone(&receiver), Arc::clone(&navmesh))))
                 .collect(),
             job_sender: sender,
@@ -47,7 +49,7 @@ impl JobMarket {
     }
 
     pub fn find_path(&self, start: Vector3, end: Vector3) -> Option<PathReceiver> {
-        let (sender, receiver) = crossbeam::channel::unbounded();
+        let (sender, receiver) = flume::unbounded();
 
         self.job_sender
             .send(JobMessage::Work(Work {
@@ -83,7 +85,7 @@ impl JobMarket {
 }
 
 fn worker(
-    job_receiver: Arc<Mutex<crossbeam::channel::Receiver<JobMessage>>>,
+    job_receiver: Arc<flume::Receiver<JobMessage>>,
     navmesh: Arc<RwLock<Navmesh>>,
 ) -> impl Fn() {
     move || {
@@ -91,7 +93,7 @@ fn worker(
             start,
             end,
             return_sender,
-        })) = job_receiver.lock_arc().recv()
+        })) = job_receiver.recv()
         {
             let navmesh = navmesh.read();
             let NavmeshStatus::Loaded(navmesh_tree) = &navmesh.navmesh else {

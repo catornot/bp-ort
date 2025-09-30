@@ -163,8 +163,8 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, player: &mut CPla
                         brain.path_next_request = helper.globals.curTime + 0.1;
                         (Status::Failure, 0.)
                     }
-                    Err(crossbeam::channel::TryRecvError::Disconnected) => (Status::Failure, 0.),
-                    Err(crossbeam::channel::TryRecvError::Empty) => RUNNING,
+                    Err(flume::TryRecvError::Disconnected) => (Status::Failure, 0.),
+                    Err(flume::TryRecvError::Empty) => RUNNING,
                 }
             } else {
                 (Status::Failure, 0.)
