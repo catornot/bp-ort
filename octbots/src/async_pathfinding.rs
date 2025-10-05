@@ -1,7 +1,7 @@
 use bevy_math::{NormedVectorSpace, Vec3};
 use itertools::Itertools;
 use oktree::prelude::*;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::RwLock;
 use rrplug::prelude::*;
 use std::{
     sync::Arc,

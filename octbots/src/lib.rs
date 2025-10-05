@@ -109,10 +109,6 @@ impl Plugin for OctBots {
                 ) {
                     log::error!("failed to register a simulation function");
                 }
-
-                if !interface.register_simulation(PLUGIN_DLL_NAME, 99, behavior::infodump) {
-                    log::error!("failed to register a simulation function");
-                }
             };
 
             log::info!(

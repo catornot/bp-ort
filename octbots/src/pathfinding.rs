@@ -34,7 +34,7 @@ impl Ord for Node {
 impl Eq for Node {}
 
 pub fn find_path(octtree: &Octree32, start: TUVec3u32, end: TUVec3u32) -> Option<Vec<TUVec3u32>> {
-    log::info!("{start:?} and {end:?}");
+    // log::info!("{start:?} and {end:?}");
     if octtree.get(&start.0).is_some() || octtree.get(&end.0).is_some() {
         return None;
     }
@@ -87,27 +87,20 @@ pub fn find_path(octtree: &Octree32, start: TUVec3u32, end: TUVec3u32) -> Option
             let new_cost = edge_cost + cost;
 
             // calculate heuristic cost
-            let estimated_cost = heuristic(neighbor, end, start);
+            let neighboor_ground_distance = find_ground_distance(octtree, neighbor);
+            let estimated_cost = heuristic(neighbor, end, start, neighboor_ground_distance);
 
             let neighbor_index = match visited_list.entry(neighbor) {
                 Entry::Vacant(entry) => {
                     // This is the first time we're seeing this neighbor
                     let index = entry.index();
-                    entry.insert((
-                        node.index,
-                        new_cost,
-                        find_ground_distance(octtree, neighbor),
-                    ));
+                    entry.insert((node.index, new_cost, neighboor_ground_distance));
                     index
                 }
                 Entry::Occupied(mut e) => {
                     if e.get().1 > new_cost {
                         // We've found a better path to this neighbor
-                        e.insert((
-                            node.index,
-                            new_cost,
-                            find_ground_distance(octtree, neighbor),
-                        ));
+                        e.insert((node.index, new_cost, neighboor_ground_distance));
                         e.index()
                     } else {
                         // The existing path is better, do nothing
@@ -128,7 +121,7 @@ pub fn find_path(octtree: &Octree32, start: TUVec3u32, end: TUVec3u32) -> Option
     None
 }
 
-fn heuristic(neighbor: TUVec3u32, end: TUVec3u32, start: TUVec3u32) -> Cost {
+fn heuristic(neighbor: TUVec3u32, end: TUVec3u32, start: TUVec3u32, ground_distance: u32) -> Cost {
     // TODO: is this even the correct way to do distance I am so lost rn
     fn distance3(pos: TUVec3u32, target: TUVec3u32) -> f64 {
         (((pos.0.x as i64 - target.0.x as i64).pow(2)
@@ -137,7 +130,7 @@ fn heuristic(neighbor: TUVec3u32, end: TUVec3u32, start: TUVec3u32) -> Cost {
             .sqrt()
     }
 
-    distance3(neighbor, end) / distance3(start, end)
+    (distance3(neighbor, end) / distance3(start, end)) * 0.6 + (1. / ground_distance as f64) * 0.4
 }
 
 fn get_neighbors<'a>(
