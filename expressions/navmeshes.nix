@@ -70,7 +70,9 @@ stdenv.mkDerivation {
   phases = [ "buildPhase" ];
   buildPhase = (
     lib.concatLines (
-      builtins.map (name: "xvfb-run bspeater -d ${titanfall2}/vpk -n ${name} -o $out --display -v $TMPDIR") maps
+      builtins.map (
+        name: "xvfb-run bspeater -d ${titanfall2}/vpk -n ${name} -o $out --display -v $TMPDIR"
+      ) maps
     )
   );
 }

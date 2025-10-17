@@ -51,54 +51,81 @@
       in
       rec {
         formatter = native-pkgs.nixfmt-tree;
-        packages = {
-          bp-ort = pkgs.callPackage ./expressions/default.nix {
-            rust-bin = rust-overlay.lib.mkRustBin { } pkgs.buildPackages;
+        packages =
+          let
+            version = "0.1.5";
+          in
+          let
+            mkPluginBuildType =
+              plugin: buildType:
+              pkgs.callPackage ./expressions/plugins.nix {
+                rust-bin = rust-overlay.lib.mkRustBin { } pkgs.buildPackages;
+                inherit plugin version buildType;
+              };
+            mkPlugin = plugin: mkPluginBuildType plugin "release";
+          in
+          {
+            bp-ort = mkPluginBuildType "bp_ort" "debug";
+            ranim = mkPlugin "ranim";
+            octbots = mkPlugin "octbots";
+            packaged-mod = native-pkgs.callPackage ./expressions/packaged-mod.nix {
+              mod = self.packages.${system}.mod;
+              inherit version;
+            };
+            mod = native-pkgs.callPackage ./expressions/mod.nix {
+              plugins = native-pkgs.symlinkJoin {
+                name = "plugins";
+                # must have at least one plugin
+                paths = with self.packages.${system}; [
+                  bp-ort
+                  # octbots
+                  # ranim
+                ];
+              };
+              inherit version;
+            };
+            bspeater = native-pkgs.callPackage ./expressions/bspeater.nix {
+              rust-bin = rust-overlay.lib.mkRustBin { } native-pkgs.buildPackages;
+              inherit version;
+            };
+            default = self.packages.${system}.bp-ort;
+
+            tracy = native-pkgs.writeShellApplication {
+              name = "tracy";
+
+              runtimeInputs = [
+                native-pkgs.tracy
+              ];
+
+              text = ''
+                capture -o target/trace.tracy
+              '';
+            };
+
+            tracy-open = native-pkgs.writeShellApplication {
+              name = "tracy-open";
+
+              runtimeInputs = [
+                native-pkgs.tracy
+              ];
+
+              text = ''
+                DISPLAY=:0 :w
+                tracy target/trace.tracy
+              '';
+            };
+
+            navmeshes =
+              let
+                bspeater = self.packages.${system}.bspeater;
+                titanfall2 = catornot-flakes.packages.${system}.titanfall2;
+                tf2vpk = catornot-flakes.packages.${system}.tf2vpk;
+              in
+              native-pkgs.callPackage ./expressions/navmeshes.nix { inherit bspeater titanfall2 tf2vpk; };
+
+            win-shell = devShell.default;
+            native-shell = devShell.native;
           };
-          packaged-mod = pkgs.callPackage ./expressions/packaged-mod.nix {
-            bp-ort = self.packages.${system}.bp-ort;
-          };
-          bspeater = native-pkgs.callPackage ./expressions/bspeater.nix {
-            rust-bin = rust-overlay.lib.mkRustBin { } native-pkgs.buildPackages;
-          };
-          default = self.packages.${system}.bp-ort;
-
-          tracy = native-pkgs.writeShellApplication {
-            name = "tracy";
-
-            runtimeInputs = [
-              native-pkgs.tracy
-            ];
-
-            text = ''
-              capture -o target/trace.tracy
-            '';
-          };
-
-          tracy-open = native-pkgs.writeShellApplication {
-            name = "tracy-open";
-
-            runtimeInputs = [
-              native-pkgs.tracy
-            ];
-
-            text = ''
-              DISPLAY=:0 :w
-              tracy target/trace.tracy
-            '';
-          };
-
-          navmeshes =
-            let
-              bspeater = self.packages.${system}.bspeater;
-              titanfall2 = catornot-flakes.packages.${system}.titanfall2;
-              tf2vpk = catornot-flakes.packages.${system}.tf2vpk;
-            in
-            native-pkgs.callPackage ./expressions/navmeshes.nix { inherit bspeater titanfall2 tf2vpk; };
-
-          win-shell = devShell.default;
-          native-shell = devShell.native;
-        };
 
         devShell.default = pkgs.mkShell rec {
           nativeBuildInputs = with pkgs; [
