@@ -1,6 +1,7 @@
 {
   allowedCrate ? null,
   allowedCrates ? if allowedCrate == null then [ ] else [ allowedCrate ],
+  libCrates ? [ "shared" ],
   writeText,
 }:
 let
@@ -9,7 +10,7 @@ let
       throw "must have at least one crate"
     else
       builtins.concatStringsSep ", " (
-        builtins.map (crate: ''"${crate}"'') (allowedCrates ++ [ "shared" ])
+        builtins.map (crate: ''"${crate}"'') (allowedCrates ++ libCrates)
       );
 in
 writeText "cratePatche.patch" ''

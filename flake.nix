@@ -78,8 +78,8 @@
                 # must have at least one plugin
                 paths = with self.packages.${system}; [
                   bp-ort
-                  # octbots
-                  # ranim
+                  octbots
+                  ranim
                 ];
               };
               inherit version;
@@ -88,6 +88,7 @@
               rust-bin = rust-overlay.lib.mkRustBin { } native-pkgs.buildPackages;
               inherit version;
             };
+
             default = self.packages.${system}.bp-ort;
 
             tracy = native-pkgs.writeShellApplication {

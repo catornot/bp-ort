@@ -3,13 +3,14 @@
   rustPlatform,
   pkgs,
   rust-bin,
+  version,
 }:
 let
   cargoLock = (import ./cargo_lock.nix { });
 in
 rustPlatform.buildRustPackage (final: {
   name = "bspeater";
-  version = "0.1.0";
+  inherit version;
 
   rustToolchain = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ../rust-toolchain.toml;
   buildInputs = with pkgs; [
@@ -64,9 +65,8 @@ rustPlatform.buildRustPackage (final: {
     maintainers = [ "cat_or_not" ];
   };
 
-  # we need this since bspeater cannot be compiled for windows
   patches = [
-    ./only_bspeater.patch
+    (pkgs.callPackage ./crate_patch.nix { allowedCrate = "bspeater"; libCrates = []; })
   ];
 
   inherit cargoLock;
