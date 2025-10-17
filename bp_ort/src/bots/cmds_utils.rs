@@ -305,16 +305,53 @@ pub unsafe fn view_rate(
 
     // should maybe revist the consturction of ray
     let mut result: MaybeUninit<TraceResults> = MaybeUninit::zeroed();
-    (helper.sv_funcs.util_trace_line)(
-        &(v1 + GROUND_OFFSET),
-        &(v2 + GROUND_OFFSET),
-        TRACE_MASK_SHOT as i8,
-        TRACE_MASK_SHOT as i8,
-        0,
-        TRACE_MASK_SHOT,
-        TRACE_MASK_SHOT,
-        result.as_mut_ptr(),
-    );
+    let mut ray = Ray {
+        start: VectorAligned { vec: v1, w: 0. },
+        delta: VectorAligned {
+            vec: v2 - v1 + GROUND_OFFSET,
+            w: 0.,
+        },
+        offset: VectorAligned {
+            vec: Vector3::new(0., 0., 0.),
+            w: 0.,
+        },
+        unk3: 0.,
+        unk4: 0,
+        unk5: 0.,
+        unk6: 1103806595072,
+        unk7: 0.,
+        is_ray: true,
+        is_swept: false,
+        is_smth: false,
+        flags: 0,
+        unk8: 0,
+    };
+
+    if corretness {
+        let filter: *const CTraceFilterSimple = &CTraceFilterSimple {
+            vtable: helper.sv_funcs.simple_filter_vtable,
+            unk: 0,
+            pass_ent: player.cast(),
+            should_hit_func: std::ptr::null(),
+            collision_group: TRACE_COLLISION_GROUP_BLOCK_WEAPONS,
+        };
+
+        // could use this to get 100% result and trace ray for a aproximation of failure
+        (helper.engine_funcs.trace_ray_filter)(
+            (*helper.sv_funcs.ctraceengine) as *const libc::c_void,
+            &mut ray,
+            TRACE_MASK_SHOT as u32,
+            filter.cast(),
+            result.as_mut_ptr(),
+        );
+    } else {
+        (helper.engine_funcs.trace_ray)(
+            (*helper.sv_funcs.ctraceengine) as *const libc::c_void,
+            &mut ray,
+            TRACE_MASK_SHOT as u32,
+            result.as_mut_ptr(),
+        );
+    }
     let result = result.assume_init();
 
     if !result.start_solid && result.fraction_left_solid == 0.0 {
