@@ -350,6 +350,7 @@ pub struct CUtlMemory<T: ?Sized> {
 
 offset_functions! {
     ENGINE_FUNCTIONS + EngineFunctions for WhichDll::Engine => {
+        base = *const c_void where offset(0x0);
         client_array = *mut CClient where offset(0x12A53F90);
         host_client = *mut *mut CClient where offset(0x13158990);
         cmd_source = *const isize where offset(0x12A53F90); // when 1 host_client is invalid
@@ -473,6 +474,7 @@ offset_functions! {
 
 offset_functions! {
     CLIENT_FUNCTIONS + ClientFunctions for WhichDll::Client => {
+        base = *const c_void where offset(0x0);
         get_c_player_by_index = unsafe extern "C" fn(i32) -> *mut C_Player where offset(0x348650);
         get_local_c_player = unsafe extern "C" fn() -> *mut C_Player where offset(0x14ef40);
     }

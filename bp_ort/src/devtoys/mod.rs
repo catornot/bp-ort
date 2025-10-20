@@ -3,6 +3,7 @@ use rrplug::{
     mid::engine::concommands::find_concommand,
     prelude::*,
 };
+use shared::bindings::{CLIENT_FUNCTIONS, SERVER_FUNCTIONS};
 use std::{cell::RefCell, convert::Infallible};
 
 use crate::bindings::ENGINE_FUNCTIONS;
@@ -129,6 +130,16 @@ impl Plugin for DevToys {
                 token,
             )
             .unwrap();
+
+        engine
+            .register_concommand(
+                "concommand_func_offset",
+                concommand_func_offset,
+                "returns the offset from base for any concommand",
+                0,
+                token,
+            )
+            .unwrap();
     }
 
     fn runframe(&self, token: EngineToken) {
@@ -225,6 +236,35 @@ fn remove_max(cmd: CCommandResult) -> Option<Infallible> {
     convar.m_bHasMax = false;
     convar.m_fMinVal = f32::MIN;
     convar.m_fMaxVal = f32::MAX;
+
+    None
+}
+
+#[rrplug::concommand]
+fn concommand_func_offset(cmd: CCommandResult) -> Option<Infallible> {
+    let concommand_str = cmd.get_arg(0)?;
+    let dll = cmd.get_arg(1)?;
+
+    let base = match dll {
+        "client" => CLIENT_FUNCTIONS.wait().base as isize,
+        "engine" => ENGINE_FUNCTIONS.wait().base as isize,
+        "server" => SERVER_FUNCTIONS.wait().base as isize,
+        _ => {
+            log::warn!("no matching dll");
+            0
+        }
+    };
+
+    let Some(concommmand) = find_concommand(concommand_str).ok() else {
+        log::error!("this cmd doesn't exist");
+        return None;
+    };
+
+    if let Some(func) = concommmand.m_pCommandCallback {
+        log::info!("it's at 0x{:x}", func as usize as isize - base);
+    } else {
+        log::error!("this cmd doesn't have a callback");
+    }
 
     None
 }
