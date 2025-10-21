@@ -1,10 +1,11 @@
 use bevy::{input::common_conditions::input_just_pressed, prelude::*};
 use bevy_fly_camera::FlyCamera;
 use oktree::prelude::*;
-use std::sync::Arc;
+use std::{iter, ops::BitAnd, sync::Arc};
 
 use crate::{
-    CELL_SIZE, ChunkCells, DebugAmount, OFFSET, ProcessingStep, WireMe,
+    ATTRIBUTE_PRIMATIVE_TYPE, ATTRIBUTE_UNIQUE_CONTENTS, CELL_SIZE, ChunkCells, DebugAmount,
+    OFFSET, PrimitiveType, ProcessingStep, WireMe, WorldMesh,
     async_pathfinding::JobMarket,
     behavior::{self, Behavior, init_pathfinding},
 };
@@ -27,6 +28,9 @@ pub struct PathfindingPoints {
 #[derive(Component)]
 struct PointsText;
 
+#[derive(Component)]
+struct MeshInfoText;
+
 pub fn debug_plugin(app: &mut App) {
     app.add_systems(
         Update,
@@ -38,6 +42,7 @@ pub fn debug_plugin(app: &mut App) {
             add_navmesh_resource
                 .run_if(in_state(ProcessingStep::Done))
                 .run_if(|res: Option<Res<NavmeshRes>>| res.is_none()),
+            debug_contents,
         ),
     )
     .add_systems(Startup, setup_debug_ui)
@@ -95,7 +100,22 @@ fn setup_debug_ui(mut commands: Commands) {
         .with_child((text_bundles.clone(), TextSpan("None".into())))
         .id();
 
-    commands.entity(root).add_children(&[text_points]);
+    let mesh_info = commands
+        .spawn((
+            MeshInfoText,
+            text_bundles.clone(),
+            TextLayout::default(),
+            Text::new("Mesh"),
+        ))
+        .with_child((text_bundles.clone(), TextSpan(" ".into())))
+        .with_child((text_bundles.clone(), TextSpan("N/A".into())))
+        .with_child((text_bundles.clone(), TextSpan(" ".into())))
+        .with_child((text_bundles.clone(), TextSpan("N/A".into())))
+        .id();
+
+    commands
+        .entity(root)
+        .add_children(&[text_points, mesh_info]);
 }
 
 fn update_pos_text(
@@ -215,4 +235,118 @@ fn add_navmesh_resource(mut commands: Commands, cells: Res<ChunkCells>) {
         init_pathfinding(Arc::clone(&navmesh)),
         JobMarket::new(navmesh),
     ));
+}
+
+fn debug_contents(
+    mut ray_cast: MeshRayCast,
+    camera: Query<&Transform, (With<FlyCamera>, Without<WorldMesh>)>,
+    world_meshes: Query<&Mesh3d, (With<WorldMesh>, Without<FlyCamera>)>,
+    meshes: Res<Assets<Mesh>>,
+    mut text: Query<Entity, With<MeshInfoText>>,
+    mut writer: TextUiWriter,
+    mut gizmos: Gizmos,
+) -> Result<(), BevyError> {
+    let Transform {
+        translation,
+        rotation,
+        scale: _,
+    } = *camera.single()?;
+
+    let Some(result) = ray_cast
+        .cast_ray(
+            Ray3d::new(
+                translation,
+                // Dir3::new(
+                //     Transform::from_rotation(rotation)
+                //         .transform_point(Vec3::X)
+                //         .normalize(),
+                // )
+                // .unwrap_or(),
+                Dir3::X,
+            ),
+            &MeshRayCastSettings::default(),
+        )
+        .first()
+    else {
+        bevy::log::warn!("couldn't get anything in this ray cast odd");
+        return Ok(());
+    };
+
+    gizmos.line(
+        translation + Vec3::new(0., -10., 0.),
+        result.1.point,
+        Color::srgb_from_array([1.0, 1.0, 1.0]),
+    );
+
+    if let Some(mesh) = world_meshes
+        .get(result.0)
+        .ok()
+        .and_then(|mesh| meshes.get(mesh.id()))
+    {
+        let ty = mesh
+            .attribute(ATTRIBUTE_PRIMATIVE_TYPE)
+            .and_then(|values| <[u8; 4]>::try_from(values.get_bytes().get(0..4)?).ok())
+            .map(u32::from_ne_bytes)
+            .map(PrimitiveType::try_from)
+            .and_then(|maybe_err| maybe_err.ok())
+            .map(|ty| match ty {
+                PrimitiveType::Brush => "Brush",
+                PrimitiveType::Tricoll => "Tricoll",
+                PrimitiveType::Prop => "Prop",
+            })
+            .unwrap_or("N/A");
+
+        const FLAGS: [(&str, i32); 31] = [
+            ("EMPTY\n", 0x00),
+            ("SOLID\n", 0x01),
+            ("WINDOW\n", 0x02),
+            ("AUX\n", 0x04),
+            ("GRATE\n", 0x08),
+            ("SLIME\n", 0x10),
+            ("WATER\n", 0x20),
+            ("WINDOW_NO_COLLIDE\n", 0x40),
+            ("ISOPAQUE\n", 0x80),
+            ("TEST_FOG_VOLUME\n", 0x100),
+            ("UNUSED_1\n", 0x200),
+            ("BLOCK_LIGHT\n", 0x400),
+            ("TEAM_1\n", 0x800),
+            ("TEAM_2\n", 0x1000),
+            ("IGNORE_NODRAW_OPAQUE\n", 0x2000),
+            ("MOVEABLE\n", 0x4000),
+            ("PLAYER_CLIP\n", 0x10000),
+            ("MONSTER_CLIP\n", 0x20000),
+            ("BRUSH_PAINT\n", 0x40000),
+            ("BLOCK_LOS\n", 0x80000),
+            ("NO_CLIMB\n", 0x100000),
+            ("TITAN_CLIP\n", 0x200000),
+            ("BULLET_CLIP\n", 0x400000),
+            ("UNUSED_5\n", 0x800000),
+            ("ORIGIN\n", 0x1000000),
+            ("MONSTER\n", 0x2000000),
+            ("DEBRIS\n", 0x4000000),
+            ("DETAIL\n", 0x8000000),
+            ("TRANSLUCENT\n", 0x10000000),
+            ("LADDER\n", 0x20000000),
+            ("HITBOX\n", 0x40000000),
+        ];
+
+        let contents = mesh
+            .attribute(ATTRIBUTE_UNIQUE_CONTENTS)
+            .and_then(|values| <[u8; 4]>::try_from(values.get_bytes().get(0..4)?).ok())
+            .map(i32::from_ne_bytes)
+            .unwrap_or(0);
+
+        let contents = FLAGS
+            .iter()
+            .zip([contents; FLAGS.len()].iter())
+            .filter_map(|(flag, contents)| flag.1.bitand(*contents).eq(&flag.1).then_some(flag.0))
+            .collect::<String>();
+
+        for ent in &mut text {
+            *writer.text(ent, 4) = ty.to_string();
+            *writer.text(ent, 2) = contents.to_string();
+        }
+    }
+
+    Ok(())
 }

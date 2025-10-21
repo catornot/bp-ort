@@ -30,20 +30,24 @@ pub fn geoset_to_meshes(
         })
         .filter_map(|primative| {
             let flag = Contents::SOLID as i32 | Contents::PLAYER_CLIP as i32;
+            let no_flag = Contents::WINDOW_NO_COLLIDE as i32;
             // if it doesn't contain any
-            if unique_contents[primative as usize & 0xFF] & flag == 0 {
+            if unique_contents[primative as usize & 0xFF] & flag == 0
+                || unique_contents[primative as usize & 0xFF] & no_flag != 0
+            {
                 None
             } else {
                 Some((
                     PrimitiveType::try_from((primative >> 29) & 0x7)
                         .expect("invalid primative type"),
                     ((primative >> 8) & 0x1FFFFF) as usize,
+                    unique_contents[primative as usize & 0xFF],
                 ))
             }
         })
-        .collect::<std::collections::HashSet<(PrimitiveType, usize)>>()
+        .collect::<std::collections::HashSet<(PrimitiveType, usize, i32)>>()
         .into_iter()
-        .filter_map(|(ty, index)| {
+        .filter_map(|(ty, index, contents)| {
             let mut pushing_vertices: Vec<Vec3> = Vec::new();
             let mut indices = Vec::new();
 
@@ -84,6 +88,14 @@ pub fn geoset_to_meshes(
                 .with_inserted_attribute(
                     Mesh::ATTRIBUTE_UV_0,
                     pushing_vertices.iter().map(|_| Vec2::ONE).collect_vec(),
+                )
+                .with_inserted_attribute(
+                    ATTRIBUTE_UNIQUE_CONTENTS,
+                    vec![contents; pushing_vertices.len()],
+                )
+                .with_inserted_attribute(
+                    ATTRIBUTE_PRIMATIVE_TYPE,
+                    vec![ty as u32; pushing_vertices.len()],
                 )
                 .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pushing_vertices)
                 .with_inserted_indices(bevy::render::mesh::Indices::U32(indices)),

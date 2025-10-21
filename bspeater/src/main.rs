@@ -7,7 +7,11 @@ use bevy::{
     asset::RenderAssetUsages,
     pbr::wireframe::WireframeConfig,
     prelude::*,
-    render::{RenderPlugin, settings::WgpuSettings},
+    render::{
+        RenderPlugin,
+        mesh::{MeshVertexAttribute, VertexFormat},
+        settings::WgpuSettings,
+    },
 };
 use bevy_fly_camera::{FlyCamera, FlyCameraPlugin};
 use clap::Parser;
@@ -38,8 +42,16 @@ pub const UNPACK: &str = "vpk";
 pub const UNPACK_MERGED: &str = "vpk_merged";
 pub const UNPACK_COMMON: &str = "common_vpk";
 
+pub const ATTRIBUTE_PRIMATIVE_TYPE: MeshVertexAttribute =
+    MeshVertexAttribute::new("Primative_Type", 2001, VertexFormat::Uint32);
+pub const ATTRIBUTE_UNIQUE_CONTENTS: MeshVertexAttribute =
+    MeshVertexAttribute::new("Unique_Contents", 2000, VertexFormat::Sint32);
+
 trait SeekRead: Seek + Read {}
 impl<T: Seek + Read> SeekRead for T {}
+
+#[derive(Component)]
+struct WorldMesh;
 
 fn read_i32(reader: &mut dyn SeekRead) -> Result<i32, io::Error> {
     let mut int = [0; size_of::<i32>()];
@@ -338,6 +350,7 @@ fn main() -> anyhow::Result<()> {
                         .add(mesh),
                 ),
                 MeshMaterial3d(materials[i % 3].clone()),
+                WorldMesh,
             ))
         })
         .collect::<Vec<_>>()
