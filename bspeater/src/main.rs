@@ -358,8 +358,12 @@ fn main() -> anyhow::Result<()> {
         app.world_mut().spawn(mesh);
     }
 
-    app.add_plugins(debug::debug_plugin)
-        .add_systems(Startup, calc_extents)
+    // not debugging needed when we don't even see an output
+    if display {
+        app.add_plugins(debug::debug_plugin);
+    }
+
+    app.add_systems(Startup, calc_extents)
         .add_systems(
             Update,
             (
