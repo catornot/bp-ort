@@ -7,7 +7,7 @@
 let
 in
 pkgs.stdenv.mkDerivation rec {
-  pname = "bp_ort-mod";
+  pname = "bp_ort";
   inherit version;
 
   manifest = pkgs.writeText "manifest.json" ''

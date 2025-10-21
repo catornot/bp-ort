@@ -53,7 +53,7 @@
         formatter = native-pkgs.nixfmt-tree;
         packages =
           let
-            version = "0.1.5";
+            version = "0.1.6";
           in
           let
             mkPluginBuildType =
