@@ -35,13 +35,18 @@ pub fn debug_plugin(app: &mut App) {
     app.add_systems(
         Update,
         (
+            #[cfg(not(feature = "render"))]
             debug_world,
+            #[cfg(not(feature = "render"))]
             debug_pathfinding.run_if(resource_exists::<NavmeshRes>),
+            #[cfg(not(feature = "render"))]
             update_pos_text,
+            #[cfg(not(feature = "render"))]
             add_pathfinding_points.run_if(input_just_pressed(KeyCode::Enter)),
             add_navmesh_resource
                 .run_if(in_state(ProcessingStep::Done))
                 .run_if(|res: Option<Res<NavmeshRes>>| res.is_none()),
+            #[cfg(not(feature = "render"))]
             debug_contents,
         ),
     )

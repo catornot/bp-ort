@@ -4,14 +4,19 @@
 use anyhow::Context;
 use avian3d::prelude::*;
 use bevy::{
+    a11y::AccessibilityPlugin,
     asset::RenderAssetUsages,
+    input::InputPlugin,
+    log::LogPlugin,
     pbr::wireframe::WireframeConfig,
     prelude::*,
     render::{
         RenderPlugin,
-        mesh::{MeshVertexAttribute, VertexFormat},
+        mesh::{MeshPlugin, MeshVertexAttribute, VertexFormat},
         settings::WgpuSettings,
     },
+    scene::ScenePlugin,
+    state::app::StatesPlugin,
 };
 use bevy_fly_camera::{FlyCamera, FlyCameraPlugin};
 use clap::Parser;
@@ -289,20 +294,27 @@ fn main() -> anyhow::Result<()> {
 
     let mut app = App::new();
 
+    if display {
+        app.add_plugins(DefaultPlugins)
+    } else {
+        app.add_plugins((
+            MinimalPlugins,
+            AssetPlugin::default(),
+            TransformPlugin,
+            StatesPlugin,
+            MeshPlugin,
+            LogPlugin::default(),
+            ScenePlugin,
+            InputPlugin,
+            // MaterialPlugin::<StandardMaterial>::default(),
+        ))
+        .init_asset::<StandardMaterial>()
+        .init_asset::<Mesh>()
+        .init_asset::<Shader>()
+    };
+
     app.add_plugins((
         // TODO: actually make this non dependent on a display output since rn it needs a wayland compositor or x server to run lol
-        DefaultPlugins.set(RenderPlugin {
-            render_creation: if display.not() {
-                WgpuSettings {
-                    backends: None,
-                    ..default()
-                }
-                .into()
-            } else {
-                Default::default()
-            },
-            ..default()
-        }),
         FlyCameraPlugin,
         PhysicsPlugins::default(),
         PhysicsDebugPlugin::default(),
@@ -362,6 +374,7 @@ fn main() -> anyhow::Result<()> {
                         .expect("this should exist probably")
                         .add(mesh),
                 ),
+                #[cfg(not(feature = "render"))]
                 MeshMaterial3d(materials[i % 3].clone()),
                 WorldMesh,
             ))

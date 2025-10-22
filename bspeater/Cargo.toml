@@ -6,7 +6,6 @@ edition = "2024"
 [dependencies]
 # sourcepak = { version = "0.3.0", features = ["revpk"] }
 avian3d = { version = "0.3.*", features = ["simd", "debug-plugin"] }
-bevy = { version = "0.16.*", features = ["wayland", "x11"] }
 bevy_fly_camera = "0.16.*"
 bevy_gltf_export = { git = "https://github.com/luca-della-vedova/bevy_gltf_export.git", version = "0.1.0" }
 clap = { version = "4.5.39", features = ["derive"] }
@@ -22,3 +21,36 @@ flume = { version = "0.11.1", default-features = false }
 bonsai-bt = "0.10.0"
 indexmap = "2.11.4"
 rustc-hash = "2.1.1"
+
+[dependencies.bevy]
+version = "0.16.1"
+default-features = false
+features = [
+  "bevy_asset",
+  "bevy_state",
+  "bevy_color",
+  # "bevy_gltf",
+  "multi_threaded",
+  "default_font",
+  "sysinfo_plugin",
+  # 3d
+  "bevy_picking",
+  "bevy_mesh_picking_backend",
+]
+
+[features]
+# doesn't do shit anyway since the gltf exporter requires render
+default=["render"]
+render = [
+  "bevy/bevy_render",
+  "bevy/bevy_winit",
+  "bevy/x11",
+  "bevy/wayland",
+  "bevy/bevy_pbr",
+  "bevy/bevy_core_pipeline",
+  "bevy/bevy_text",
+  "bevy/bevy_ui",
+  "bevy/bevy_gizmos",
+  "bevy/tonemapping_luts",
+  "bevy/smaa_luts",
+]
