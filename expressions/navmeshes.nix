@@ -21,7 +21,7 @@
     "mp_relic02"
     "mp_rise"
     "mp_wargames"
-    # "mp_lobby" # not in mp_lobby vpk lol it's in commmon
+    "mp_lobby"
     "mp_lf_deck"
     "mp_lf_meadow"
     "mp_lf_stacks"

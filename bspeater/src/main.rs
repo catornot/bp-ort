@@ -164,6 +164,8 @@ fn main() -> anyhow::Result<()> {
             .arg("*")
             .arg("--include")
             .arg("models/")
+            .arg("--include")
+            .arg("maps/")
             .arg(vpk_dir.join(UNPACK_COMMON))
             .arg(game_dir.join("englishclient_mp_common.bsp.pak000_dir.vpk"))
             .spawn()
@@ -177,36 +179,47 @@ fn main() -> anyhow::Result<()> {
             .context("tried merging common vpk")?;
     }
 
-    let mut bsp = if !vpk_dir.join(&map_name).with_extension("bsp").exists() {
-        Command::new("tf2-vpkunpack")
-            .arg("--exclude")
-            .arg("*")
-            .arg("--include")
-            .arg("maps")
-            .arg("--include")
-            .arg("models")
-            .arg(vpk_dir.join(UNPACK))
-            .arg(game_dir.join(name))
-            .spawn()?
-            .wait_with_output()
-            .context("tried unpacking vpks")?;
+    let mut bsp =
+        if !vpk_dir.join(&map_name).with_extension("bsp").exists() && map_name != "mp_lobby" {
+            Command::new("tf2-vpkunpack")
+                .arg("--exclude")
+                .arg("*")
+                .arg("--include")
+                .arg("maps")
+                .arg("--include")
+                .arg("models")
+                .arg(vpk_dir.join(UNPACK))
+                .arg(game_dir.join(name))
+                .spawn()?
+                .wait_with_output()
+                .context("tried unpacking vpks")?;
 
-        copy_dir_all(vpk_dir.join(UNPACK), vpk_dir.join(UNPACK_MERGED))
-            .context("tried merging vpks")?;
+            copy_dir_all(vpk_dir.join(UNPACK), vpk_dir.join(UNPACK_MERGED))
+                .context("tried merging vpks")?;
 
-        File::open(
-            vpk_dir
-                .join(UNPACK_MERGED)
-                .join("maps")
-                .join(&map_name)
-                .with_extension("bsp"),
-        )
-        .context("tried getting unpacked map")?
-    } else {
-        std::fs::create_dir_all(vpk_dir.join(UNPACK)).context("tried creating unpack dir")?;
-        File::open(vpk_dir.join(&map_name).with_extension("bsp"))
-            .context("tried getting custom bsp")?
-    };
+            File::open(
+                vpk_dir
+                    .join(UNPACK_MERGED)
+                    .join("maps")
+                    .join(&map_name)
+                    .with_extension("bsp"),
+            )
+            .context("tried getting unpacked map")?
+        } else if map_name == "mp_lobby" {
+            std::fs::create_dir_all(vpk_dir.join(UNPACK)).context("tried creating unpack dir")?;
+            File::open(
+                vpk_dir
+                    .join(UNPACK_MERGED)
+                    .join("maps")
+                    .join("mp_lobby")
+                    .with_extension("bsp"),
+            )
+            .context("tried getting mp_lobby")?
+        } else {
+            std::fs::create_dir_all(vpk_dir.join(UNPACK)).context("tried creating unpack dir")?;
+            File::open(vpk_dir.join(&map_name).with_extension("bsp"))
+                .context("tried getting custom bsp")?
+        };
 
     {
         let mut current_vpk =
