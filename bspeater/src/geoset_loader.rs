@@ -1,5 +1,6 @@
 use crate::*;
 use bevy::math::DVec3;
+use rayon::prelude::*;
 
 pub fn geoset_to_meshes(
     BSPData {
@@ -46,7 +47,8 @@ pub fn geoset_to_meshes(
             }
         })
         .collect::<std::collections::HashSet<(PrimitiveType, usize, i32)>>()
-        .into_iter()
+        // maybe this doesn't improve anything but it's cool
+        .into_par_iter()
         .filter_map(|(ty, index, contents)| {
             let mut pushing_vertices: Vec<Vec3> = Vec::new();
             let mut indices = Vec::new();
