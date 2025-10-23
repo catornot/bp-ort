@@ -6,18 +6,19 @@ use bonsai_bt::{
 };
 use itertools::Itertools;
 use parking_lot::RwLock;
+use parry3d::shape::Capsule;
+use parry3d::{self, query::RayCast};
 use rrplug::{
     bindings::class_types::{cbaseentity::CBaseEntity, client::CClient, cplayer::CPlayer},
     prelude::*,
 };
 use shared::{
-    bindings::{CUserCmd, SERVER_FUNCTIONS},
+    bindings::{Action as MoveAction, CUserCmd, SERVER_FUNCTIONS},
     cmds_helper::CUserCmdHelper,
-    utils::nudge_type,
+    utils::{lookup_ent, nudge_type},
 };
 use std::{
     collections::{HashMap, VecDeque},
-    ops::Sub,
     sync::{Arc, LazyLock},
 };
 
@@ -36,6 +37,7 @@ struct BotBrain {
     path_next_request: f32,
     path: VecDeque<Vector3>,
     origin: Vector3,
+    abs_origin: Vector3,
     next_cmd: CUserCmd,
     last_alive_state: bool,
     needs_new_path: bool,
@@ -52,7 +54,7 @@ pub enum BotAction {
     CanMove,
     Move,
     IsJump,
-    Jump,
+    Jump(i32),
     FinishMove,
 }
 
@@ -66,7 +68,7 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
         Action(BotAction::Move),
         AlwaysSucceed(Box::new(Sequence(vec![
             Action(BotAction::IsJump),
-            Action(BotAction::Jump),
+            Action(BotAction::Jump(0)),
         ]))),
         Action(BotAction::FinishMove),
     ]);
@@ -81,7 +83,7 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
         Action(BotAction::Move),
         AlwaysSucceed(Box::new(Sequence(vec![
             Action(BotAction::IsJump),
-            Action(BotAction::Jump),
+            Action(BotAction::Jump(0)),
         ]))),
         Action(BotAction::FinishMove),
     ]);
@@ -109,6 +111,7 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
             path: VecDeque::new(),
             path_next_request: 0.,
             origin: Vector3::ZERO,
+            abs_origin: Vector3::ZERO,
             needs_new_path: true,
         },
     ));
@@ -121,8 +124,23 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
     };
 
     let mut v = Vector3::ZERO;
+    unsafe {
+        (helper.sv_funcs.calc_absolute_velocity)(
+            nudge_type::<&CPlayer>(bot),
+            &nudge_type::<*const CPlayer>(bot),
+            0,
+            0,
+        );
+        (helper.sv_funcs.calc_origin)(
+            nudge_type::<&CPlayer>(bot),
+            &nudge_type::<*const CPlayer>(bot),
+            0,
+            0,
+        );
+    };
     bt.blackboard_mut().next_cmd = CUserCmd::new_empty(helper);
     bt.blackboard_mut().origin = unsafe { *bot.get_origin(&mut v) };
+    bt.blackboard_mut().abs_origin = bot.m_vecAbsOrigin;
 
     let is_alive = unsafe { (helper.sv_funcs.is_alive)(nudge_type::<&CBaseEntity>(bot)) } == 1;
     if is_alive != bt.blackboard().last_alive_state {
@@ -247,69 +265,50 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
             unsafe {
                 bot.get_forward_vector(&mut forward_vector, std::ptr::null(), std::ptr::null())
             };
-            let forward_vector = Vec3::new(forward_vector.x, forward_vector.y, forward_vector.z);
+            let forward_vector = Vec2::new(forward_vector.x, forward_vector.y);
 
-            // let back = -Vec3::new(forward_vector.x, forward_vector.y, 0.)
-            //     .try_into()
-            //     .unwrap_or(Dir3::NEG_Z);
-            // let up = Dir3::Y;
-            // let right = up
-            //     .cross(back.into())
-            //     .try_normalize()
-            //     .unwrap_or_else(|| up.any_orthonormal_vector());
-            // let up = back.cross(right);
-            // let move_ = Vector3::from(
-            //     Quat::from_mat3(&Mat3::from_cols(right, up, back.into()))
-            //         .mul_vec3(Vec3::X)
-            //         .to_array(),
-            // );
+            let angle = -forward_vector.angle_to(Vec2::new(
+                brain.origin.x - target.x,
+                brain.origin.y - target.y,
+            ));
 
-            fn dir(origin: Vector3, target: Vector3) -> Vec3 {
-                Vec3::new(origin.x, origin.y, origin.z) - Vec3::new(target.x, target.y, target.z)
+            let move2d = -Vec2::new(angle.cos(), angle.sin());
+
+            let move_ = Vector3::from(move2d.extend(0.).to_array());
+
+            let debug = crate::ENGINE_INTERFACES.wait().debug_overlay;
+            unsafe {
+                debug.AddLineOverlay(
+                    &brain.origin,
+                    &(brain.origin + move_ * Vector3::new(30., 30., 30.)),
+                    200,
+                    100,
+                    150,
+                    true,
+                    0.01,
+                )
             }
 
-            pub fn look_at(origin: Vector3, target: Vector3) -> [f32; 3] {
-                let diff = target - origin;
-                let angley = diff.y.atan2(diff.x);
-                let anglex = diff.z.atan2((diff.x.powi(2) + diff.y.powi(2)).sqrt());
-
-                [-anglex, angley, 0.]
-            }
-
-            let v = -Vec3::from(dir(brain.origin, target));
-
-            let dot = v.normalize().dot(forward_vector.normalize()).atan();
-            // let dot = forward_vector.angle_between(v);
-
-            // let move_ = Vector3::new(
-            //     -forward_vector.x * (dot).cos(),
-            //     forward_vector.y * (dot).sin(),
-            //     0.,
-            // );
-            // let move_ = Vector3::new(dot.x, dot.y, dot.z);
-            let move_ = Vector3::from(
-                (Vec2::new(dot.sub(3.14 / 2.).cos(), dot.sub(-3.14 / 2.).sin()).extend(0.)
-                    - forward_vector)
-                    .to_array(),
-            );
-            // let move_ = Vector3::from((Vec2::new(dot.cos(), -dot.sin()).extend(0.)).to_array());
-            // let move_ = v.sub(forward_vector).to_array().into();
-
-            log::info!("going to {move_}");
-            log::info!("dot to {dot}");
-            log::info!("forward to {forward_vector}");
-
-            brain.next_cmd.move_ = look_at(brain.origin, target).into();
+            brain.next_cmd.move_ = move_;
+            brain.next_cmd.buttons |= MoveAction::Speed as u32;
 
             (Status::Success, 0.)
         }
         BotAction::IsJump => match brain.path.front() {
-            Some(point) if point.z < brain.origin.z - 2. => (Status::Success, 0.),
+            Some(point) if point.z > brain.origin.z => (Status::Success, 0.),
             Some(_) => (Status::Failure, 0.),
             None => (Status::Failure, 0.),
         },
-        BotAction::Jump => {
-            brain.next_cmd.move_.z = 1.;
+        BotAction::Jump(mut frames) => {
+            frames += 1;
+
+            if frames % 6 < 3
+                && (bot.m_vecAbsVelocity.z - 5. <= 0.
+                    || lookup_ent(bot.m_hGroundEntity, helper.sv_funcs).is_some())
+            {
+                brain.next_cmd.move_.z = 1.;
+                brain.next_cmd.buttons |= MoveAction::Jump as u32;
+            }
 
             (Status::Success, 0.)
         }
@@ -318,8 +317,15 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
                 break '_move (Status::Failure, 0.);
             };
 
-            if ((brain.origin.x - target.x).powi(2) + (brain.origin.y - target.y).powi(2)).sqrt()
-                < 40.
+            if Capsule::new_z(50., 25.)
+                .transform_by(&[brain.origin.x, brain.origin.y, brain.origin.z].into())
+                .intersects_local_ray(
+                    &parry3d::query::Ray::new(
+                        [target.x, target.y, target.z].into(),
+                        [0., 0., 1.].into(),
+                    ),
+                    0.01,
+                )
             {
                 brain.path.pop_front();
             }

@@ -78,7 +78,7 @@ pub fn find_path(octtree: &Octree32, start: TUVec3u32, end: TUVec3u32) -> Option
 
         // Check if we've reached the goal
         if end == node_pos {
-            return get_path(visited_list, node.index, start_index);
+            return get_path(visited_list, node.index, start_index, octtree);
         }
 
         for (neighbor, edge_cost) in get_neighbors(octtree, &visited_list, &node_pos) {
@@ -88,7 +88,7 @@ pub fn find_path(octtree: &Octree32, start: TUVec3u32, end: TUVec3u32) -> Option
 
             // calculate heuristic cost
             let neighboor_ground_distance = find_ground_distance(octtree, neighbor);
-            let estimated_cost = heuristic(neighbor, end, start, neighboor_ground_distance);
+            let estimated_cost = heuristic(neighbor, end, start);
 
             let neighbor_index = match visited_list.entry(neighbor) {
                 Entry::Vacant(entry) => {
@@ -121,8 +121,7 @@ pub fn find_path(octtree: &Octree32, start: TUVec3u32, end: TUVec3u32) -> Option
     None
 }
 
-fn heuristic(neighbor: TUVec3u32, end: TUVec3u32, start: TUVec3u32, ground_distance: u32) -> Cost {
-    // TODO: is this even the correct way to do distance I am so lost rn
+fn heuristic(neighbor: TUVec3u32, end: TUVec3u32, start: TUVec3u32) -> Cost {
     fn distance3(pos: TUVec3u32, target: TUVec3u32) -> f64 {
         (((pos.0.x as i64 - target.0.x as i64).pow(2)
             + (pos.0.y as i64 - target.0.y as i64).pow(2)
@@ -130,7 +129,7 @@ fn heuristic(neighbor: TUVec3u32, end: TUVec3u32, start: TUVec3u32, ground_dista
             .sqrt()
     }
 
-    (distance3(neighbor, end) / distance3(start, end)) * 0.6 + (1. / ground_distance as f64) * 0.4
+    distance3(neighbor, end) / distance3(start, end)
 }
 
 fn get_neighbors<'a>(
@@ -174,12 +173,27 @@ fn get_neighbors<'a>(
     .collect()
 }
 
-fn get_path(visited_list: VisitedList, mut index: usize, start: usize) -> Option<Vec<TUVec3u32>> {
+fn get_path(
+    visited_list: VisitedList,
+    mut index: usize,
+    start: usize,
+    octtree: &Octree32,
+) -> Option<Vec<TUVec3u32>> {
     let mut path = Vec::new();
 
     while index != start {
         if let Some((pos, &(parent_index, _, _))) = visited_list.get_index(index) {
-            path.push(*pos);
+            path.push(
+                (pos.0.z.saturating_sub(MAX_DISTANCE.saturating_sub(1))..=pos.0.z)
+                    .rev()
+                    .find(|z| {
+                        octtree
+                            .get(&TUVec3::new(pos.0.x, pos.0.y, z.saturating_sub(1)))
+                            .is_some()
+                    })
+                    .map(|z| TUVec3u32::new(pos.0.x, pos.0.y, z))
+                    .unwrap_or(*pos),
+            );
             index = parent_index
         } else {
             return None;
@@ -197,6 +211,7 @@ fn get_path(visited_list: VisitedList, mut index: usize, start: usize) -> Option
 const MAX_DISTANCE: u32 = 8;
 fn find_ground_distance(octtree: &Octree<u32, TUVec3u32>, point: TUVec3u32) -> u32 {
     (point.0.z.saturating_sub(MAX_DISTANCE)..point.0.z)
+        .rev()
         .position(|z| octtree.get(&TUVec3::new(point.0.x, point.0.y, z)).is_some())
         .unwrap_or(MAX_DISTANCE as usize) as u32
 }
