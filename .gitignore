@@ -2,7 +2,5 @@
 /result
 /result-1
 /output
-bindgen_check.h
-cbindgen.toml
 justfile
 bacon.toml
