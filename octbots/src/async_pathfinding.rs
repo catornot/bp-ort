@@ -118,7 +118,7 @@ fn worker(
     }
 }
 
-fn vector3_to_tuvec(cell_size: f32, origin: Vector3) -> TUVec3u32 {
+pub fn vector3_to_tuvec(cell_size: f32, origin: Vector3) -> TUVec3u32 {
     let scaled = origin / Vector3::new(cell_size, cell_size, cell_size);
 
     TUVec3u32::new(
@@ -128,7 +128,7 @@ fn vector3_to_tuvec(cell_size: f32, origin: Vector3) -> TUVec3u32 {
     )
 }
 
-fn tuvec_to_vector3(cell_size: f32, point: TUVec3u32) -> Vector3 {
+pub fn tuvec_to_vector3(cell_size: f32, point: TUVec3u32) -> Vector3 {
     Vector3::new(cell_size, cell_size, cell_size)
         * Vector3::new(
             map_to_i32(point.0.x) as f32,

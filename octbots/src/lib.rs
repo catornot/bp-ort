@@ -1,4 +1,4 @@
-#![feature(let_chains, mpmc_channel)]
+#![feature(let_chains, mpmc_channel, stmt_expr_attributes, if_let_guard)]
 
 use once_cell::sync::OnceCell;
 use parking_lot::{Mutex, RwLock};

@@ -69,7 +69,10 @@ pub fn find_path(octtree: &Octree32, start: TUVec3u32, end: TUVec3u32) -> Option
         if node.cost > cost
             && (visited_list
                 .get_index(parent)
-                .map(|(_, (_, _, distance))| pass_ground_distance(*distance))
+                .map(|(parent_pos, (_, _, parent_distance))| (parent_pos, *parent_distance))
+                .map(|(parent_pos, parent_distance)| {
+                    fall_condition(&node_pos, ground_distance, parent_pos, parent_distance)
+                })
                 .unwrap_or_default()
                 || pass_ground_distance(ground_distance))
         {
@@ -81,7 +84,9 @@ pub fn find_path(octtree: &Octree32, start: TUVec3u32, end: TUVec3u32) -> Option
             return get_path(visited_list, node.index, start_index, octtree);
         }
 
-        for (neighbor, edge_cost) in get_neighbors(octtree, &visited_list, &node_pos) {
+        for (neighbor, edge_cost) in
+            get_neighbors(octtree, &visited_list, &node_pos, ground_distance)
+        {
             // new cost to reach this node = edge cost + node cost
             // This is confirmed cost, not heuristic
             let new_cost = edge_cost + cost;
@@ -136,6 +141,7 @@ fn get_neighbors<'a>(
     octtree: &'a Octree<u32, TUVec3u32>,
     visited_list: &VisitedList,
     point: &'a TUVec3u32,
+    ground_distance: u32,
 ) -> Vec<(TUVec3u32, Cost)> {
     [
         [1, 0, 0],
@@ -159,8 +165,15 @@ fn get_neighbors<'a>(
                 .unwrap_or_else(|| find_ground_distance(octtree, *point)),
         ))
     })
-    .filter(|(point, ground_distance)| {
-        octtree.get(&point.0).is_none() && pass_ground_distance(*ground_distance)
+    .filter(|(neighboor_point, neighboor_ground_distance)| {
+        octtree.get(&neighboor_point.0).is_none()
+            && (pass_ground_distance(*neighboor_ground_distance)
+                || fall_condition(
+                    neighboor_point,
+                    *neighboor_ground_distance,
+                    point,
+                    ground_distance,
+                ))
     })
     .map(|(point, ground_distance)| {
         (
@@ -208,7 +221,20 @@ fn get_path(
     Some(path)
 }
 
-const MAX_DISTANCE: u32 = 8;
+/// the consequence of this are unknown to me but I just want to give bots the ability to fall down from any heigth
+fn fall_condition(
+    pos: &TUVec3u32,
+    distance: u32,
+    parent_pos: &TUVec3u32,
+    parent_distance: u32,
+) -> bool {
+    (pass_ground_distance(parent_distance) && !pass_ground_distance(distance))
+        || (!pass_ground_distance(distance)
+            && parent_pos.0.z > pos.0.z
+            && [parent_pos.0.x, parent_pos.0.y] == [pos.0.x, pos.0.y])
+}
+
+const MAX_DISTANCE: u32 = 9;
 fn find_ground_distance(octtree: &Octree<u32, TUVec3u32>, point: TUVec3u32) -> u32 {
     (point.0.z.saturating_sub(MAX_DISTANCE)..point.0.z)
         .rev()

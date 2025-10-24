@@ -1,10 +1,11 @@
-use bevy_math::prelude::*;
+use bevy_math::{bounding::RayCast3d, prelude::*};
 use bonsai_bt::{
     Action,
-    Behavior::{AlwaysSucceed, WhenAny},
+    Behavior::{AlwaysSucceed, Select, WhenAny},
     Event, Sequence, Status, UpdateArgs, BT, RUNNING,
 };
 use itertools::Itertools;
+use oktree::prelude::*;
 use parking_lot::RwLock;
 use parry3d::shape::Capsule;
 use parry3d::{self, query::RayCast};
@@ -19,11 +20,13 @@ use shared::{
 };
 use std::{
     collections::{HashMap, VecDeque},
+    f32::consts::PI,
+    ops::Not,
     sync::{Arc, LazyLock},
 };
 
 use crate::{
-    async_pathfinding::PathReceiver,
+    async_pathfinding::{vector3_to_tuvec, PathReceiver},
     loader::{Navmesh, NavmeshStatus},
 };
 
@@ -37,10 +40,17 @@ struct BotBrain {
     path_next_request: f32,
     path: VecDeque<Vector3>,
     origin: Vector3,
+    angles: Vector3,
     abs_origin: Vector3,
     next_cmd: CUserCmd,
     last_alive_state: bool,
     needs_new_path: bool,
+    /// lock on view from the enemy targeting system
+    /// when false the movement system can control the view angles
+    view_lock: bool,
+    /// clamped angles for the targeting sytem when wallrunning
+    /// maybe should be a [[Option<f32>]]
+    clamped_view: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -55,6 +65,10 @@ pub enum BotAction {
     Move,
     IsJump,
     Jump(i32),
+    IsFenceHop,
+    TryMountFence(i32),
+    IsCrawling,
+    Crawl,
     FinishMove,
 }
 
@@ -63,16 +77,6 @@ pub fn drop_behaviors() {
 }
 
 pub extern "C" fn init_bot(edict: u16, client: &CClient) {
-    let target_moving = Sequence(vec![
-        Action(BotAction::CanMove),
-        Action(BotAction::Move),
-        AlwaysSucceed(Box::new(Sequence(vec![
-            Action(BotAction::IsJump),
-            Action(BotAction::Jump(0)),
-        ]))),
-        Action(BotAction::FinishMove),
-    ]);
-
     let dead_state = Sequence(vec![
         Action(BotAction::IsDead),
         Action(BotAction::DeadState),
@@ -81,9 +85,16 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
     let target_moving = Sequence(vec![
         Action(BotAction::CanMove),
         Action(BotAction::Move),
-        AlwaysSucceed(Box::new(Sequence(vec![
-            Action(BotAction::IsJump),
-            Action(BotAction::Jump(0)),
+        AlwaysSucceed(Box::new(Select(vec![
+            Sequence(vec![Action(BotAction::IsJump), Action(BotAction::Jump(0))]),
+            Sequence(vec![
+                Action(BotAction::IsCrawling),
+                Action(BotAction::Crawl),
+            ]),
+            Sequence(vec![
+                Action(BotAction::IsFenceHop),
+                Action(BotAction::TryMountFence(0)),
+            ]),
         ]))),
         Action(BotAction::FinishMove),
     ]);
@@ -111,8 +122,11 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
             path: VecDeque::new(),
             path_next_request: 0.,
             origin: Vector3::ZERO,
+            angles: Vector3::ZERO,
             abs_origin: Vector3::ZERO,
             needs_new_path: true,
+            view_lock: false,
+            clamped_view: 0.,
         },
     ));
 }
@@ -140,6 +154,7 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
     };
     bt.blackboard_mut().next_cmd = CUserCmd::new_empty(helper);
     bt.blackboard_mut().origin = unsafe { *bot.get_origin(&mut v) };
+    bt.blackboard_mut().angles = unsafe { *bot.eye_angles(&mut v) };
     bt.blackboard_mut().abs_origin = bot.m_vecAbsOrigin;
 
     let is_alive = unsafe { (helper.sv_funcs.is_alive)(nudge_type::<&CBaseEntity>(bot)) } == 1;
@@ -261,11 +276,19 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
                 break '_move (Status::Failure, 0.);
             };
 
-            let mut forward_vector = Vector3::ZERO;
-            unsafe {
-                bot.get_forward_vector(&mut forward_vector, std::ptr::null(), std::ptr::null())
-            };
-            let forward_vector = Vec2::new(forward_vector.x, forward_vector.y);
+            const TURN_RATE: f32 = PI / 3.;
+            let angle = (target.y - brain.origin.y).atan2(target.x - brain.origin.x);
+            brain.next_cmd.world_view_angles.y = angle
+                .clamp(angle - TURN_RATE, angle + TURN_RATE)
+                .to_degrees()
+                * brain.view_lock.not() as i32 as f32
+                + brain.angles.y * brain.view_lock as i32 as f32;
+            brain.next_cmd.world_view_angles.x = 0.;
+
+            let forward_vector = Vec2::new(
+                brain.next_cmd.world_view_angles.y.to_radians().cos(),
+                brain.next_cmd.world_view_angles.y.to_radians().sin(),
+            );
 
             let angle = -forward_vector.angle_to(Vec2::new(
                 brain.origin.x - target.x,
@@ -295,7 +318,11 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
             (Status::Success, 0.)
         }
         BotAction::IsJump => match brain.path.front() {
-            Some(point) if point.z > brain.origin.z => (Status::Success, 0.),
+            Some(point)
+                if point.z > brain.abs_origin.z + 50. || bot.m_vecAbsVelocity == Vector3::ZERO =>
+            {
+                (Status::Success, 0.)
+            }
             Some(_) => (Status::Failure, 0.),
             None => (Status::Failure, 0.),
         },
@@ -312,21 +339,95 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
 
             (Status::Success, 0.)
         }
+        BotAction::IsFenceHop => match brain.path.front() {
+            Some(point)
+                if point.z > brain.abs_origin.z + 10. || bot.m_vecAbsVelocity == Vector3::ZERO =>
+            {
+                (Status::Success, 0.)
+            }
+            Some(_) => (Status::Failure, 0.),
+            None => (Status::Failure, 0.),
+        },
+        BotAction::TryMountFence(mut frames) => {
+            frames += 1;
+
+            let fence_check =
+                |navmesh: &Navmesh, octtree: &Octree<u32, TUVec3u32>, dir: Vector3| {
+                    octtree
+                        .ray_cast(&RayCast3d::new(
+                            Vec3::new(brain.abs_origin.x, brain.abs_origin.y, brain.abs_origin.z)
+                                / Vec3::splat(navmesh.cell_size),
+                            Dir3A::new_unchecked(Vec3::new(dir.x, dir.y, 0.).normalize().into()),
+                            navmesh.cell_size,
+                        ))
+                        .element
+                        .and_then(|element| octtree.get_element(element))
+                        .copied()
+                        .map(|pos| TUVec3::new(pos.0.x, pos.0.y, pos.0.z + 1))
+                };
+            if frames % 12 < 5
+                && bot.m_vecAbsVelocity.x + bot.m_vecAbsVelocity.y <= 5.
+                // not sure about the ground check
+                && lookup_ent(bot.m_hGroundEntity, helper.sv_funcs).is_some()
+                && let Some(dir) = brain
+                    .path
+                    .front()
+                    .copied()
+                    .map(|target| brain.abs_origin - target )
+                && let Some(navmesh) = brain.navmesh.try_read()
+                && let NavmeshStatus::Loaded(octtree) = &navmesh.navmesh
+                && let Some(element) = fence_check(&navmesh, octtree, dir)
+                && octtree.get(&element).is_none()
+            {
+                brain.next_cmd.move_.z = 1.;
+                brain.next_cmd.buttons |= MoveAction::Jump as u32;
+                (Status::Success, 0.)
+            } else {
+                (Status::Failure, 0.)
+            }
+        }
+        BotAction::IsCrawling => match (brain.path.front(), brain.navmesh.try_read()) {
+            (Some(point), Some(navmesh))
+                if let NavmeshStatus::Loaded(octtree) = &navmesh.navmesh
+                    && let point = vector3_to_tuvec(
+                        navmesh.cell_size,
+                        *point + Vector3::new(0., 0., navmesh.cell_size),
+                    )
+                    .0
+                    && (octtree.get(&point).is_some()
+                        || octtree
+                            .get(&TUVec3::new(point.x, point.y, point.z + 1))
+                            .is_some()) =>
+            {
+                (Status::Success, 0.)
+            }
+            _ => (Status::Failure, 0.),
+        },
+        BotAction::Crawl => {
+            brain.next_cmd.buttons |= MoveAction::Duck as u32;
+
+            (Status::Success, 0.)
+        }
+
         BotAction::FinishMove => '_move: {
-            let Some(target) = brain.path.front() else {
+            let Some(_) = brain.path.front() else {
                 break '_move (Status::Failure, 0.);
             };
 
-            if Capsule::new_z(50., 25.)
-                .transform_by(&[brain.origin.x, brain.origin.y, brain.origin.z].into())
-                .intersects_local_ray(
+            let hitbox: Capsule = Capsule::new_z(50., 25.)
+                .transform_by(&[brain.origin.x, brain.origin.y, brain.origin.z].into());
+            let is_in_hitbox = |target: &Vector3| {
+                hitbox.intersects_local_ray(
                     &parry3d::query::Ray::new(
                         [target.x, target.y, target.z].into(),
                         [0., 0., 1.].into(),
                     ),
                     0.01,
                 )
-            {
+            };
+
+            // look 7 points ahead for when a bot overshoots points
+            if brain.path.iter().take(7).any(is_in_hitbox) {
                 brain.path.pop_front();
             }
 
