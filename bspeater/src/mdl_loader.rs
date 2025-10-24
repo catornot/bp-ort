@@ -9,7 +9,6 @@ pub fn extract_game_lump_models(
     game_lump: Vec<u8>,
     merged_dir: PathBuf,
 ) -> (Vec<StaticProp>, Vec<Option<(Vec<Vec3>, Vec<u32>)>>) {
-    return (vec![], vec![]);
     let mut game_lump = game_lump.into_iter().skip(20);
 
     let model_name_count =
