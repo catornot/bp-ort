@@ -10,24 +10,26 @@ use parking_lot::RwLock;
 use parry3d::shape::Capsule;
 use parry3d::{self, query::RayCast};
 use rrplug::{
-    bindings::class_types::{cbaseentity::CBaseEntity, client::CClient, cplayer::CPlayer},
+    bindings::class_types::{client::CClient, cplayer::CPlayer},
     prelude::*,
 };
 use shared::{
-    bindings::{Action as MoveAction, CUserCmd, SERVER_FUNCTIONS},
+    bindings::{Action as MoveAction, CUserCmd, TraceResults, SERVER_FUNCTIONS},
     cmds_helper::CUserCmdHelper,
     utils::{lookup_ent, nudge_type},
 };
 use std::{
     collections::{HashMap, VecDeque},
     f32::consts::PI,
+    mem::MaybeUninit,
     ops::Not,
     sync::{Arc, LazyLock},
 };
 
 use crate::{
-    async_pathfinding::{vector3_to_tuvec, PathReceiver},
+    async_pathfinding::PathReceiver,
     loader::{Navmesh, NavmeshStatus},
+    nav_points::{get_neighbors_h, tuvec_to_vector3, vector3_to_tuvec, NavPoint},
 };
 
 static BEHAVIOR: LazyLock<RwLock<HashMap<u16, BT<BotAction, BotBrain>>>> =
@@ -38,11 +40,12 @@ struct BotBrain {
     current_target: Option<i32>,
     path_receiver: Option<PathReceiver>,
     path_next_request: f32,
-    path: VecDeque<Vector3>,
+    path: VecDeque<NavPoint>,
     origin: Vector3,
     angles: Vector3,
     abs_origin: Vector3,
     next_cmd: CUserCmd,
+    next_wall_point: Option<Vector3>,
     last_alive_state: bool,
     needs_new_path: bool,
     /// lock on view from the enemy targeting system
@@ -69,6 +72,8 @@ pub enum BotAction {
     TryMountFence(i32),
     IsCrawling,
     Crawl,
+    IsWallRun,
+    WallRun,
     FinishMove,
 }
 
@@ -86,6 +91,10 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
         Action(BotAction::CanMove),
         Action(BotAction::Move),
         AlwaysSucceed(Box::new(Select(vec![
+            Sequence(vec![
+                Action(BotAction::IsWallRun),
+                Action(BotAction::WallRun),
+            ]),
             Sequence(vec![Action(BotAction::IsJump), Action(BotAction::Jump(0))]),
             Sequence(vec![
                 Action(BotAction::IsCrawling),
@@ -124,6 +133,7 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
             origin: Vector3::ZERO,
             angles: Vector3::ZERO,
             abs_origin: Vector3::ZERO,
+            next_wall_point: None,
             needs_new_path: true,
             view_lock: false,
             clamped_view: 0.,
@@ -157,7 +167,7 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
     bt.blackboard_mut().angles = unsafe { *bot.eye_angles(&mut v) };
     bt.blackboard_mut().abs_origin = bot.m_vecAbsOrigin;
 
-    let is_alive = unsafe { (helper.sv_funcs.is_alive)(nudge_type::<&CBaseEntity>(bot)) } == 1;
+    let is_alive = bot.m_lifeState == 0;
     if is_alive != bt.blackboard().last_alive_state {
         bt.reset_bt();
         bt.blackboard_mut().last_alive_state = is_alive;
@@ -203,7 +213,12 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
             }
 
             let mut v = Vector3::ZERO;
-            let start = brain.path.back().copied().unwrap_or(brain.origin);
+            let start = brain
+                .path
+                .back()
+                .map(AsRef::as_ref)
+                .copied()
+                .unwrap_or(brain.origin);
             let end = unsafe { *other_player.get_origin(&mut v) };
 
             if let None = brain.path_receiver.as_ref()
@@ -247,7 +262,7 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
                 .cloned()
                 .tuple_windows()
                 .for_each(|(p1, p2)| unsafe {
-                    debug.AddLineOverlay(&p1, &p2, 0, 255, 0, true, 0.5)
+                    debug.AddLineOverlay(&*p1, &*p2, 0, 255, 0, true, 0.5)
                 });
 
             (Status::Success, 0.)
@@ -260,7 +275,11 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
                 unsafe {
                     debug.AddLineOverlay(
                         &brain.origin,
-                        brain.path.front().unwrap_or(&Vector3::ZERO),
+                        brain
+                            .path
+                            .front()
+                            .map(AsRef::as_ref)
+                            .unwrap_or(&Vector3::ZERO),
                         0,
                         100,
                         150,
@@ -272,7 +291,12 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
             }
         }
         BotAction::Move => '_move: {
-            let Some(target) = brain.path.front().copied() else {
+            // move towards wall point if we have to wallrun
+            let Some(target) = brain
+                .next_wall_point
+                .take()
+                .or_else(|| brain.path.front().map(AsRef::<Vector3>::as_ref).copied())
+            else {
                 break '_move (Status::Failure, 0.);
             };
 
@@ -319,7 +343,8 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
         }
         BotAction::IsJump => match brain.path.front() {
             Some(point)
-                if point.z > brain.abs_origin.z + 50. || bot.m_vecAbsVelocity == Vector3::ZERO =>
+                if point.as_vec().z > brain.abs_origin.z + 50.
+                    || bot.m_vecAbsVelocity == Vector3::ZERO =>
             {
                 (Status::Success, 0.)
             }
@@ -372,8 +397,7 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
                 && let Some(dir) = brain
                     .path
                     .front()
-                    .copied()
-                    .map(|target| brain.abs_origin - target )
+                    .map(|target| brain.abs_origin - **target )
                 && let Some(navmesh) = brain.navmesh.try_read()
                 && let NavmeshStatus::Loaded(octtree) = &navmesh.navmesh
                 && let Some(element) = fence_check(&navmesh, octtree, dir)
@@ -391,7 +415,7 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
                 if let NavmeshStatus::Loaded(octtree) = &navmesh.navmesh
                     && let point = vector3_to_tuvec(
                         navmesh.cell_size,
-                        *point + Vector3::new(0., 0., navmesh.cell_size),
+                        **point + Vector3::new(0., 0., navmesh.cell_size),
                     )
                     .0
                     && (octtree.get(&point).is_some()
@@ -408,7 +432,54 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
 
             (Status::Success, 0.)
         }
+        BotAction::IsWallRun => {
+            // anything below 1 distance off the ground isn't wallrunnable
+            // we find if the next point is wallrunable that means that this mean isn't some random spot where we are passing near the wall
+            match (brain.path.front(), brain.navmesh.try_read()) {
+                (Some(point), Some(ref navmesh))
+                    if point.as_distance() > 1
+                        && let NavmeshStatus::Loaded(octtree) = &navmesh.navmesh
+                        && let Some(wall_point) = get_neighbors_h(*point.as_ref(), octtree)
+                            .find_map(|(point, is_empty)| is_empty.not().then_some(point))
+                        && get_neighbors_h(*point.as_ref(), octtree)
+                            .filter(|(_, is_empty)| *is_empty)
+                            .flat_map(|(point, _)| get_neighbors_h(point, octtree).zip([point; 4]))
+                            .filter_map(|((next_wall_point, is_empty), next_point)| {
+                                is_empty.not().then_some((next_wall_point, next_point))
+                            })
+                            .find_map(|(next_wall_point, next_point)| {
+                                ((wall_point.0.x == next_wall_point.0.x
+                                    && (wall_point.0.y as i32 - next_wall_point.0.y as i32).abs()
+                                        == 1)
+                                    || (wall_point.0.y == next_wall_point.0.y
+                                        && (wall_point.0.x as i32 - next_wall_point.0.x as i32)
+                                            .abs()
+                                            == 1))
+                                    .then_some(next_point)
+                            })
+                            .is_some() =>
+                {
+                    brain.next_wall_point = unsafe {
+                        let mut result = MaybeUninit::<TraceResults>::zeroed();
+                        (helper.sv_funcs.util_trace_line)(
+                            point.as_ref(),
+                            &tuvec_to_vector3(navmesh.cell_size, wall_point),
+                            i8::MAX,
+                            i8::MAX,
+                            i32::MAX,
+                            i32::MAX,
+                            i32::MAX,
+                            result.as_mut_ptr(),
+                        );
+                        Some(result.assume_init().end_pos)
+                    };
 
+                    (Status::Success, 0.)
+                }
+                _ => (Status::Failure, 0.),
+            }
+        }
+        BotAction::WallRun => (Status::Success, 0.),
         BotAction::FinishMove => '_move: {
             let Some(_) = brain.path.front() else {
                 break '_move (Status::Failure, 0.);
@@ -427,10 +498,17 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
             };
 
             // look 7 points ahead for when a bot overshoots points
-            if brain.path.iter().take(7).any(is_in_hitbox) {
+            if brain
+                .path
+                .iter()
+                .take(7)
+                .map(AsRef::as_ref)
+                .any(is_in_hitbox)
+            {
                 brain.path.pop_front();
             }
 
+            brain.next_wall_point = None;
             brain.needs_new_path = brain.path.len() < 3;
 
             (Status::Success, 0.)
@@ -442,6 +520,7 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
                 (Status::Success, 0.)
             }
         }
+
         BotAction::DeadState => {
             brain.needs_new_path = true;
             brain.path.clear();

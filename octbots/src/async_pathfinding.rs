@@ -1,4 +1,3 @@
-use oktree::prelude::*;
 use parking_lot::RwLock;
 use rrplug::prelude::*;
 use std::{
@@ -8,16 +7,17 @@ use std::{
 };
 
 use crate::{
-    loader::{map_to_i32, map_to_u32, Navmesh, NavmeshStatus},
+    loader::{Navmesh, NavmeshStatus},
+    nav_points::{vector3_to_tuvec, NavPoint},
     pathfinding::find_path,
 };
 
-pub type PathReceiver = flume::Receiver<Option<Vec<Vector3>>>;
+pub type PathReceiver = flume::Receiver<Option<Vec<NavPoint>>>;
 
 pub struct Work {
     pub start: Vector3,
     pub end: Vector3,
-    pub return_sender: flume::Sender<Option<Vec<Vector3>>>,
+    pub return_sender: flume::Sender<Option<Vec<NavPoint>>>,
 }
 
 enum JobMessage {
@@ -99,40 +99,12 @@ fn worker(
                 continue;
             };
 
-            _ = return_sender.send(
-                find_path(
-                    navmesh_tree,
-                    vector3_to_tuvec(navmesh.cell_size, start),
-                    vector3_to_tuvec(navmesh.cell_size, end),
-                )
-                .map(|points| {
-                    // string_pulling(
-                    points
-                        .into_iter()
-                        .map(|point| tuvec_to_vector3(navmesh.cell_size, point))
-                        .collect()
-                    // )
-                }),
-            );
+            _ = return_sender.send(find_path(
+                navmesh_tree,
+                vector3_to_tuvec(navmesh.cell_size, start),
+                vector3_to_tuvec(navmesh.cell_size, end),
+                navmesh.cell_size,
+            ));
         }
     }
-}
-
-pub fn vector3_to_tuvec(cell_size: f32, origin: Vector3) -> TUVec3u32 {
-    let scaled = origin / Vector3::new(cell_size, cell_size, cell_size);
-
-    TUVec3u32::new(
-        map_to_u32(scaled.x as i32),
-        map_to_u32(scaled.y as i32),
-        map_to_u32(scaled.z as i32),
-    )
-}
-
-pub fn tuvec_to_vector3(cell_size: f32, point: TUVec3u32) -> Vector3 {
-    Vector3::new(cell_size, cell_size, cell_size)
-        * Vector3::new(
-            map_to_i32(point.0.x) as f32,
-            map_to_i32(point.0.y) as f32,
-            map_to_i32(point.0.z) as f32,
-        )
 }

@@ -3,7 +3,7 @@ use oktree::prelude::*;
 use rustc_hash::FxHasher;
 use std::{cmp::Reverse, collections::BinaryHeap, hash::BuildHasherDefault};
 
-use crate::loader::Octree32;
+use crate::{loader::Octree32, nav_points::NavPoint};
 
 type FxIndexMap<K, V> = IndexMap<K, V, BuildHasherDefault<FxHasher>>;
 type Cost = f64;
@@ -33,7 +33,12 @@ impl Ord for Node {
 }
 impl Eq for Node {}
 
-pub fn find_path(octtree: &Octree32, start: TUVec3u32, end: TUVec3u32) -> Option<Vec<TUVec3u32>> {
+pub fn find_path(
+    octtree: &Octree32,
+    start: TUVec3u32,
+    end: TUVec3u32,
+    cell_size: f32,
+) -> Option<Vec<NavPoint>> {
     // log::info!("{start:?} and {end:?}");
     if octtree.get(&start.0).is_some() || octtree.get(&end.0).is_some() {
         return None;
@@ -81,7 +86,7 @@ pub fn find_path(octtree: &Octree32, start: TUVec3u32, end: TUVec3u32) -> Option
 
         // Check if we've reached the goal
         if end == node_pos {
-            return get_path(visited_list, node.index, start_index, octtree);
+            return get_path(visited_list, node.index, start_index, octtree, cell_size);
         }
 
         for (neighbor, edge_cost) in
@@ -191,12 +196,13 @@ fn get_path(
     mut index: usize,
     start: usize,
     octtree: &Octree32,
-) -> Option<Vec<TUVec3u32>> {
+    cell_size: f32,
+) -> Option<Vec<NavPoint>> {
     let mut path = Vec::new();
 
     while index != start {
-        if let Some((pos, &(parent_index, _, _))) = visited_list.get_index(index) {
-            path.push(
+        if let Some((pos, &(parent_index, _, ground_distance))) = visited_list.get_index(index) {
+            path.push(NavPoint::new(
                 (pos.0.z.saturating_sub(MAX_DISTANCE.saturating_sub(1))..=pos.0.z)
                     .rev()
                     .find(|z| {
@@ -206,7 +212,9 @@ fn get_path(
                     })
                     .map(|z| TUVec3u32::new(pos.0.x, pos.0.y, z))
                     .unwrap_or(*pos),
-            );
+                ground_distance,
+                cell_size,
+            ));
             index = parent_index
         } else {
             return None;
@@ -222,6 +230,7 @@ fn get_path(
 }
 
 /// the consequence of this are unknown to me but I just want to give bots the ability to fall down from any heigth
+/// the bots now like to jump up and down sometimes
 fn fall_condition(
     pos: &TUVec3u32,
     distance: u32,

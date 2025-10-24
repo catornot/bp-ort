@@ -23,6 +23,7 @@ use crate::async_pathfinding::JobMarket;
 mod async_pathfinding;
 mod behavior;
 mod loader;
+mod nav_points;
 mod pathfinding;
 
 const PLUGIN_DLL_NAME: *const i8 = c"octbots.dll".as_ptr();
