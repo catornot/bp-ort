@@ -5,12 +5,12 @@ use std::{
     mem,
 };
 
-use crate::bindings::{Ray, TraceResults};
+use crate::bindings::{CGameTrace, Ray};
 
 static_detour! {
-    static TraceLineSimple: unsafe extern "C" fn(*const Vector3, *const Vector3, c_char, c_char, i32, i32, i32, *mut TraceResults);
-    static CEngineTraceServer__TraceRayFiltered: unsafe extern "C" fn(*mut c_void, *const Ray, u32, *const c_void, *mut TraceResults);
-    static SomeTraceFunction: unsafe extern "C" fn(*mut Ray,usize,i32,u32,c_char, *const TraceResults);
+    static TraceLineSimple: unsafe extern "C" fn(*const Vector3, *const Vector3, c_char, c_char, i32, i32, i32, *mut CGameTrace);
+    static CEngineTraceServer__TraceRayFiltered: unsafe extern "C" fn(*mut c_void, *const Ray, u32, *const c_void, *mut CGameTrace);
+    static SomeTraceFunction: unsafe extern "C" fn(*mut Ray,usize,i32,u32,c_char, *const CGameTrace);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -22,7 +22,7 @@ fn hook_trace_line(
     unk3: i32,
     unk4: i32,
     unk5: i32,
-    trace: *mut TraceResults,
+    trace: *mut CGameTrace,
 ) {
     unsafe {
         log::info!(
@@ -57,7 +57,7 @@ fn trace_ray_filter_hook(
     ray: *const Ray,
     fmask: u32,
     filter: *const c_void,
-    trace: *mut TraceResults,
+    trace: *mut CGameTrace,
 ) {
     unsafe {
         log::info!("ray: {:?}", ray.as_ref());
@@ -77,7 +77,7 @@ fn some_trace_function_hook(
     unk2: i32,
     fmask: u32,
     unk3: c_char,
-    trace: *const TraceResults,
+    trace: *const CGameTrace,
 ) {
     unsafe {
         log::info!("ray: {:?}", ray.as_ref());

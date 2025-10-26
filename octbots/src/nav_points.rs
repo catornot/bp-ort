@@ -70,23 +70,6 @@ impl NavPoint {
     }
 }
 
-pub fn get_neighbors_h<'b>(
-    point: TUVec3u32,
-    octtree: &'b Octree<u32, TUVec3u32>,
-) -> impl Iterator<Item = (TUVec3u32, bool)> + 'b {
-    const ITEMS: &[[i32; 3]] = &[[1, 0, 0], [0, 1, 0], [-1, 0, 0], [0, -1, 0]];
-    ITEMS
-        .iter()
-        .filter_map(move |offset| {
-            Some(TUVec3u32::new(
-                point.0.x.checked_add_signed(offset[0])?,
-                point.0.y.checked_add_signed(offset[1])?,
-                point.0.z.checked_add_signed(offset[2])?,
-            ))
-        })
-        .map(move |neighboor| (neighboor, octtree.get(&neighboor.0).is_none()))
-}
-
 pub fn vector3_to_tuvec(cell_size: f32, origin: Vector3) -> TUVec3u32 {
     let scaled = origin / Vector3::new(cell_size, cell_size, cell_size);
 

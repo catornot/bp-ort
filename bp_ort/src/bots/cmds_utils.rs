@@ -7,7 +7,7 @@ use shared::utils::nudge_type;
 use std::mem::MaybeUninit;
 
 use crate::{
-    bindings::{Action, CTraceFilterSimple, CUserCmd, Ray, TraceResults, VectorAligned},
+    bindings::{Action, CGameTrace, CTraceFilterSimple, CUserCmd, Ray, VectorAligned},
     interfaces::ENGINE_INTERFACES,
     navmesh::RECAST_DETOUR,
 };
@@ -304,7 +304,7 @@ pub unsafe fn view_rate(
     const TRACE_COLLISION_GROUP_BLOCK_WEAPONS: i32 = 0x12; // 18
 
     // should maybe revist the consturction of ray
-    let mut result: MaybeUninit<TraceResults> = MaybeUninit::zeroed();
+    let mut result: MaybeUninit<CGameTrace> = MaybeUninit::zeroed();
     let mut ray = Ray {
         start: VectorAligned { vec: v1, w: 0. },
         delta: VectorAligned {

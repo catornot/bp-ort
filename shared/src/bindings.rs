@@ -47,6 +47,57 @@ pub type CreateInterfaceFn =
     unsafe extern "C" fn(name: *const c_char, return_code: *mut c_int) -> *const c_void;
 
 #[repr(C)]
+pub enum TraceCollisionGroup {
+    None = 0,
+    Debris = 1,
+    DebrisTrigger = 2,
+    Player = 5,
+    BreakableGlass = 6,
+    NPC = 8,
+    Weapon = 12,
+    Projectile = 14,
+    BlockWeapons = 18,
+    BlockWeaponsAndPhysics = 19,
+}
+
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
+#[repr(C)]
+pub enum Contents {
+    // r1/scripts/vscripts/_consts.nut:1159
+    EMPTY = 0x00,
+    SOLID = 0x01,
+    WINDOW = 0x02, // bulletproof glass etc. (transparent but solid)
+    AUX = 0x04,    // unused ?
+    GRATE = 0x08,  // allows bullets & vis
+    SLIME = 0x10,
+    WATER = 0x20,
+    WINDOW_NO_COLLIDE = 0x40,
+    ISOPAQUE = 0x80,         // blocks AI Line Of Sight, may be non - solid
+    TEST_FOG_VOLUME = 0x100, // cannot be seen through, but may be non - solid
+    UNUSED_1 = 0x200,
+    BLOCK_LIGHT = 0x400,
+    TEAM_1 = 0x800,
+    TEAM_2 = 0x1000,
+    IGNORE_NODRAW_OPAQUE = 0x2000, // ignore opaque if Surface.NO_DRAW
+    MOVEABLE = 0x4000,
+    PLAYER_CLIP = 0x10000, // blocks human players
+    MONSTER_CLIP = 0x20000,
+    BRUSH_PAINT = 0x40000,
+    BLOCK_LOS = 0x80000, // block AI line of sight
+    NO_CLIMB = 0x100000,
+    TITAN_CLIP = 0x200000, // blocks titan players
+    BULLET_CLIP = 0x400000,
+    UNUSED_5 = 0x800000,
+    ORIGIN = 0x1000000,  // removed before bsping an entity
+    MONSTER = 0x2000000, // should never be on a brush, only in game
+    DEBRIS = 0x4000000,
+    DETAIL = 0x8000000,       // brushes to be added after vis leafs
+    TRANSLUCENT = 0x10000000, // auto set if any surface has trans
+    LADDER = 0x20000000,
+    HITBOX = 0x40000000, // use accurate hitboxes on trace
+}
+
+#[repr(C)]
 pub struct InterfaceReg {
     pub init: extern "C" fn() -> *const c_void,
     pub name: *const c_char,
@@ -156,9 +207,9 @@ pub enum CmdSource {
 }
 
 #[repr(C)]
-#[repr(align(4))]
+// #[repr(align(4))]
 #[derive(Debug)]
-pub struct TraceResults {
+pub struct CGameTrace {
     pub start_pos: Vector3,
     pub unk1: f32,
     pub end_pos: Vector3,
@@ -248,7 +299,7 @@ pub struct Ray {
 pub struct CTraceFilterSimple {
     pub vtable: *const fn(),
     pub unk: i32,
-    pub pass_ent: *const (),
+    pub pass_ent: *const CBaseEntity,
     pub should_hit_func: *const (),
     pub collision_group: i32,
 }
@@ -377,8 +428,8 @@ offset_functions! {
         cengine_client_client_cmd = unsafe extern "C" fn(*const c_void, *const c_char) -> () where offset(0x4fb50);
         host_state = *mut CHostState where offset(0x7CF180);
 
-        trace_ray_filter = unsafe extern "fastcall-unwind" fn(this: *const c_void, ray: *const Ray, maskf: u32, filter: *const c_void, trace: *mut TraceResults ) where offset(0x14eeb0);
-        trace_ray = unsafe extern "fastcall-unwind" fn(this: *const c_void, ray: *const Ray, maskf: u32, trace: *mut TraceResults ) where offset(0x14f7a0);
+        trace_ray_filter = unsafe extern "fastcall-unwind" fn(this: *const c_void, ray: *const Ray, maskf: u32, filter: *const c_void, trace: *mut CGameTrace ) where offset(0x14eeb0);
+        trace_ray = unsafe extern "fastcall-unwind" fn(this: *const c_void, ray: *const Ray, maskf: u32, trace: *mut CGameTrace ) where offset(0x14f7a0);
     }
 }
 
@@ -442,7 +493,7 @@ offset_functions! {
         get_weapon_type = unsafe extern "C" fn(*const CBaseEntity) -> u32 where offset(0xf0cd0);
         get_weapon_charge_fraction = unsafe extern "C" fn(*const CBaseEntity) -> f32 where offset(0x68ea20);
 
-        util_trace_line = unsafe extern "C" fn(*const Vector3, *const Vector3, c_char, c_char, i32, i32, i32, *mut TraceResults )  where offset(0x2725c0);
+        util_trace_line = unsafe extern "C" fn(*const Vector3, *const Vector3, c_char, c_char, i32, i32, i32, *mut CGameTrace )  where offset(0x2725c0);
         ctraceengine = *const *const *const fn() where offset(0xbfbdc8);
         simple_filter_vtable = *const fn() where offset(0x8ebbf8);
         create_trace_hull = unsafe extern "C" fn(this: *mut Ray, start: *const Vector3, end: *const Vector3, min: *const Vector3, max: *const Vector3) where offset(0x0ba0d0);
