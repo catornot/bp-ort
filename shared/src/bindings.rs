@@ -19,6 +19,8 @@ use std::{
     mem::MaybeUninit,
 };
 
+use crate::interfaces::CNetworkStringTable;
+
 pub type BotName = *const c_char;
 pub type ServerGameClients = *const c_void;
 pub type PlayerByIndex = unsafe extern "C" fn(i32) -> *mut CPlayer;
@@ -322,21 +324,6 @@ pub struct CEntInfo {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone)]
-pub struct INetworkStringTable {
-    pub destroctor: extern "C" fn(*const Self),
-    pub unk1: extern "C" fn(),
-    pub unk2: extern "C" fn(),
-    pub unk3: extern "C" fn(),
-    pub unk4: extern "C" fn(),
-    pub unk5: extern "C" fn(),
-    pub unk6: extern "C" fn(),
-    pub unk7: extern "C" fn(),
-    pub unk8: extern "C" fn(),
-    pub get_string: extern "C" fn(*const Self, i32) -> *const c_char,
-}
-
-#[repr(C)]
 #[allow(non_camel_case_types)]
 #[allow(dead_code)]
 pub enum server_state_t {
@@ -414,7 +401,7 @@ offset_functions! {
         globals = *mut CGlobalVars where offset(0x7C6F70);
         render_line = unsafe extern "C" fn(*const Vector3, *const Vector3, Color, bool) where offset(0x192A70);
         cgame_client_printf = unsafe extern "C" fn(client: *const CClient, msg: *const c_char) where offset(0x1016A0);
-        cnetwork_string_table_vtable = *const INetworkStringTable where offset(0x60FAE8);
+        cnetwork_string_table_vtable = *const CNetworkStringTable where offset(0x60FAE8);
 
         props_and_world_filter = *const fn() where offset(0x5eb980);
         hit_all_filter = *const fn() where offset(0x5fc520);

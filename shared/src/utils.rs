@@ -215,17 +215,17 @@ pub fn get_ents_by_class_name<'a>(
 
 pub fn get_weaponx_name<'a>(
     weapon: &'a CBaseEntity,
-    server_funcs: &ServerFunctions,
     engine_funcs: &EngineFunctions,
 ) -> Option<&'a str> {
     unsafe {
-        rrplug::mid::utils::str_from_char_ptr((engine_funcs
-            .cnetwork_string_table_vtable
-            .as_ref()?
-            .get_string)(
-            *server_funcs.weapon_names_string_table.cast(),
-            *std::ptr::from_ref(weapon).cast::<i32>().byte_offset(0x12d8), // this is the name index TODO: make this a actual field in some struct
-        ))
+        rrplug::mid::utils::str_from_char_ptr(
+            engine_funcs
+                .cnetwork_string_table_vtable
+                .as_ref()?
+                .GetString(
+                    *std::ptr::from_ref(weapon).cast::<i32>().byte_offset(0x12d8), // this is the name index TODO: make this a actual field in some struct
+                ),
+        )
     }
 }
 

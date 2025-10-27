@@ -115,5 +115,28 @@ create_external_interface! {
         pub fn CreateFakeClient(szName: *const c_char, szUnk: *const c_char, szPlaylist: *const c_char, nTeam: i32) -> Edict;
 
         // not full vtable
+    }
 }
+
+create_external_interface! {
+    pub CNetworkStringTable + CNetworkStringTableMod => {
+      pub fn destructor() -> ();
+      pub fn unk_1() -> ();
+      pub fn unk_2() -> ();
+      pub fn unk_3() -> ();
+      pub fn GetMaxStrings() -> u32;
+      pub fn GetEntryBits() -> u32;
+      pub fn SetTicks(ticks: u32) -> ();
+      pub fn ChangedSinceTick(ticks: u32) -> bool;
+      pub fn AddString(isServer: bool, key: *const c_char, length: i32, userdata: *mut c_void) -> i32;
+      pub fn GetString(stringNumber: i32) -> *const c_char;
+      pub fn unk_10() -> ();
+      pub fn unk_11() -> ();
+      pub fn unk_12() -> ();
+      pub fn unk_13() -> ();
+      pub fn ReadStringTable() -> *mut ();
+      pub fn unk_15() -> ();
+      pub fn unk_16() -> ();
+      pub fn unk_17() -> ();
+    }
 }
