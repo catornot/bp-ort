@@ -401,7 +401,7 @@ offset_functions! {
         globals = *mut CGlobalVars where offset(0x7C6F70);
         render_line = unsafe extern "C" fn(*const Vector3, *const Vector3, Color, bool) where offset(0x192A70);
         cgame_client_printf = unsafe extern "C" fn(client: *const CClient, msg: *const c_char) where offset(0x1016A0);
-        cnetwork_string_table_vtable = *const CNetworkStringTable where offset(0x60FAE8);
+        cnetwork_string_table_vtable = *const () where offset(0x60FAE8);
 
         props_and_world_filter = *const fn() where offset(0x5eb980);
         hit_all_filter = *const fn() where offset(0x5fc520);
@@ -476,7 +476,7 @@ offset_functions! {
         set_weapon_by_slot = unsafe extern "C" fn(*const c_void, *const c_char) where offset(0xe4ba0);
         replace_weapon = unsafe extern "C" fn(*const CPlayer, *const c_char, *const c_void, *const c_void) where offset(0xdbae0);
         get_active_weapon = unsafe extern "C" fn(*const CPlayer) -> *const CBaseEntity where offset(0xea4c0);
-        weapon_names_string_table = *const c_void where offset(0xbfbcf0);
+        weapon_names_string_table = *const *const CNetworkStringTable where offset(0xbfbcf0);
         get_weapon_type = unsafe extern "C" fn(*const CBaseEntity) -> u32 where offset(0xf0cd0);
         get_weapon_charge_fraction = unsafe extern "C" fn(*const CBaseEntity) -> f32 where offset(0x68ea20);
 

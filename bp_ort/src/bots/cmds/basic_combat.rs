@@ -239,7 +239,7 @@ pub(crate) fn basic_combat(
     cmd.buttons |= if matches!(target, Some((_, true))) && !is_titan {
         // pilot abilities TODO: check for cooldown
         match lookup_ent(player.m_inventory.offhandWeapons[1], helper.sv_funcs)
-                .and_then(|ent| get_weaponx_name(ent, helper.engine_funcs))
+                .and_then(|ent| get_weaponx_name(ent, helper.sv_funcs))
                 .unwrap_or_default()
             {
                 "mp_weapon_grenade_sonar" => Action::OffHand1 as u32,
@@ -253,7 +253,7 @@ pub(crate) fn basic_combat(
             .saturating_mul((time(helper) as u32 % 25 < 10) as u32)
                 // pilot nades TODO: check for cooldown
                 | match lookup_ent(player.m_inventory.offhandWeapons[0], helper.sv_funcs)
-                    .and_then(|ent| get_weaponx_name(ent, helper.engine_funcs))
+                    .and_then(|ent| get_weaponx_name(ent, helper.sv_funcs))
                     .unwrap_or_default()
                 {
                     "mp_ability_shifter" if player.m_iHealth < 50 => Action::OffHand0 as u32,

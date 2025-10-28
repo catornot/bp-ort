@@ -267,7 +267,7 @@ pub fn bot_get_weapon_class(command: CCommandResult) -> Option<()> {
         log::info!("weapon name {}", unsafe {
             rrplug::mid::utils::from_char_ptr(name)
         });
-        log::info!("weapon name {}", get_weaponx_name(ent, engine)?);
+        log::info!("weapon name {}", get_weaponx_name(ent, server)?);
     }
 
     None

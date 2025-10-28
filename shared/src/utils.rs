@@ -11,7 +11,7 @@ use windows_sys::Win32::System::{
     Diagnostics::Debug::WriteProcessMemory, Threading::GetCurrentProcess,
 };
 
-use crate::bindings::{EngineFunctions, ServerFunctions, ENGINE_FUNCTIONS};
+use crate::bindings::{ServerFunctions, ENGINE_FUNCTIONS};
 
 pub struct ClassNameIter<'a> {
     // class_name: &'a CStr,
@@ -215,12 +215,13 @@ pub fn get_ents_by_class_name<'a>(
 
 pub fn get_weaponx_name<'a>(
     weapon: &'a CBaseEntity,
-    engine_funcs: &EngineFunctions,
+    server_funcs: &ServerFunctions,
 ) -> Option<&'a str> {
     unsafe {
         rrplug::mid::utils::str_from_char_ptr(
-            engine_funcs
-                .cnetwork_string_table_vtable
+            server_funcs
+                .weapon_names_string_table
+                .as_ref()?
                 .as_ref()?
                 .GetString(
                     *std::ptr::from_ref(weapon).cast::<i32>().byte_offset(0x12d8), // this is the name index TODO: make this a actual field in some struct
