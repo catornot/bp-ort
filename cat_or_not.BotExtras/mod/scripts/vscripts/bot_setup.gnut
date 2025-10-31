@@ -25,6 +25,7 @@ void function Init_botSetup()
 	AddCallback_OnPilotBecomesTitan( BotBecameTitan )
 
 	AddClientCommandCallback( "test_script_navs", TestScriptNavs )
+	AddClientCommandCallback( "test_script_oct", TestScriptOct )
 	AddClientCommandCallback( "test_script_navs_random", TestScriptNavsRandom )
 	AddClientCommandCallback( "bot_task", NewTask )
 	AddClientCommandCallback( "bump", BumpEveryone )
@@ -271,6 +272,29 @@ bool function TestScriptNavs(entity player, array<string> args) {
 	}
 
 	return true
+}
+
+bool function TestScriptOct(entity player, array<string> args) {
+	thread TestScriptOct_Threaded(player.GetOrigin(), GetPlayerCrosshairOrigin( player ))
+
+	return true
+}
+
+void function TestScriptOct_Threaded(vector start, vector end) {
+	array<vector> points = []
+
+	try {
+		points = OcttreeFindPath(start + <0,0,50>, end + <0,0,50>)
+	} catch (error) {
+		print("didn't work")
+	}
+
+
+	vector prevPoint = start
+	foreach( vector point in points) {
+		DebugDrawLine(prevPoint, point, 0, 255, 0, true, 1000)
+		prevPoint = point
+	}
 }
 
 bool function TestScriptNavsRandom(entity player, array<string> args) {

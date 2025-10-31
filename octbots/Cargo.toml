@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 log = "*"
-rrplug = { workspace = true }
+rrplug = { workspace = true, features = ["async_engine"] }
 shared = { workspace = true }
 parking_lot = "*"
 once_cell = "*"

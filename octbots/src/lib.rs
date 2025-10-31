@@ -25,6 +25,7 @@ mod behavior;
 mod loader;
 mod nav_points;
 mod pathfinding;
+mod sqapi;
 
 const PLUGIN_DLL_NAME: *const i8 = c"octbots.dll".as_ptr();
 
@@ -81,6 +82,8 @@ impl Plugin for OctBots {
         // let (chrome_layer, guard) = tracing_chrome::ChromeLayerBuilder::new().file(file).build();
         // tracing::subscriber::set_global_default(tracing_subscriber::registry().with(chrome_layer))
         //     .expect("setup tracy layer");
+
+        sqapi::octtree_register_sq_functions();
 
         Self {
             current_map: Mutex::new("".to_string()),
