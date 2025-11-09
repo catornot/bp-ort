@@ -66,7 +66,7 @@ pub fn find_path(
 
     let mut iterations = 0usize;
     while let Some(Reverse(node)) = open_list.pop()
-        && iterations < u16::MAX as usize * 10
+        && iterations < u16::MAX as usize * 30
     {
         iterations += 1;
         let (&node_pos, &(parent, cost, ground_distance, wallrun_distance)) =
