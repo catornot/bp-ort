@@ -4766,7 +4766,7 @@ checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
 [[package]]
 name = "rrplug"
 version = "4.2.1"
-source = "git+https://github.com/catornot/rrplug.git#d98c697c2d4bebf8bdaaaaf4e4a99bf479bd2f62"
+source = "git+https://github.com/catornot/rrplug.git#dc37c8f7afe460e1879617661aeeda07764a6094"
 dependencies = [
  "bitflags 2.9.4",
  "log",
@@ -4780,7 +4780,7 @@ dependencies = [
 [[package]]
 name = "rrplug_proc"
 version = "4.2.1"
-source = "git+https://github.com/catornot/rrplug.git#d98c697c2d4bebf8bdaaaaf4e4a99bf479bd2f62"
+source = "git+https://github.com/catornot/rrplug.git#dc37c8f7afe460e1879617661aeeda07764a6094"
 dependencies = [
  "proc-macro2",
  "quote",
