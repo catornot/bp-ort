@@ -124,7 +124,17 @@ impl Navmesh {
 
 fn async_load_worker_builder(id: String) -> impl FnOnce() -> Option<(Octree32, f32)> {
     move || {
+        let profile = std::env::args()
+            .find(|arg| arg.starts_with("-profile"))
+            .and_then(|profile| {
+                profile
+                    .split_once('=')
+                    .map(|(_, profile)| profile.to_string())
+            })
+            .unwrap_or_else(|| "R2Northstar".to_string());
+
         let mut file = std::fs::File::open(format!("output/{id}.navmesh"))
+            .or_else(|_| std::fs::File::open(format!("{profile}/octnavs/{id}.navmesh")))
             .inspect_err(|err| log::error!("failed loading {id}: {err}"))
             .ok()?;
         let mut buf = Vec::with_capacity(10000);
