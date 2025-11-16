@@ -182,6 +182,7 @@ impl Plugin for Bots {
             "FrontierBotter",
             "UniBot",
             "Bolf109909",
+            "ASillyBot",
         ]
         .into_iter()
         .map(str::to_string)
