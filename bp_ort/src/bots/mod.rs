@@ -488,6 +488,10 @@ fn get_bot_name() -> String {
     let bot_names = PLUGIN.wait().bots.generic_bot_names.lock();
     let mut rng = rand::thread_rng();
 
+    if next_names.is_empty() {
+        next_names.extend_from_slice(bot_names.as_slice());
+    };
+
     match next_names
         .is_empty()
         .not()
