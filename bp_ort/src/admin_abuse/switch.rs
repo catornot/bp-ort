@@ -1,15 +1,14 @@
 use rrplug::{
-    bindings::{
-        class_types::client::SignonState,
-        cvar::convar::{FCVAR_CLIENTDLL, FCVAR_GAMEDLL, FCVAR_GAMEDLL_FOR_REMOTE_CLIENTS},
-    },
+    bindings::cvar::convar::{FCVAR_CLIENTDLL, FCVAR_GAMEDLL, FCVAR_GAMEDLL_FOR_REMOTE_CLIENTS},
     prelude::*,
 };
 
 use crate::{
-    admin_abuse::{admin_check, execute_for_matches, forward_to_server},
+    admin_abuse::{
+        admin_check, completion_append_player_names, execute_for_matches, forward_to_server,
+    },
     bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
-    utils::{get_c_char_array, get_c_char_array_lossy, iterate_c_array_sized},
+    utils::get_c_char_array,
 };
 
 pub fn register_switch_command(engine_data: &EngineData, token: EngineToken) {
@@ -107,11 +106,9 @@ fn switch_completion(current: CurrentCommand, suggestions: CommandCompletion) ->
         _ = suggestions.push(&format!("{} militia", current.cmd))
     }
 
-    unsafe { iterate_c_array_sized::<_, 32>(ENGINE_FUNCTIONS.wait().client_array.into()) }
-        .filter(|client| client.m_nSignonState == SignonState::FULL)
-        .map(|client| get_c_char_array_lossy(&client.m_szServerName))
-        .filter(|name| name.starts_with(current.partial))
-        .for_each(|name| _ = suggestions.push(&format!("{} {}", current.cmd, name)));
+    completion_append_player_names(current.partial, |name| {
+        _ = suggestions.push(&format!("{} {}", current.cmd, name))
+    });
 
     suggestions.commands_used()
 }

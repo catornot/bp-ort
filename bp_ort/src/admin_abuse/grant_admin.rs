@@ -1,18 +1,18 @@
-use rrplug::prelude::*;
 use rrplug::{
     bindings::{
-        class_types::{client::SignonState, cplayer::CPlayer},
+        class_types::cplayer::CPlayer,
         cvar::convar::{FCVAR_CLIENTDLL, FCVAR_GAMEDLL, FCVAR_GAMEDLL_FOR_REMOTE_CLIENTS},
     },
     mid::utils::str_from_char_ptr,
+    prelude::*,
 };
 
-use crate::admin_abuse::parse_admins;
-use crate::utils::get_c_char_array_lossy;
 use crate::{
-    admin_abuse::{admin_check, execute_for_matches, forward_to_server},
+    admin_abuse::{
+        admin_check, completion_append_player_names, execute_for_matches, forward_to_server,
+        parse_admins,
+    },
     bindings::{EngineFunctions, ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
-    utils::iterate_c_array_sized,
 };
 
 pub fn register_grant_admin_command(engine_data: &EngineData, token: EngineToken) {
@@ -79,11 +79,9 @@ fn add_admin(player: &CPlayer, engine_funcs: &EngineFunctions, token: EngineToke
 
 #[rrplug::completion]
 fn grant_admin_completion(current: CurrentCommand, suggestions: CommandCompletion) -> i32 {
-    unsafe { iterate_c_array_sized::<_, 32>(ENGINE_FUNCTIONS.wait().client_array.into()) }
-        .filter(|client| client.m_nSignonState == SignonState::FULL)
-        .map(|client| get_c_char_array_lossy(&client.m_szServerName))
-        .filter(|name| name.starts_with(current.partial))
-        .for_each(|name| _ = suggestions.push(&format!("{} {}", current.cmd, name)));
+    completion_append_player_names(current.partial, |name| {
+        _ = suggestions.push(&format!("{} {}", current.cmd, name))
+    });
 
     suggestions.commands_used()
 }

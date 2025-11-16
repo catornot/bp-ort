@@ -65,14 +65,13 @@ pub fn disguise_name(command: CCommandResult) -> Option<()> {
     let name = command.get_args().get(1)?;
 
     let client = unsafe { ENGINE_FUNCTIONS.wait().client_array.add(index).as_mut()? };
-    let player =
-        unsafe { (SERVER_FUNCTIONS.wait().get_player_by_index)(index as i32 + 1).as_mut()? };
 
     unsafe {
-        set_c_char_array(&mut client.m_szServerName, name);
-        set_c_char_array(&mut client.m_szClientName, name);
-        set_c_char_array(&mut player.m_title, name);
-        set_c_char_array(&mut player.m_communityName, name);
+        set_c_char_array(&mut client.m_szServerName, "");
+        (ENGINE_FUNCTIONS.wait().cclient_setname)(
+            client,
+            (name.to_string() + "\0").as_ptr().cast(),
+        );
     }
 
     None

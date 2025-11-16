@@ -1,5 +1,5 @@
 use rrplug::{
-    bindings::class_types::{cbaseentity::CBaseEntity, cplayer::CPlayer},
+    bindings::class_types::{cbaseentity::CBaseEntity, client::SignonState, cplayer::CPlayer},
     mid::utils::try_cstring,
 };
 use std::{
@@ -158,6 +158,10 @@ pub fn send_client_print(player: &CPlayer, msg: &str) -> Option<()> {
             .add((player.pl.index as usize).checked_sub(1)?)
             .as_ref()?
     };
+    if !client.m_bFullyAuthenticated || client.m_nSignonState != SignonState::CONNECTED {
+        return None;
+    }
+
     let msg = try_cstring(msg).ok()?;
 
     unsafe { (engine.cgame_client_printf)(client, msg.as_ptr()) };

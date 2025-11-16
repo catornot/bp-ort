@@ -402,6 +402,7 @@ offset_functions! {
         render_line = unsafe extern "C" fn(*const Vector3, *const Vector3, Color, bool) where offset(0x192A70);
         cgame_client_printf = unsafe extern "C" fn(client: *const CClient, msg: *const c_char) where offset(0x1016A0);
         cnetwork_string_table_vtable = *const () where offset(0x60FAE8);
+        cclient_setname = unsafe extern "C" fn(client: *mut CClient, name: *const c_char) where offset(0x105ed0);
 
         props_and_world_filter = *const fn() where offset(0x5eb980);
         hit_all_filter = *const fn() where offset(0x5fc520);
@@ -515,6 +516,7 @@ offset_functions! {
         base = *const c_void where offset(0x0);
         get_c_player_by_index = unsafe extern "C" fn(i32) -> *mut C_Player where offset(0x348650);
         get_local_c_player = unsafe extern "C" fn() -> *mut C_Player where offset(0x14ef40);
+        c_player_get_name = unsafe extern "C" fn(*const C_Player) -> *const c_char where offset(0x14f320);
     }
 }
 

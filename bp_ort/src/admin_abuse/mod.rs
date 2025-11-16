@@ -1,9 +1,10 @@
 use parking_lot::{RwLock, RwLockReadGuard};
 use rrplug::{
     bindings::class_types::{cbaseentity::CBaseEntity, client::SignonState, cplayer::CPlayer},
+    mid::utils::from_char_ptr,
     prelude::*,
 };
-use shared::utils::nudge_type;
+use shared::{bindings::CLIENT_FUNCTIONS, utils::nudge_type};
 
 use crate::{
     bindings::{EngineFunctions, ServerFunctions, ENGINE_FUNCTIONS},
@@ -11,11 +12,12 @@ use crate::{
 };
 
 use self::{
-    grant_admin::register_grant_admin_command, health::register_health_command,
-    slay::register_slay_command, switch::register_switch_command,
+    disguise::register_disguise_command, grant_admin::register_grant_admin_command,
+    health::register_health_command, slay::register_slay_command, switch::register_switch_command,
     teleport::register_teleport_command,
 };
 
+mod disguise;
 mod grant_admin;
 mod health;
 mod slay;
@@ -62,6 +64,7 @@ impl Plugin for AdminAbuse {
         register_teleport_command(engine_data, token);
         register_health_command(engine_data, token);
         register_grant_admin_command(engine_data, token);
+        register_disguise_command(engine_data, token);
     }
 
     fn on_sqvm_created(&self, _sqvm_handle: &CSquirrelVMHandle, token: EngineToken) {
@@ -197,4 +200,20 @@ pub fn execute_for_matches(
         })
         .filter(|(player, name)| filter_target(filter, player, name))
         .for_each(|(player, _)| execution(player));
+}
+
+pub fn completion_append_player_names(current_filter: &str, append_func: impl FnMut(String)) {
+    if let Some(client_funcs) = CLIENT_FUNCTIONS.get() {
+        (0..32)
+            .filter_map(|i| unsafe { (client_funcs.get_c_player_by_index)(i).as_ref() })
+            .map(|player| unsafe { from_char_ptr((client_funcs.c_player_get_name)(player)) })
+            .filter(|name| name.starts_with(current_filter))
+            .for_each(append_func);
+    } else if let Some(engine) = ENGINE_FUNCTIONS.get() {
+        unsafe { iterate_c_array_sized::<_, 32>(engine.client_array.into()) }
+            .filter(|client| client.m_nSignonState == SignonState::FULL)
+            .map(|client| get_c_char_array_lossy(&client.m_szServerName))
+            .filter(|name| name.starts_with(current_filter))
+            .for_each(append_func);
+    }
 }

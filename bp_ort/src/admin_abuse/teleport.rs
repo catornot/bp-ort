@@ -8,7 +8,9 @@ use rrplug::{
     },
     mid::utils::from_char_ptr,
 };
+use shared::utils::lookup_ent;
 
+use crate::admin_abuse::completion_append_player_names;
 use crate::bindings::CLIENT_FUNCTIONS;
 use crate::utils::get_c_char_array_lossy;
 use crate::{
@@ -18,14 +20,14 @@ use crate::{
 };
 
 pub fn register_teleport_command(engine_data: &EngineData, token: EngineToken) {
-    // _ = engine_data.register_concommand_with_completion(
-    //     "tp",
-    //     forward_to_server,
-    //     "kills a desired target",
-    //     FCVAR_CLIENTDLL as i32,
-    //     teleport_completion,
-    //     token,
-    // );
+    _ = engine_data.register_concommand_with_completion(
+        "tp",
+        forward_to_server,
+        "kills a desired target",
+        FCVAR_CLIENTDLL as i32,
+        teleport_completion,
+        token,
+    );
 
     _ = engine_data.register_concommand(
         "tp_server",
@@ -94,7 +96,11 @@ fn teleport_server_command(command: CCommandResult) -> Option<()> {
 
     execute_for_matches(
         command.get_arg(0),
-        |player| unsafe { (funcs.set_origin)(player, &tp_location) },
+        |player| {
+            if lookup_ent(player.m_hMoveParent, funcs).is_none() {
+                unsafe { (funcs.set_origin)(player, &tp_location) }
+            }
+        },
         false,
         funcs,
         engine,
@@ -118,17 +124,13 @@ fn teleport_completion(current: CurrentCommand, suggestions: CommandCompletion) 
             _ = suggestions.push(&format!("{} militia", current.cmd))
         }
 
-        unsafe { iterate_c_array_sized::<_, 32>(ENGINE_FUNCTIONS.wait().client_array.into()) }
-            .filter(|client| client.m_nSignonState == SignonState::FULL)
-            .map(|client| get_c_char_array_lossy(&client.m_szServerName))
-            .filter(|name| name.starts_with(current.partial))
-            .for_each(|name| _ = suggestions.push(&format!("{} {}", current.cmd, name)));
+        completion_append_player_names(current.partial, |name| {
+            _ = suggestions.push(&format!("{} {}", current.cmd, name))
+        });
         return;
     };
 
-    unsafe { iterate_c_array_sized::<_, 32>(ENGINE_FUNCTIONS.wait().client_array.into()) }
-        .filter(|client| client.m_nSignonState == SignonState::FULL)
-        .map(|client| get_c_char_array_lossy(&client.m_szServerName))
-        .filter(|name| name.starts_with(next))
-        .for_each(|name| _ = suggestions.push(&format!("{} {} {}", current.cmd, prev, name)));
+    completion_append_player_names(next, |name| {
+        _ = suggestions.push(&format!("{} {} {}", current.cmd, prev, name))
+    });
 }
