@@ -129,8 +129,8 @@ Name overrides currently only affects players after a map reload or if it's over
 
 **Code Callback** - the plugin attemps to call the following functions when the player connects which are not defined anywhere (aka you can define them)
 
-- `string function CodeCallBack_CanChangeName(string name)`
-- `string function CodeCallBack_CanChangeClangTag(string clan_tag)`
+- `string function CodeCallBack_CanChangeName(string uid, string name)`
+- `string function CodeCallBack_CanChangeClangTag(string uid, string clan_tag)`
 
 **API**
 

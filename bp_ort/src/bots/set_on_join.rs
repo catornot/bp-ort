@@ -79,7 +79,7 @@ pub unsafe fn set_stuff_on_join(client: &mut CClient) {
             *sqvm,
             SQFUNCTIONS.server.wait(),
             "CodeCallBack_CanChangeName",
-            name,
+            (get_c_char_array_lossy(&client.m_UID), name),
         )
         .map_err(|err| err.log())
         .ok()
@@ -93,7 +93,10 @@ pub unsafe fn set_stuff_on_join(client: &mut CClient) {
             *sqvm,
             SQFUNCTIONS.server.wait(),
             "CodeCallBack_CanChangeClangTag",
-            (),
+            (
+                get_c_char_array_lossy(&client.m_UID),
+                get_c_char_array_lossy(&client.m_szClanTag),
+            ),
         )
         .map_err(|err| err.log())
         .ok()
