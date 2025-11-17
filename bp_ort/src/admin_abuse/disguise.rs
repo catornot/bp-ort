@@ -67,19 +67,18 @@ fn disguise_server_command(command: CCommandResult) {
     let engine = ENGINE_FUNCTIONS.wait();
     let funcs = SERVER_FUNCTIONS.wait();
 
-    let (is_admin, Some(player)) = admin_check(&command, engine, funcs) else {
+    let (true, admin) = admin_check(&command, engine, funcs) else {
         return;
     };
 
-    if !is_admin {
-        return;
-    }
-
     let Some(ty) = command.get_arg(0).and_then(disguise_str_to_ty) else {
-        _ = send_client_print(
-            player,
-            &format!("{:?} is not a valid type", command.get_arg(0)),
-        );
+        if let Some(admin) = admin {
+            _ = send_client_print(
+                admin,
+                &format!("{:?} is not a valid type", command.get_arg(0)),
+            );
+        }
+
         log::info!(
             "player emited err: {:?} is not a valid type",
             command.get_arg(0)
@@ -87,19 +86,35 @@ fn disguise_server_command(command: CCommandResult) {
         return;
     };
 
-    execute_for_matches(
-        command.get_arg(1),
-        |player| {
-            if let Err(err) = disguise(player, ty, command.get_args().get(2..).unwrap_or_default())
-            {
-                _ = send_client_print(player, err);
-                log::info!("player emited err: {err}");
+    if let Some(player) = command
+        .get_arg(1)
+        .and_then(|arg| arg.parse::<u16>().ok())
+        .and_then(|index| unsafe { (funcs.get_player_by_index)(index as i32).as_mut() })
+    {
+        if let Err(err) = disguise(player, ty, command.get_args().get(2..).unwrap_or_default()) {
+            if let Some(admin) = admin.as_ref() {
+                _ = send_client_print(admin, err);
             }
-        },
-        false,
-        funcs,
-        engine,
-    );
+            log::info!("player emited err: {err}");
+        }
+    } else {
+        execute_for_matches(
+            command.get_arg(1),
+            |player| {
+                if let Err(err) =
+                    disguise(player, ty, command.get_args().get(2..).unwrap_or_default())
+                {
+                    if let Some(admin) = admin.as_ref() {
+                        _ = send_client_print(admin, err);
+                    }
+                    log::info!("player emited err: {err}");
+                }
+            },
+            false,
+            funcs,
+            engine,
+        );
+    }
 }
 
 fn disguise(

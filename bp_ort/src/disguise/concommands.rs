@@ -1,5 +1,6 @@
 use rrplug::bindings::cvar::convar::{FCVAR_CLIENTDLL, FCVAR_GAMEDLL};
 use rrplug::prelude::*;
+use shared::utils::get_c_char_array;
 
 use crate::{
     bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
@@ -87,9 +88,15 @@ pub fn disguise_tag(command: CCommandResult) -> Option<()> {
     let player =
         unsafe { (SERVER_FUNCTIONS.wait().get_player_by_index)(index as i32 + 1).as_mut()? };
 
+    let name = get_c_char_array(&client.m_szServerName)
+        .unwrap_or("null")
+        .to_string();
     unsafe {
+        // HACK: setting the player name also updates the clan tag
+        set_c_char_array(&mut client.m_szServerName, "");
         set_c_char_array(&mut client.m_szClanTag, tag);
         set_c_char_array(&mut player.m_communityClanTag, tag);
+        (ENGINE_FUNCTIONS.wait().cclient_setname)(client, (name + "\0").as_ptr().cast());
     }
 
     None
