@@ -1,8 +1,6 @@
 use rrplug::prelude::*;
 
-use self::concommands::register_concommands;
-
-mod concommands;
+mod sqapi;
 
 #[derive(Debug)]
 pub struct Disguise;
@@ -15,12 +13,7 @@ impl Plugin for Disguise {
         PluginContext::DEDICATED,
     );
     fn new(_: bool) -> Self {
+        sqapi::digsuise_sqapi();
         Self {}
-    }
-
-    fn on_dll_load(&self, engine: Option<&EngineData>, _dll_ptr: &DLLPointer, token: EngineToken) {
-        let Some(engine) = engine else { return };
-
-        register_concommands(engine, token)
     }
 }
