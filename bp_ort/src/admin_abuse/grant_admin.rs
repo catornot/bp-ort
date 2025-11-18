@@ -6,6 +6,7 @@ use rrplug::{
     mid::utils::str_from_char_ptr,
     prelude::*,
 };
+use shared::utils::get_player_index;
 
 use crate::{
     admin_abuse::{
@@ -64,7 +65,7 @@ fn add_admin(player: &CPlayer, engine_funcs: &EngineFunctions, token: EngineToke
     let uid = unsafe {
         let client = engine_funcs
             .client_array
-            .add(player.pl.index as usize - 1)
+            .add(get_player_index(player))
             .as_ref()?;
         let uid = client.m_UID.as_ptr();
         str_from_char_ptr(uid)?

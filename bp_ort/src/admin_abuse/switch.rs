@@ -2,6 +2,7 @@ use rrplug::{
     bindings::cvar::convar::{FCVAR_CLIENTDLL, FCVAR_GAMEDLL, FCVAR_GAMEDLL_FOR_REMOTE_CLIENTS},
     prelude::*,
 };
+use shared::utils::get_player_index;
 
 use crate::{
     admin_abuse::{
@@ -43,17 +44,16 @@ fn switch_server_command(command: CCommandResult) {
     let engine = ENGINE_FUNCTIONS.wait();
     let funcs = SERVER_FUNCTIONS.wait();
 
-    let (check, admin) = admin_check(&command, engine, funcs);
-    if !check {
+    let (true, admin) = admin_check(&command, engine, funcs) else {
         return;
-    }
+    };
 
     let filter = command.get_arg(0).or_else(|| unsafe {
         admin.and_then(|admin| {
             get_c_char_array(
                 &engine
                     .client_array
-                    .add(admin.pl.index as usize - 1)
+                    .add(get_player_index(admin))
                     .as_ref()?
                     .m_szServerName,
             )

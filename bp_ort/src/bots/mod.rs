@@ -15,7 +15,7 @@ use rrplug::{
     mid::{squirrel::SQVM_SERVER, utils::try_cstring},
     prelude::*,
 };
-use shared::bindings::HostState;
+use shared::{bindings::HostState, utils::get_player_index};
 use simple_bot_manager::ManagerData;
 use std::{
     cell::RefCell,
@@ -657,7 +657,7 @@ fn aim_penalty_changed() -> Option<()> {
 #[rrplug::sqfunction(VM = "Server", ExportName = "BotSetTitan")]
 fn bot_set_titan(bot: Option<&mut CPlayer>, titan: String) -> Option<()> {
     let mut data_maps = BOT_DATA_MAP.get(engine_token).try_borrow_mut().ok()?;
-    let bot_data = data_maps.as_mut().get_mut(bot?.pl.index as usize)?; // index and edict should be the same
+    let bot_data = data_maps.as_mut().get_mut(get_player_index(bot?))?; // index and edict should be the same; nope it isn't
 
     bot_data.titan = match titan.as_str().trim() {
         "titan_stryder_arc" | "titan_stryder_leadwall" | "titan_stryder_ronin_prime" => {
@@ -678,7 +678,7 @@ fn bot_set_titan(bot: Option<&mut CPlayer>, titan: String) -> Option<()> {
 #[rrplug::sqfunction(VM = "Server", ExportName = "BotSetTargetPos")]
 fn bot_set_target_pos(bot: Option<&mut CPlayer>, target: Vector3) -> Option<()> {
     let mut data_maps = BOT_DATA_MAP.get(engine_token).try_borrow_mut().ok()?;
-    let bot_data = data_maps.as_mut().get_mut(bot?.pl.index as usize)?; // index and edict should be the same
+    let bot_data = data_maps.as_mut().get_mut(get_player_index(bot?))?; // index and edict should be the same; nope it isn't
 
     bot_data.target_pos = target;
 
@@ -688,7 +688,7 @@ fn bot_set_target_pos(bot: Option<&mut CPlayer>, target: Vector3) -> Option<()> 
 #[rrplug::sqfunction(VM = "Server", ExportName = "BotSetSimulationType")]
 fn bot_set_sim_type(bot: Option<&mut CPlayer>, sim_type: i32) -> Option<()> {
     let mut data_maps = BOT_DATA_MAP.get(engine_token).try_borrow_mut().ok()?;
-    let bot_data = data_maps.as_mut().get_mut(bot?.pl.index as usize)?; // index and edict should be the same
+    let bot_data = data_maps.as_mut().get_mut(get_player_index(bot?))?; // index and edict should be the same; nope it isn't
 
     if sim_type >= 0 {
         bot_data.sim_type = Some(sim_type);
@@ -737,7 +737,7 @@ fn remember_name_override(
             engine.client_array,
             engine.globals.as_ref()?.maxClients as usize,
         )
-        .get(player?.pl.index as usize)?
+        .get(get_player_index(player?))?
     };
 
     *PLUGIN

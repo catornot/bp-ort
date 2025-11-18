@@ -4,7 +4,10 @@ use rrplug::{
     mid::utils::from_char_ptr,
     prelude::*,
 };
-use shared::{bindings::CLIENT_FUNCTIONS, utils::nudge_type};
+use shared::{
+    bindings::CLIENT_FUNCTIONS,
+    utils::{get_player_index, nudge_type},
+};
 
 use crate::{
     bindings::{EngineFunctions, ServerFunctions, ENGINE_FUNCTIONS},
@@ -133,7 +136,7 @@ pub fn admin_check<'a, 'b>(
         .and_then(|caller_player| unsafe {
             engine_funcs
                 .client_array
-                .add(caller_player.pl.index.saturating_sub(1) as usize)
+                .add(get_player_index(caller_player))
                 .as_ref()
                 .map(|c| from_c_string::<String>(c.m_UID.as_ptr()))
         })

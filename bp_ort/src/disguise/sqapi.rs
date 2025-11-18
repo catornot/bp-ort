@@ -1,5 +1,5 @@
 use rrplug::{bindings::class_types::cplayer::CPlayer, prelude::*};
-use shared::utils::get_c_char_array;
+use shared::utils::{get_c_char_array, get_player_index};
 
 use crate::{bindings::ENGINE_FUNCTIONS, utils::set_c_char_array};
 
@@ -19,11 +19,7 @@ pub fn disguise_name(player: Option<&mut CPlayer>, name: String) -> Result<(), S
         ENGINE_FUNCTIONS
             .wait()
             .client_array
-            .add(
-                (player.pl.index as usize)
-                    .checked_sub(1)
-                    .ok_or("wow index underflow?")?,
-            )
+            .add(get_player_index(player))
             .as_mut()
             .ok_or("cannot find the corresponding client for the player")?
     };
@@ -46,11 +42,7 @@ pub fn disguise_tag(player: Option<&mut CPlayer>, tag: String) -> Result<(), Str
         ENGINE_FUNCTIONS
             .wait()
             .client_array
-            .add(
-                (player.pl.index as usize)
-                    .checked_sub(1)
-                    .ok_or("wow index underflow?")?,
-            )
+            .add(get_player_index(player))
             .as_mut()
             .ok_or("cannot find the corresponding client for the player")?
     };
@@ -79,11 +71,7 @@ pub fn disguise_edict(player: Option<&mut CPlayer>, edict: i32) -> Result<(), St
         ENGINE_FUNCTIONS
             .wait()
             .client_array
-            .add(
-                (player.pl.index as usize)
-                    .checked_sub(1)
-                    .ok_or("wow index underflow?")?,
-            )
+            .add(get_player_index(player))
             .as_mut()
             .ok_or("cannot find the corresponding client for the player")?
     };

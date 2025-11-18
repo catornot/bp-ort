@@ -7,7 +7,7 @@ use rrplug::{
     },
     prelude::*,
 };
-use shared::utils::{get_c_char_array, send_client_print, set_c_char_array};
+use shared::utils::{get_c_char_array, get_player_index, send_client_print, set_c_char_array};
 
 use crate::{
     admin_abuse::{
@@ -126,16 +126,7 @@ fn disguise(
         ENGINE_FUNCTIONS
             .wait()
             .client_array
-            .add(
-                player
-                    .pl
-                    .index
-                    .abs()
-                    .saturating_sub(1)
-                    .try_into()
-                    .ok()
-                    .ok_or("woops")?,
-            )
+            .add(get_player_index(player))
             .as_mut()
             .ok_or("no cclient how?")?
     };

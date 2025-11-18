@@ -19,7 +19,7 @@ use shared::{
         TraceCollisionGroup, SERVER_FUNCTIONS,
     },
     cmds_helper::CUserCmdHelper,
-    utils::{lookup_ent, nudge_type},
+    utils::{get_player_index, lookup_ent, nudge_type},
 };
 use std::{
     collections::{HashMap, VecDeque},
@@ -163,7 +163,7 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
 
 pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer) -> CUserCmd {
     let mut behavior_static = BEHAVIOR.write();
-    let Some(bt) = behavior_static.get_mut(&(bot.pl.index as u16)) else {
+    let Some(bt) = behavior_static.get_mut(&(get_player_index(bot) as u16)) else {
         return CUserCmd::new_empty(helper);
     };
 
@@ -200,7 +200,7 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
             let Some(current_target) = (0..helper.globals.maxPlayers)
                 .flat_map(|i| unsafe { (helper.sv_funcs.get_player_by_index)(i + 1).as_ref() })
                 .filter(|other| other.pl.index != bot.pl.index)
-                .map(|other| other.pl.index)
+                .map(|other| get_player_index(other) as i32)
                 .next()
             else {
                 break 'target (Status::Failure, 0.);

@@ -152,12 +152,7 @@ pub unsafe fn patch(addr: usize, bytes: &[u8]) {
 pub fn send_client_print(player: &CPlayer, msg: &str) -> Option<()> {
     let engine = ENGINE_FUNCTIONS.wait();
 
-    let client = unsafe {
-        engine
-            .client_array
-            .add((player.pl.index as usize).checked_sub(1)?)
-            .as_ref()?
-    };
+    let client = unsafe { engine.client_array.add(get_player_index(player)).as_ref()? };
     if !client.m_bFullyAuthenticated || client.m_nSignonState != SignonState::CONNECTED {
         return None;
     }
@@ -236,4 +231,12 @@ pub fn get_weaponx_name<'a>(
 
 pub const fn nudge_type<O>(input: O) -> O {
     input
+}
+
+pub fn get_player_index(player: &CPlayer) -> usize {
+    player
+        .pl
+        .index
+        .cast_unsigned()
+        .saturating_sub(player.m_bIsFullyConnected as u32) as usize
 }
