@@ -2,7 +2,7 @@ use rrplug::{
     bindings::class_types::{cbaseentity::CBaseEntity, cplayer::CPlayer},
     prelude::*,
 };
-use shared::utils::nudge_type;
+use shared::utils::{get_player_index, nudge_type};
 
 use crate::{
     bindings::{Action, CUserCmd},
@@ -198,12 +198,15 @@ pub(super) fn get_cmd(
 
             let maybe_target = if sim_type == 13 {
                 farthest_player(origin, team, &helper)
-                    .map(|target| unsafe { (*target.get_origin(&mut v), target.pl.index) })
+                    .map(|target| unsafe { (*target.get_origin(&mut v), get_player_index(target)) })
             } else if sim_type == 14 {
                 closest_player(origin, team, &helper)
-                    .map(|target| unsafe { (*target.get_origin(&mut v), target.pl.index) })
+                    .map(|target| unsafe { (*target.get_origin(&mut v), get_player_index(target)) })
             } else {
-                Some((local_data.target_pos, local_data.target_pos.x as i32))
+                Some((
+                    local_data.target_pos,
+                    local_data.target_pos.x.abs() as usize,
+                ))
             };
 
             let Some((target, last_index)) = maybe_target else {

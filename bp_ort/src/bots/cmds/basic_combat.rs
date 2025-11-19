@@ -7,7 +7,7 @@ use rrplug::{
     high::UnsafeHandle,
     prelude::{EngineToken, *},
 };
-use shared::utils::nudge_type;
+use shared::utils::{get_player_index, nudge_type};
 use std::{cell::UnsafeCell, sync::atomic::Ordering};
 
 use crate::{
@@ -100,12 +100,12 @@ pub(crate) fn basic_combat(
                     local_data,
                     origin,
                     *target_pos,
-                    local_data.last_target_index != target.pl.index
+                    local_data.last_target_index != get_player_index(target)
                         || local_data.should_recaculate_path,
                     helper,
                 )
             {
-                local_data.last_target_index = target.pl.index
+                local_data.last_target_index = get_player_index(target)
             }
 
             local_data.should_recaculate_path = false;
@@ -138,10 +138,10 @@ pub(crate) fn basic_combat(
                         *target_pos,
                         Some(
                             local_data.last_target_index
-                                != target.pl.index ,
+                                != get_player_index(target) ,
                         ),
                     );
-                    local_data.last_target_index = target.pl.index ;
+                    local_data.last_target_index = get_player_index(target);
 
                     result
                 } else {
@@ -165,7 +165,7 @@ pub(crate) fn basic_combat(
             local_data.approach_range = None;
         }
         (9, target) if target.is_none() || matches!(target, Some((_, false))) => {
-            let (team, player_index) = (player.m_iTeamNum, player.pl.index as u32);
+            let (team, player_index) = (player.m_iTeamNum, get_player_index(player) as u32);
             let our_flag = find_flag_for(team, true, player_index, helper);
             let their_flag = find_flag_for(team, false, player_index, helper);
             let our_base = find_base_for(team, true, helper);
@@ -271,10 +271,10 @@ pub(crate) fn basic_combat(
     if let Some(((target, target_player), should_shoot)) = target {
         if let Some(target) = shared_data
             .reserved_targets
-            .get_mut(target_player.pl.index as usize)
+            .get_mut(get_player_index(target_player))
         {
             // a last shot target system would be a lot better imo or even prefered target
-            *target = (time(helper), player.pl.index as u32);
+            *target = (time(helper), get_player_index(player) as u32);
         }
 
         let active_weapon = lookup_ent(player.m_inventory.activeWeapon, helper.sv_funcs)
@@ -613,7 +613,7 @@ fn try_refresh_ctf(helper: &CUserCmdHelper) -> EngineToken {
                 (helper.sv_funcs.get_parent)(ent.cast_const())
                     .as_ref()
                     .and_then::<&CPlayer, _>(|parent| parent.dynamic_cast())
-                    .map(|parent| parent.pl.index as u32)
+                    .map(|parent| get_player_index(parent) as u32)
                     .unwrap_or(u32::MAX),
             )
         }),

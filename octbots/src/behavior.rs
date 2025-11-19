@@ -199,7 +199,7 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
         BotAction::FindTarget => 'target: {
             let Some(current_target) = (0..helper.globals.maxPlayers)
                 .flat_map(|i| unsafe { (helper.sv_funcs.get_player_by_index)(i + 1).as_ref() })
-                .filter(|other| other.pl.index != bot.pl.index)
+                .filter(|other| get_player_index(other) != get_player_index(bot))
                 .map(|other| get_player_index(other) as i32)
                 .next()
             else {

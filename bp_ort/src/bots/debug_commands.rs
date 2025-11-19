@@ -3,6 +3,7 @@ use rrplug::{
     mid::utils::{from_char_ptr, to_cstring, try_cstring},
     prelude::*,
 };
+use shared::utils::get_player_index;
 
 use crate::{
     admin_abuse::execute_for_matches,
@@ -126,7 +127,7 @@ pub fn bot_dump_players() {
             log::info!(
                 "{}: {} on team {} with sim_type {} with titan {:?}",
                 unsafe { from_char_ptr((SERVER_FUNCTIONS.wait().get_entity_name)(player)) },
-                player.pl.index,
+                get_player_index(player),
                 player.m_iTeamNum,
                 data.as_ref()
                     .and_then(|data| data.get(client.m_nHandle as usize)?.sim_type)
@@ -138,7 +139,7 @@ pub fn bot_dump_players() {
             log::info!(
                 "{}: {} on team {}",
                 unsafe { from_char_ptr((SERVER_FUNCTIONS.wait().get_entity_name)(player)) },
-                player.pl.index,
+                get_player_index(player),
                 player.m_iTeamNum,
             );
         }

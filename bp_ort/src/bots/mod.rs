@@ -90,7 +90,7 @@ pub(super) struct BotData {
     jump_delay_obstacle: f32,
     jump_hold: u32,
     last_bad_path: f32,
-    last_target_index: i32,
+    last_target_index: usize,
     target_pos: Vector3,
     last_shot: f32,
     should_recaculate_path: bool,

@@ -10,7 +10,7 @@ use rrplug::{
 };
 use shared::{
     bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
-    utils::{lookup_ent, nudge_type},
+    utils::{get_player_index, lookup_ent, nudge_type},
 };
 use std::{collections::HashMap, sync::OnceLock};
 
@@ -21,7 +21,7 @@ static_detour! {
 }
 
 pub struct HoloPlus {
-    holo_pilot_table: Mutex<HashMap<i32, Vec<UnsafeHandle<*mut CPlayerDecoy>>>>,
+    holo_pilot_table: Mutex<HashMap<usize, Vec<UnsafeHandle<*mut CPlayerDecoy>>>>,
     enabled: OnceLock<ConVarStruct>,
 }
 
@@ -104,7 +104,9 @@ pub fn runholoframe() {
             .filter_map(|i| unsafe { (server.get_player_by_index)(i).as_ref() })
         {
             let mut holo_pilot_table = PLUGIN.wait().holoplus.holo_pilot_table.lock();
-            let decoys = holo_pilot_table.entry(player.pl.index).or_default();
+            let decoys = holo_pilot_table
+                .entry(get_player_index(player))
+                .or_default();
 
             let enabled = PLUGIN.wait().holoplus.enabled.wait().get_value_bool();
             decoys.retain(|decoy| unsafe {
@@ -290,7 +292,7 @@ fn create_player_decoy_hook(
             .holoplus
             .holo_pilot_table
             .lock()
-            .entry(boss_player.pl.index)
+            .entry(get_player_index(boss_player))
             .or_default()
             .push(unsafe { UnsafeHandle::new(decoy) });
     }

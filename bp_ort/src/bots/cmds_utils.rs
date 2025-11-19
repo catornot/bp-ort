@@ -3,7 +3,7 @@ use rrplug::{
     bindings::class_types::{cbaseentity::CBaseEntity, cplayer::CPlayer},
     high::vector::Vector3,
 };
-use shared::utils::nudge_type;
+use shared::utils::{get_player_index, nudge_type};
 use std::mem::MaybeUninit;
 
 use crate::{
@@ -173,7 +173,7 @@ pub unsafe fn find_player_in_view<'a>(
             .filter(|(_, target, _)| {
                 (helper.sv_funcs.is_titan)(nudge_type::<&CBaseEntity>(target))
                     || targets_locks
-                        .and_then(|l| l.get(target.pl.index as usize))
+                        .and_then(|l| l.get(get_player_index(target)))
                         .copied()
                         .map(|(last_shot, by)| {
                             is_timedout(last_shot, helper, 0.5) || Some(by) == player_index

@@ -1,5 +1,6 @@
 use once_cell::sync::Lazy;
 use rrplug::{bindings::class_types::cplayer::CPlayer, prelude::*};
+use shared::utils::get_player_index;
 use std::{cell::UnsafeCell, collections::HashMap};
 
 use crate::{
@@ -18,7 +19,7 @@ static HARDPOINT_DATA: EngineGlobal<UnsafeCell<HardPointData>> =
 struct HardPointData {
     last_checked: i32,
     hardpoints: Vec<Vector3>,
-    claimed: Lazy<HashMap<[i32; 2], Option<i32>>>,
+    claimed: Lazy<HashMap<[i32; 2], Option<usize>>>,
 }
 
 pub fn reset_hardpoint(bot: Option<&CPlayer>, local_data: Option<&mut BotData>) {
@@ -58,7 +59,7 @@ pub fn basic_cap_holding(
                 (
                     player_iterator(&predicate, helper)
                     .filter(|player| player.m_iTeamNum == team)
-                    .map(|player| (unsafe { *player.get_origin(&mut v) }, player.pl.index))
+                    .map(|player| (unsafe { *player.get_origin(&mut v) }, get_player_index(player)))
                     .filter(|(pos, index)| {
                         distance(*pos, hardpoint) < APROCHE_DISTANCE + 200.
                             // removed claimed players
@@ -115,7 +116,7 @@ pub fn basic_cap_holding(
     } else if let Some(((target_pos, target), _)) = target.as_ref() {
         (
             *target_pos,
-            Some(local_data.last_target_index != target.pl.index),
+            Some(local_data.last_target_index != get_player_index(target)),
         )
     } else {
         local_data.approach_range = Some(300.);
@@ -147,7 +148,7 @@ fn get_hardpoints(helper: &CUserCmdHelper) -> impl Iterator<Item = Vector3> {
         .copied()
 }
 
-fn get_hardpoint_claim(hardpoint: Vector3) -> Option<i32> {
+fn get_hardpoint_claim(hardpoint: Vector3) -> Option<usize> {
     unsafe { &*HARDPOINT_DATA.get(EngineToken::new_unchecked()).get() }
         .claimed
         .get(&[hardpoint.x as i32, hardpoint.y as i32])
@@ -169,7 +170,7 @@ fn get_claimed_hardpoint(bot: &CPlayer) -> Option<Vector3> {
                     .flatten(),
             )
         })
-        .filter(|(_, claim)| *claim == Some(bot.pl.index))
+        .filter(|(_, claim)| *claim == Some(get_player_index(bot)))
         .map(|(hardpoint, _)| hardpoint)
         .last()
 }
@@ -180,7 +181,7 @@ fn claim_hardpoint(hardpoint: Vector3, bot: &CPlayer) -> bool {
         .claimed
         .get_mut(&[hardpoint.x as i32, hardpoint.y as i32])
         .filter(|claim| claim.is_none())
-        .map(|claim| claim.replace(bot.pl.index))
+        .map(|claim| claim.replace(get_player_index(bot)))
         .is_some()
     {
         revoke_claim(bot, data);
@@ -192,7 +193,11 @@ fn claim_hardpoint(hardpoint: Vector3, bot: &CPlayer) -> bool {
 fn revoke_claim(bot: &CPlayer, data: &mut HardPointData) {
     data.claimed
         .values_mut()
-        .filter(|hardpoint_player| hardpoint_player.filter(|p| *p == bot.pl.index).is_some())
+        .filter(|hardpoint_player| {
+            hardpoint_player
+                .filter(|p| *p == get_player_index(bot))
+                .is_some()
+        })
         .for_each(|hardpoint_player| _ = hardpoint_player.take());
 }
 fn try_refresh_hardpoint(helper: &CUserCmdHelper) -> EngineToken {

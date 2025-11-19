@@ -234,9 +234,5 @@ pub const fn nudge_type<O>(input: O) -> O {
 }
 
 pub fn get_player_index(player: &CPlayer) -> usize {
-    player
-        .pl
-        .index
-        .cast_unsigned()
-        .saturating_sub(player.m_bIsFullyConnected as u32) as usize
+    (player.m_Network.m_edict - 1) as usize
 }
