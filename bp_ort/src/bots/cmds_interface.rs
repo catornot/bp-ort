@@ -106,7 +106,7 @@ impl ExternalSimulations {
                 unsafe { iterate_c_array_sized::<_, 32>(engine_functions.client_array.into()) }
                     .filter(|client| client.m_bFakePlayer)
             {
-                func(client.m_nHandle, client)
+                func(client.m_nHandle - 1, client)
             }
         }
 

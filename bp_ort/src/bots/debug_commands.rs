@@ -130,9 +130,9 @@ pub fn bot_dump_players() {
                 get_player_index(player),
                 player.m_iTeamNum,
                 data.as_ref()
-                    .and_then(|data| data.get(client.m_nHandle as usize)?.sim_type)
+                    .and_then(|data| data.get(client.m_nHandle as usize - 1)?.sim_type)
                     .unwrap_or(-1),
-                data.and_then(|data| Some(data.get(client.m_nHandle as usize)?.titan))
+                data.and_then(|data| Some(data.get(client.m_nHandle as usize - 1)?.titan))
                     .unwrap_or_default(),
             );
         } else {

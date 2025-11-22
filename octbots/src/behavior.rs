@@ -200,7 +200,7 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
             let Some(current_target) = (0..helper.globals.maxPlayers)
                 .flat_map(|i| unsafe { (helper.sv_funcs.get_player_by_index)(i + 1).as_ref() })
                 .filter(|other| get_player_index(other) != get_player_index(bot))
-                .map(|other| get_player_index(other) as i32)
+                .map(|other| get_player_index(other) as i32 + 1)
                 .next()
             else {
                 break 'target (Status::Failure, 0.);
