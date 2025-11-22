@@ -253,6 +253,9 @@ float function distance( vector origin1, vector origin2 )
 }
 
 bool function TestScriptNavs(entity player, array<string> args) {
+	if ( !PlayerHasAdmin( player ) )
+		return false
+
 	try {
 		var navs = NavigationCreate(HULL_HUMAN);
 		NavigationFindPath(navs, player.GetOrigin(), GetPlayerCrosshairOrigin( player ));
@@ -275,6 +278,9 @@ bool function TestScriptNavs(entity player, array<string> args) {
 }
 
 bool function TestScriptOct(entity player, array<string> args) {
+	if ( !PlayerHasAdmin( player ) )
+		return false
+
 	thread TestScriptOct_Threaded(player.GetOrigin(), GetPlayerCrosshairOrigin( player ))
 
 	return true
@@ -298,6 +304,9 @@ void function TestScriptOct_Threaded(vector start, vector end) {
 }
 
 bool function TestScriptNavsRandom(entity player, array<string> args) {
+	if ( !PlayerHasAdmin( player ) )
+		return false
+
 	try {
 		var navs = NavigationCreate(HULL_HUMAN);
 		vector point = expect vector(NavigationRandomPoint(navs, GetPlayerCrosshairOrigin( player ), 500.));
@@ -314,6 +323,9 @@ bool function TestScriptNavsRandom(entity player, array<string> args) {
 }
 
 bool function NewTask(entity player, array<string> args) {
+	if ( !PlayerHasAdmin( player ) )
+		return false
+
 	file.tasks.insert(0, [player.GetOrigin(), GetPlayerCrosshairOrigin( player )])
 
 	BotSpawn("TaskCompletor")
@@ -341,14 +353,9 @@ void function MaybeRunTask(entity player) {
 void function killOnCompletion(entity bot, array<vector> task) {
 	wait 1
 
-	bot.SetOrigin( task[0] )
-	SetTeam( bot, GetPlayerArray()[0].GetTeam() )
-	
-	BotSetSimulationType( bot, 7 )
-	BotSetTargetPos(bot, task[1])
-	
-	bot.EndSignal("OnDeath")
-	
+	if ( !IsValid( bot ) )
+		return
+
 	OnThreadEnd(
 		function() : ( bot )
 		{
@@ -356,18 +363,34 @@ void function killOnCompletion(entity bot, array<vector> task) {
 		}
 	)
 
+	if ( !IsAlive( bot ) )
+		return
+
+	bot.SetOrigin( task[0] )
+	SetTeam( bot, GetPlayerArray()[0].GetTeam() )
+	
+	BotSetSimulationType( bot, 7 )
+	BotSetTargetPos(bot, task[1])
+	
+	bot.EndSignal( "OnDeath" )
+
 	while (Distance2D(bot.GetOrigin(), task[1]) > 100) {
 		wait 0
 	}
 }
 
 bool function BumpEveryone(entity player, array<string> args) {
+	if ( !PlayerHasAdmin( player ) )
+		return false
+
 	foreach(entity player in GetPlayerArray()) { player.SetVelocity(< RandomInt( 500 ), RandomInt( 500 ), RandomInt( 500 ) >) }
 
 	return true
 }
 
 bool function SafePluginsReload(entity player, array<string> args) {
+	if ( !PlayerHasAdmin( player ) )
+		return false
 
 	thread SafePluginsReloadThreaded()
 
@@ -382,4 +405,10 @@ void function SafePluginsReloadThreaded()
 	wait 0.5
 	SetConVarInt("bot_cmds_type", 100)
 }
+
+bool function PlayerHasAdmin( entity player )
+{
+	return ( ( !NSIsDedicated() && player == GetPlayerArray()[0] ) || split( GetConVarString( "grant_admin" ), "," ).contains( player.GetUID() ) )
+}
+
 #endif
