@@ -37,7 +37,7 @@ if you have any problems feel free to contact me here in [discussions](https://g
 - `void function BotSetTitan(entity bot, string titan)` sets the titan type for the bot
 - `void function BotSetTargetPos(entity bot, vector target)` sets a goal for goal follower ai to follow
 - `void function BotSetSimulationType(entity bot, int sim_type)` sets the bot index for a bot (doesn't work when called rigth after a bot is spawned)
-- `int ornull function BotSpawn(string bot_name)` spawns a bot with a name or if it is passed with "" the name is chosen randomly
+- `entity ornull function BotSpawn(string bot_name)` spawns a bot with a name or if it is passed with "" the name is chosen randomly
 - `void function AddBotName(string bot_name)` adds a bot name to the random name list
 - `void function ClearBotNames()` removes all bot names from the random name list (scary!)
 
@@ -134,11 +134,11 @@ Name overrides currently only affects players after a map reload or if it's over
 
 **API**
 
-- `void function RememberNameOverride(entity player, string name string clan_tag)`
+- `void function RememberNameOverride(entity player, string name, string clan_tag )`
 
 the plugin stores a name and clan tag for a player internally and will set them for the player on their next connection attempt
 
-- `void function RememberNameOverrideUid(string uid, string name string clan_tag)`
+- `void function RememberNameOverrideUid(string uid, string name, string clan_tag )`
 
 like the one before it but it now accepts a uid so that it can be set before anyone joins
 

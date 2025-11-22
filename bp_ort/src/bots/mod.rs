@@ -6,6 +6,7 @@ use rand::Rng;
 use rrplug::{
     bindings::{
         class_types::{
+            cbaseentity::CBaseEntity,
             client::{CClient, SignonState},
             cplayer::CPlayer,
         },
@@ -15,7 +16,10 @@ use rrplug::{
     mid::{squirrel::SQVM_SERVER, utils::try_cstring},
     prelude::*,
 };
-use shared::{bindings::HostState, utils::get_player_index};
+use shared::{
+    bindings::HostState,
+    utils::{get_player_index, nudge_type},
+};
 use simple_bot_manager::ManagerData;
 use std::{
     cell::RefCell,
@@ -438,12 +442,13 @@ fn spawn_fake_player(
     unsafe { engine_server.LockNetworkStringTables(false) };
 
     log::info!(
-        "spawned a bot : {} with handle {handle} {}",
+        "spawned a bot : {} with handle {handle} and {} : {}",
         get_c_char_array(&client.m_szServerName).unwrap_or("UNK"),
+        handle - 1,
         unsafe {
             from_char_ptr((server_funcs.get_entity_name)((server_funcs
                 .get_player_by_index)(
-                handle as i32 + 1
+                handle as i32
             )))
         }
     );
@@ -452,7 +457,7 @@ fn spawn_fake_player(
     if let Some(hardpoint) = shared_data
         .claimed_hardpoints
         .iter()
-        .find(|(_, index)| **index == handle as usize)
+        .find(|(_, index)| **index == handle as usize - 1)
         .map(|(v, _)| v)
         .cloned()
     {
@@ -464,7 +469,7 @@ fn spawn_fake_player(
     *BOT_DATA_MAP
         .get(token)
         .borrow_mut()
-        .get_mut(handle as usize)
+        .get_mut(handle as usize - 1)
         .expect("tried to get an invalid edict") = BotData {
         sim_type,
         nav_query: Navigation::new(Hull::Human),
@@ -478,7 +483,7 @@ fn spawn_fake_player(
         .read()
         .values()
         .filter_map(|sim| sim.init_func.as_ref())
-        .for_each(|init_func| (init_func)(handle, client));
+        .for_each(|init_func| (init_func)(handle - 1, client));
 
     Some(handle as i32)
 }
@@ -657,7 +662,7 @@ fn aim_penalty_changed() -> Option<()> {
 #[rrplug::sqfunction(VM = "Server", ExportName = "BotSetTitan")]
 fn bot_set_titan(bot: Option<&mut CPlayer>, titan: String) -> Option<()> {
     let mut data_maps = BOT_DATA_MAP.get(engine_token).try_borrow_mut().ok()?;
-    let bot_data = data_maps.as_mut().get_mut(get_player_index(bot?))?; // index and edict should be the same; nope it isn't
+    let bot_data = data_maps.as_mut().get_mut(dbg!(get_player_index(bot?)))?; // index and edict should be the same; nope it isn't
 
     bot_data.titan = match titan.as_str().trim() {
         "titan_stryder_arc" | "titan_stryder_leadwall" | "titan_stryder_ronin_prime" => {
@@ -700,7 +705,7 @@ fn bot_set_sim_type(bot: Option<&mut CPlayer>, sim_type: i32) -> Option<()> {
 }
 
 #[rrplug::sqfunction(VM = "Server", ExportName = "BotSpawn")]
-fn bot_spawn(bot_name: String) -> Option<i32> {
+fn bot_spawn(bot_name: String) -> Option<&'static CBaseEntity> {
     spawn_fake_player(
         bot_name.is_empty().then(get_bot_name).unwrap_or(bot_name),
         choose_team(),
@@ -709,6 +714,11 @@ fn bot_spawn(bot_name: String) -> Option<i32> {
         ENGINE_FUNCTIONS.wait(),
         engine_token,
     )
+    .and_then(|index| unsafe {
+        (SERVER_FUNCTIONS.wait().get_player_by_index)(index)
+            .as_ref()
+            .map(|e| nudge_type::<&CBaseEntity>(e))
+    })
 }
 
 #[rrplug::sqfunction(VM = "Server", ExportName = "AddBotName")]
