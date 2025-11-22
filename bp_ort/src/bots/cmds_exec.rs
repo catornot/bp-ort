@@ -43,7 +43,7 @@ pub fn run_bots_cmds(_paused: bool) {
             .filter(|(_, client)| client.m_bFakePlayer)
             .filter_map(|(i, client)| {
                 let bot_player = player_by_index((i + 1) as i32).as_mut()?;
-                let handle = client.m_nHandle as usize;
+                let handle = client.m_nHandle as usize - 1; // eh
 
                 (server_functions.calc_origin)(bot_player, &std::ptr::from_ref(bot_player), 0, 0);
 
