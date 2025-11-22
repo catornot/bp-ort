@@ -110,7 +110,7 @@ impl Plugin for R2Mole {
             return;
         };
 
-        if socket.len() > 1 {
+        if socket.len() > 1 || socket.is_empty() {
             let port = self.port.wait().m_Value.m_nValue as u16;
             socket.retain(|socket| unsafe { filter_sockets(*socket, port) });
         };
