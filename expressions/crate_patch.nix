@@ -9,9 +9,7 @@ let
     if allowedCrate == null && allowedCrates == [ ] then
       throw "must have at least one crate"
     else
-      builtins.concatStringsSep ", " (
-        builtins.map (crate: ''"${crate}"'') (allowedCrates ++ libCrates)
-      );
+      builtins.concatStringsSep ", " (builtins.map (crate: ''"${crate}"'') (allowedCrates ++ libCrates));
 in
 writeText "cratePatche.patch" ''
   diff --git a/Cargo.toml b/Cargo.toml
@@ -22,7 +20,7 @@ writeText "cratePatche.patch" ''
    resolver = "2"
    
    members = [
-  -    "bp_ort", "bspeater", "octbots", "r2mole", "ranim", "shared",
+  -    "bp_ort", "bspeater", "octbots", "r2mole", "ranim", "shared", "serialized_io",
   +    ${crates}
    ]
    
