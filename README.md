@@ -1,11 +1,7 @@
 # bp-ort
 (bots plugin or other)
 
-the main feature of this plugin is ofc the bots. they are currently in their most stable form.
-I am working towards a more improved version slowly which means their current behavior is considered complete and 
-A newer and better version would be completed at some point. this newer version would include wallrunning for bots and generally better systems.
-ETA is by the end of 2025 although I cannot guarantee how much motivation I would have across the rest of this year.
-
+the main feature of this plugin is ofc the bots.
 Other features that this plugin offers
 - auto mp_box loading
 - disabling the limit on players in sp maybe?
@@ -15,20 +11,37 @@ Other features that this plugin offers
 - "other testing functionality"
 - admin abuse
 
-# Usage
+pls refrain from downloading this mod if you don't know how, it's under active development and I don't have lot's of time to waste.
 
-- start by grabbing the package from the [thunderstore listing](https://thunderstore.io/c/northstar/p/cat_or_not/bp_ort/).
-  newest builds can be found in [actions](https://github.com/catornot/bp-ort/actions) and the newest mod release can be download via the green Code button or [here](https://github.com/catornot/bp-ort/archive/refs/heads/master.zip)
-- Then load into a private match.
-- Bots can be then spawned
-1. they can be spawned with [`bot_spawn`](https://github.com/catornot/bp-ort?tab=readme-ov-file#most-imporant-command) command
-2. You could use the bot_manager: `bot_manager_enabled 1`
-3. [scripts](https://github.com/catornot/bp-ort?tab=readme-ov-file#current-sq-api)
-- enjoy!
+you can contact me tho at:
+- [northstar discord](https://northstar.tf/discord) (as @cat_or_not)
+- me@catornot.net
+- [discussions](https://github.com/catornot/bp-ort/discussions)
 
-this process should be the same for dedicated servers but you need to get the new docker image!!
+# Ongoing Rewrite
+this is like actual rewrite but it kind of is
+old systems are left intack but are instead kind of put of EOL which in this could mean they can get removed at any point.
+this "EOL" tag doesn't include any squirrel apis and admin abuse
 
-if you have any problems feel free to contact me here in [discussions](https://github.com/catornot/bp-ort/discussions) or on the [northstar discord](https://northstar.tf/discord)
+most importantly it will bring better navigation and combat capabilities for bots (like wallrunning)
+
+```mermaid
+kanban
+  todo[Todo]    
+    navmeshv2[Navmesh Overlay]
+    generic[Generic Combat Solution]
+    evasion[Evasion Maneuvers]
+    gamemodes[Support for Gamemodes]
+    fasterpathfinding[Faster Pathfinding]
+  progress[In Progress]
+    navigation[3D Navigation]
+    pathfinding[3D pathfinding]
+    props[Props in Nameshes]
+  Done[Done]
+    Navmesh[Navmesh Generation]
+```
+
+due to unforseen obstables the rewrite is not coming by the end of 2025, currently looking to getting it done by march 2026
 
 ## current sq api
 
@@ -48,7 +61,20 @@ if you have any problems feel free to contact me here in [discussions](https://g
 - `array<vector> function NavigationGetAllPoints(var nav)`
 - `vector ornull function NavigationNextPoint(var nav)`
 
-## bots
+**Code Callback** - the plugin attemps to call the following functions when the player connects which are not defined anywhere (aka you can define them)
+
+- `string function CodeCallBack_CanChangeName(string uid, string name)`
+- `string function CodeCallBack_CanChangeClangTag(string uid, string clan_tag)`
+
+### name overides
+
+- `void function RememberNameOverride(entity player, string name, string clan_tag )`
+
+the plugin stores a name and clan tag for a player internally and will set them for the player on their next connection attempt
+
+- `void function RememberNameOverrideUid(string uid, string name, string clan_tag )`
+
+## bots 
 
 ### bot names
 so bots have "unique" names derived from contributors to northstar to make bot puns (some are just "legacy names")
@@ -108,6 +134,7 @@ other ones are found under `bot_` namespace (they are not so important)
 - 32 => use offhand ability 2
 - 33 => use offhand ability 3
 - 34 => use offhand ability 4
+- 100 => experimental wallrunning ai
 
 6, 7, 8, 9, 10, 11, 13, 14, 19, and 21 require navmesh to be present on the map otherwise the game will crash (all of the standart mp maps have navmeshes)
 
@@ -119,27 +146,6 @@ it also has a feature to actually make them a bit fair where they will get more 
 the derivations like the headhunter ai try to play the objective of the gamemode ~~but they are not auto activated and have to be manually set via the `bot_cmds_type` cvar~~
 auto activation is controlled is controlled by `auto_select_gamemode` in the mod.
 
-# other features
-
-## admin abuse (incomplete) with auto completion!!!
-some of the commands from script admin abuse are included in this plugin
-
-## name overriding
-Name overrides currently only affects players after a map reload or if it's overridden when they join
-
-**Code Callback** - the plugin attemps to call the following functions when the player connects which are not defined anywhere (aka you can define them)
-
-- `string function CodeCallBack_CanChangeName(string uid, string name)`
-- `string function CodeCallBack_CanChangeClangTag(string uid, string clan_tag)`
-
-**API**
-
-- `void function RememberNameOverride(entity player, string name, string clan_tag )`
-
-the plugin stores a name and clan tag for a player internally and will set them for the player on their next connection attempt
-
-- `void function RememberNameOverrideUid(string uid, string name, string clan_tag )`
-
 like the one before it but it now accepts a uid so that it can be set before anyone joins
 
 btw the cvar `bot_uwufy` controls if connecting players will get their name uwufied (it's disabled by default now)
@@ -148,16 +154,3 @@ btw the cvar `bot_uwufy` controls if connecting players will get their name uwuf
 this a optinal but recommend to have script mod for this plugin. it adds extra features on top of the plugin that are simply easier to implement in scripts.
 
 it's most critical feature is notifying the plugin of the current selected titan for the bot and swapping loadout for bots. it also adds mod settings integration for bp_ort.
-
-## exposed functions
-- `void function SpawnNBots(int n, string name = "")`
-this spawns the specified amount of bots (useful for filling whole lobbies)
-
-usage:
-```bash
-sv_cheats 1
-script thread SpawnNBots(32)
-```
-
-
-# you should make the bot miss a portion of their mag instead random spread
