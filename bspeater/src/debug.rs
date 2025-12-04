@@ -268,7 +268,7 @@ fn debug_contents(
         )
         .first()
     else {
-        bevy::log::warn!("couldn't get anything in this ray cast odd");
+        // bevy::log::warn!("couldn't get anything in this ray cast odd");
         return Ok(());
     };
 

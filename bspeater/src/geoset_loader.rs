@@ -1,6 +1,6 @@
 use crate::*;
-use bevy::math::DVec3;
-use rayon::prelude::*;
+use avian3d::math::PI;
+use bevy::math::{Affine3A, DVec3};
 
 pub fn geoset_to_meshes(
     BSPData {
@@ -176,36 +176,85 @@ fn prop_to_mesh(
     if props.len() <= index {
         return None;
     }
+
     let static_prop = props[index];
-    let transform = Transform::from_translation(static_prop.origin)
+    let transform = Transform::from_translation(static_prop.origin.xzy())
         .with_rotation(Quat::from_euler(
-            EulerRot::XYZ,
-            static_prop.angles.x,
-            static_prop.angles.y,
-            static_prop.angles.z,
+            EulerRot::XYZEx,
+            static_prop.angles.x.to_radians(),
+            static_prop.angles.y.to_radians(),
+            static_prop.angles.z.to_radians(),
         ))
         .with_scale(Vec3::splat(static_prop.scale))
-        .compute_affine();
+        .compute_matrix();
+
+    let transform_2 =
+        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, 0., 0., 0.)).compute_matrix();
+
+    // let transform = new_source_transform_matrix(
+    //     static_prop.origin.with_z(-static_prop.origin.z),
+    //     static_prop.angles,
+    //     static_prop.scale,
+    // );
 
     if let Some(model_data) = model_data
         .get(static_prop.model_index as usize)
         .and_then(|o| o.as_ref())
-    // .filter(|_| static_prop.solid == 1)
+        .filter(|_| static_prop.solid == 6)
+    // figure what this actually is ^ rigth vphysics stuff I rember
     {
         indices.extend(&model_data.1);
-        pushing_vertices.extend(
-            model_data
-                .0
-                .iter()
-                .copied()
-                .map(|vert| transform.transform_point3(vert)),
-        );
-        println!("phys model");
+        pushing_vertices.extend(model_data.0.iter().copied().map(|vert| {
+            transform_2
+                .mul_vec4(transform.mul_vec4(vert.extend(1.)).xyzw())
+                .xyz()
+        }));
     } else {
         // println!("no phys model");
     }
 
     Some(())
+}
+
+fn new_source_transform_matrix(origin: Vec3, angles: Vec3, scale: f32) -> Mat4 {
+    let sy = angles.y.to_radians().sin();
+    let sp = angles.x.to_radians().sin();
+    let sr = angles.z.to_radians().sin();
+    let cy = angles.y.to_radians().cos();
+    let cp = angles.x.to_radians().cos();
+    let cr = angles.z.to_radians().cos();
+    Mat4::from_cols(
+        Vec4::new(cp * cy * scale, cp * sy * scale, -sp * scale, 0.),
+        Vec4::new(
+            (sp * sr * cy - cr * sy) * scale,
+            (sp * sr * sy + cr * cy) * scale,
+            sr * cp * scale,
+            0.,
+        ),
+        Vec4::new(
+            (sp * cr * cy + sr * sy) * scale,
+            (sp * cr * sy - sr * cy) * scale,
+            cr * cp * scale,
+            0.,
+        ),
+        Vec4::new(origin.x, origin.y, origin.z, 0.),
+    )
+}
+
+fn model_to_mesh(
+    model_data: &(Vec<Vec3>, Vec<u32>),
+    pushing_vertices: &mut Vec<Vec3>,
+    indices: &mut Vec<u32>,
+    transform: Affine3A,
+) {
+    indices.extend(&model_data.1);
+    pushing_vertices.extend(
+        model_data
+            .0
+            .iter()
+            .copied()
+            .map(|vert| transform.transform_point3(vert)),
+    );
 }
 
 fn tricoll_to_mesh(
