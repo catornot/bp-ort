@@ -148,10 +148,6 @@ impl Plugin for R2Mole {
             }
         };
     }
-
-    fn on_reload_request(&self) -> reloading::ReloadResponse {
-        unsafe { reloading::ReloadResponse::allow_reload() }
-    }
 }
 
 entry!(R2Mole);

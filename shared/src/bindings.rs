@@ -311,7 +311,7 @@ pub struct CTraceFilterSimple {
 #[derive(Debug, Clone)]
 pub struct CTraceFilterWorldAndProps {
     pub vtable: *const fn(),
-    pub pass_ent: *const (),
+    pub pass_ent: *const CBaseEntity,
 }
 
 #[repr(C)]
