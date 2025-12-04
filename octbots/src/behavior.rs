@@ -10,7 +10,7 @@ use parking_lot::RwLock;
 use parry3d::shape::Capsule;
 use parry3d::{self, query::RayCast};
 use rrplug::{
-    bindings::class_types::{cbaseentity::CBaseEntity, client::CClient, cplayer::CPlayer},
+    bindings::class_types::{client::CClient, cplayer::CPlayer},
     prelude::*,
 };
 use shared::{
@@ -357,7 +357,17 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
             }
 
             if brain.next_wall_point.is_some() || brain.next_point_override.is_some() {
-                unsafe { debug.AddLineOverlay(&brain.origin, &target, 255, 0, 150, true, 0.01) }
+                unsafe {
+                    debug.AddLineOverlay(
+                        &brain.origin,
+                        &target,
+                        255,
+                        brain.next_point_override.is_some() as i32 * 255,
+                        150,
+                        true,
+                        0.01,
+                    )
+                }
             }
 
             brain.next_cmd.move_ = move_;
@@ -489,6 +499,17 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
                         // check next path 
                         && is_wallrun_point(point) =>
                 {
+                    let diff = dbg!((Vec3::new(
+                        point.as_point().0.x as f32 - wall_point.0.x as f32,
+                        point.as_point().0.y as f32 - wall_point.0.y as f32,
+                        point.as_point().0.z as f32 - wall_point.0.z as f32,
+                    )
+                    .abs()
+                    .min(Vec3::splat(1.))
+                    .max(Vec3::ZERO)
+                        - Vec3::splat(1.))
+                    .abs());
+
                     brain.next_wall_point = unsafe {
                         let mut result = MaybeUninit::<CGameTrace>::zeroed();
                         let mut ray = MaybeUninit::<Ray>::zeroed().assume_init(); // all zeros is correct for Ray
@@ -499,19 +520,23 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
                             point.as_ref(),
                             &wall_pos,
                             &Vector3::new(
-                                -navmesh.cell_size,
-                                -navmesh.cell_size,
-                                -navmesh.cell_size,
+                                -navmesh.cell_size * diff.x,
+                                -navmesh.cell_size * diff.y,
+                                -navmesh.cell_size * diff.z,
                             ),
-                            &Vector3::new(navmesh.cell_size, navmesh.cell_size, navmesh.cell_size),
+                            &Vector3::new(
+                                navmesh.cell_size * diff.x,
+                                navmesh.cell_size * diff.y,
+                                navmesh.cell_size * diff.z,
+                            ),
                         );
 
                         let filter: *const CTraceFilterSimple = &CTraceFilterSimple {
                             vtable: helper.sv_funcs.simple_filter_vtable,
                             unk: 0,
-                            pass_ent: nudge_type::<&CBaseEntity>(bot),
+                            pass_ent: std::ptr::null(),
                             should_hit_func: std::ptr::null(),
-                            collision_group: TraceCollisionGroup::Player as i32,
+                            collision_group: TraceCollisionGroup::None as i32,
                         };
 
                         ray.is_smth = false;
@@ -529,15 +554,7 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
                             result.as_mut_ptr(),
                         );
 
-                        const WALL_FRAC: f32 = 0.6;
-                        const POINT_FRAC: f32 = 0.4;
-                        let splat = |f: f32| Vector3::new(f, f, f);
-
                         Some(result.assume_init().end_pos)
-                            .filter(|wall| *wall == Vector3::ZERO)
-                            .or_else(|| {
-                                Some(wall_pos * splat(WALL_FRAC) + **point * splat(POINT_FRAC))
-                            })
                     };
 
                     (Status::Success, 0.)
@@ -613,11 +630,11 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
                 )
             };
 
-            // look 7 points ahead for when a bot overshoots points
+            // look 20 points ahead for when a bot overshoots points
             if brain
                 .path
                 .iter()
-                .take(7)
+                .take(20)
                 .map(AsRef::as_ref)
                 .any(is_in_hitbox)
             {

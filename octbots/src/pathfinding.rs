@@ -10,7 +10,7 @@ type Cost = f64;
 type VisitedList = FxIndexMap<TUVec3u32, (usize, Cost, u32, u32)>;
 
 /// this would work with the current grid size ...
-const WALLRUN_MAX_DISTANCE: u32 = 15;
+const WALLRUN_MAX_DISTANCE: u32 = 20;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Node {
@@ -218,7 +218,8 @@ fn get_neighbors<'a>(
                         point,
                         ground_distance,
                     )
-                    || find_wall_point(*neighboor_point, octtree).is_some())
+                    || (find_wall_point(*neighboor_point, octtree).is_some()
+                        && neighboor_point.0.z == point.0.z))
                 && *wallrun_distance < WALLRUN_MAX_DISTANCE
         },
     )
@@ -334,7 +335,7 @@ fn fall_condition(
             && [parent_pos.0.x, parent_pos.0.y] == [pos.0.x, pos.0.y])
 }
 
-const MAX_DISTANCE: u32 = 8;
+const MAX_DISTANCE: u32 = 6;
 fn find_ground_distance(octtree: &Octree<u32, TUVec3u32>, point: TUVec3u32) -> u32 {
     (point.0.z.saturating_sub(MAX_DISTANCE + 1)..point.0.z)
         .rev()
