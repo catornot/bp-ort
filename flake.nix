@@ -68,6 +68,7 @@
             bp-ort = mkPluginBuildType "bp_ort" "debug";
             ranim = mkPlugin "ranim";
             octbots = mkPlugin "octbots";
+            serialized-io = mkPlugin "serialized_io";
             packaged-mod = native-pkgs.callPackage ./expressions/packaged-mod.nix {
               mod = self.packages.${system}.mod;
               inherit version;
@@ -80,6 +81,7 @@
                   bp-ort
                   octbots
                   ranim
+                  serialized-io
                 ];
               };
               inherit version;

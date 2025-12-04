@@ -66,7 +66,10 @@ rustPlatform.buildRustPackage (final: {
   };
 
   patches = [
-    (pkgs.callPackage ./crate_patch.nix { allowedCrate = "bspeater"; libCrates = []; })
+    (pkgs.callPackage ./crate_patch.nix {
+      allowedCrate = "bspeater";
+      libCrates = [ ];
+    })
   ];
 
   inherit cargoLock;

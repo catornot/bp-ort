@@ -69,16 +69,14 @@ impl JobMarket {
         }
 
         // give threads time to end
-        thread::sleep(Duration::from_secs(1));
+        thread::sleep(Duration::new(2, 100));
 
-        // self.workers.iter().for_each(|worker| {
-        //     let start = SystemTime::now();
-        //     while !worker.is_finished()
-        //     && start.elapsed().unwrap_or(Duration::new(1, 0)) >= Duration::new(1, 0)
-        //     {
-        //         thread::sleep(Duration::from_millis(10));
-        //     }
-        // });
+        self.workers.iter().for_each(|worker| {
+            while !worker.is_finished() {
+                thread::sleep(Duration::from_millis(50));
+                _ = self.job_sender.send(JobMessage::Stop);
+            }
+        });
     }
 }
 

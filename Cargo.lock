@@ -496,7 +496,7 @@ dependencies = [
  "downcast-rs 2.0.2",
  "either",
  "petgraph",
- "ron",
+ "ron 0.8.1",
  "serde",
  "smallvec",
  "thiserror 2.0.16",
@@ -557,7 +557,7 @@ dependencies = [
  "futures-lite",
  "js-sys",
  "parking_lot",
- "ron",
+ "ron 0.8.1",
  "serde",
  "stackfuture",
  "thiserror 2.0.16",
@@ -4758,6 +4758,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ron"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd490c5b18261893f14449cbd28cb9c0b637aebf161cd77900bfdedaff21ec32"
+dependencies = [
+ "bitflags 2.9.4",
+ "once_cell",
+ "serde",
+ "serde_derive",
+ "typeid",
+ "unicode-ident",
+]
+
+[[package]]
 name = "roxmltree"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4766,7 +4780,7 @@ checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
 [[package]]
 name = "rrplug"
 version = "4.2.1"
-source = "git+https://github.com/catornot/rrplug.git#2776c8a9f1c2be7aa9b930afac3ead3d15f9caa2"
+source = "git+https://github.com/catornot/rrplug.git#fc676edae292f5e3952517149281cb97231dac15"
 dependencies = [
  "bitflags 2.9.4",
  "log",
@@ -4780,7 +4794,7 @@ dependencies = [
 [[package]]
 name = "rrplug_proc"
 version = "4.2.1"
-source = "git+https://github.com/catornot/rrplug.git#2776c8a9f1c2be7aa9b930afac3ead3d15f9caa2"
+source = "git+https://github.com/catornot/rrplug.git#fc676edae292f5e3952517149281cb97231dac15"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4990,6 +5004,14 @@ dependencies = [
  "memchr",
  "ryu",
  "serde",
+]
+
+[[package]]
+name = "serialized_io"
+version = "0.1.0"
+dependencies = [
+ "ron 0.12.0",
+ "rrplug",
 ]
 
 [[package]]
