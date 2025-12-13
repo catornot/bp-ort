@@ -13,7 +13,6 @@ use rrplug::{
     bindings::class_types::{cbaseentity::CBaseEntity, client::CClient, cplayer::CPlayer},
     prelude::*,
 };
-use rustc_hash::FxHashMap;
 use shared::{
     bindings::{
         Action as MoveAction, CGameTrace, CTraceFilterSimple, CUserCmd, Contents, Ray,
