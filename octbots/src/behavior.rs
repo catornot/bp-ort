@@ -10,13 +10,14 @@ use parking_lot::RwLock;
 use parry3d::shape::Capsule;
 use parry3d::{self, query::RayCast};
 use rrplug::{
-    bindings::class_types::{client::CClient, cplayer::CPlayer},
+    bindings::class_types::{cbaseentity::CBaseEntity, client::CClient, cplayer::CPlayer},
     prelude::*,
 };
+use rustc_hash::FxHashMap;
 use shared::{
     bindings::{
         Action as MoveAction, CGameTrace, CTraceFilterSimple, CUserCmd, Contents, Ray,
-        TraceCollisionGroup, SERVER_FUNCTIONS,
+        TraceCollisionGroup, VectorAligned, SERVER_FUNCTIONS,
     },
     cmds_helper::CUserCmdHelper,
     utils::{get_player_index, lookup_ent, nudge_type},
@@ -33,7 +34,7 @@ use crate::{
     async_pathfinding::PathReceiver,
     loader::{Navmesh, NavmeshStatus},
     nav_points::{tuvec_to_vector3, vector3_to_tuvec, NavPoint},
-    pathfinding::get_neighbors_h,
+    pathfinding::{get_neighbors_h, AreaCost},
 };
 
 static BEHAVIOR: LazyLock<RwLock<HashMap<u16, BT<BotAction, BotBrain>>>> =
@@ -64,6 +65,12 @@ struct BotBrain {
     jump_tick: u32,
     vault_tick: u32,
     down_tick: u32,
+
+    // area cost
+    // should make some wrapper around this that can be shared
+    area_cost: AreaCost,
+    last_path_points: Vec<NavPoint>,
+    last_point_reached_delta: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -75,6 +82,7 @@ pub enum BotAction {
     IsDead,
     DeadState,
     CanMove,
+    CheckReachability,
     Move,
     IsJump,
     Jump,
@@ -101,6 +109,7 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
 
     let target_moving = Sequence(vec![
         Action(BotAction::CanMove),
+        Action(BotAction::CheckReachability),
         AlwaysSucceed(Box::new(Sequence(vec![
             Action(BotAction::IsWallRun),
             Action(BotAction::WallRun),
@@ -157,6 +166,9 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
             jump_tick: 0,
             vault_tick: 0,
             down_tick: 0,
+            area_cost: AreaCost::default(),
+            last_path_points: Vec::new(),
+            last_point_reached_delta: 0.,
         },
     ));
 }
@@ -244,12 +256,17 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
             if let None = brain.path_receiver.as_ref()
                 && brain.path_next_request < helper.globals.curTime
             {
-                brain.path_receiver = crate::PLUGIN.wait().job_market.find_path(start, end);
+                brain.path_receiver =
+                    crate::PLUGIN
+                        .wait()
+                        .job_market
+                        .find_path(start, end, brain.area_cost.clone());
             }
 
             let status = if let Some(path_receiver) = brain.path_receiver.as_ref() {
                 match path_receiver.try_recv() {
                     Ok(Some(path)) => {
+                        brain.last_path_points.clear();
                         path.into_iter().for_each(|v| brain.path.push_back(v));
 
                         (Status::Success, 0.)
@@ -307,6 +324,120 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
                         0.01,
                     )
                 }
+                (Status::Success, 0.)
+            }
+        }
+        BotAction::CheckReachability => {
+            let build_ray = |v1: Vector3, v2: Vector3| Ray {
+                start: VectorAligned { vec: v1, w: 0. },
+                delta: VectorAligned {
+                    vec: v2 - v1,
+                    w: 0.,
+                },
+                offset: VectorAligned {
+                    vec: Vector3::new(0., 0., 0.),
+                    w: 0.,
+                },
+                unk3: 0.,
+                unk4: 0,
+                unk5: 0.,
+                unk6: 1103806595072,
+                unk7: 0.,
+                is_ray: true,
+                is_swept: false,
+                is_smth: false,
+                flags: 0,
+                unk8: 0,
+            };
+            if let Some(point) = brain.path.front()
+                && let Some(navmesh) = brain.navmesh.try_read()
+                && let NavmeshStatus::Loaded(_) = &navmesh.navmesh
+                && unsafe {
+                    let mut result_low = MaybeUninit::<CGameTrace>::zeroed();
+                    let mut result_high = MaybeUninit::<CGameTrace>::zeroed();
+                    const HIGH_OFFSET: Vector3 = Vector3::new(0., 0., 100.);
+                    const LOW_OFFSET: Vector3 = Vector3::new(0., 0., 40.);
+                    let ray_low =
+                        build_ray(brain.abs_origin + LOW_OFFSET, point.as_vec() + LOW_OFFSET);
+                    let ray_high =
+                        build_ray(brain.abs_origin + HIGH_OFFSET, point.as_vec() + HIGH_OFFSET);
+
+                    let filter: *const CTraceFilterSimple = &CTraceFilterSimple {
+                        vtable: helper.sv_funcs.simple_filter_vtable,
+                        unk: 0,
+                        pass_ent: nudge_type::<&CBaseEntity>(bot),
+                        should_hit_func: std::ptr::null(),
+                        collision_group: TraceCollisionGroup::None as i32,
+                    };
+
+                    (helper.engine_funcs.trace_ray_filter)(
+                        (*helper.sv_funcs.ctraceengine) as *const libc::c_void,
+                        &ray_high,
+                        Contents::SOLID as u32
+                            | Contents::MOVEABLE as u32
+                            | Contents::WINDOW as u32
+                            | Contents::MONSTER as u32
+                            | Contents::GRATE as u32
+                            | Contents::PLAYER_CLIP as u32,
+                        filter.cast(),
+                        result_high.as_mut_ptr(),
+                    );
+
+                    (helper.engine_funcs.trace_ray_filter)(
+                        (*helper.sv_funcs.ctraceengine) as *const libc::c_void,
+                        &ray_low,
+                        Contents::SOLID as u32
+                            | Contents::MOVEABLE as u32
+                            | Contents::WINDOW as u32
+                            | Contents::MONSTER as u32
+                            | Contents::GRATE as u32
+                            | Contents::PLAYER_CLIP as u32,
+                        filter.cast(),
+                        result_low.as_mut_ptr(),
+                    );
+
+                    result_low
+                        .assume_init()
+                        .fraction
+                        .max(result_high.assume_init().fraction)
+                } != 1.0
+            {
+                *brain.area_cost.entry(point.as_point()).or_default() += 100.;
+                // also add to the last 5 points
+                brain
+                    .last_path_points
+                    .iter()
+                    .rev()
+                    .take(5)
+                    .for_each(|point| {
+                        *brain.area_cost.entry(point.as_point()).or_default() += 100.;
+                    });
+
+                brain.last_point_reached_delta = 0.;
+                brain.path.clear();
+                brain.needs_new_path = true;
+                brain.path_receiver = None; // remove any future paths
+                (Status::Failure, 0.)
+            } else if let Some(point) = brain.path.front()
+                && brain.last_point_reached_delta > 5.
+            {
+                *brain.area_cost.entry(point.as_point()).or_default() += 100.;
+                // also add to the last 5 points
+                brain
+                    .last_path_points
+                    .iter()
+                    .rev()
+                    .take(5)
+                    .for_each(|point| {
+                        *brain.area_cost.entry(point.as_point()).or_default() += 100.;
+                    });
+
+                brain.last_point_reached_delta = 0.;
+                brain.path.clear();
+                brain.needs_new_path = true;
+                brain.path_receiver = None; // remove any future paths
+                (Status::Failure, 0.)
+            } else {
                 (Status::Success, 0.)
             }
         }
@@ -601,15 +732,18 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
             //             .and_then(|element| octtree.get_element(element))
             //         .is_some()
             //     };
-            if let Some(point) = brain.path.front()
-                && let Some(navmesh) = brain.navmesh.try_read()
-                // this just breaks this system :(
-                // && distance2d(point.as_point().0, brain.abs_origin) < navmesh.cell_size * 2.  // check if we are not able to fall
-                && let NavmeshStatus::Loaded(octtree) = &navmesh.navmesh
-                && let Some(point_offset) = get_neighbors_h(point.as_point(), octtree)
+            let get_drop_point = |point: TUVec3u32, octtree| {
+                get_neighbors_h(point, octtree)
                     .filter_map(|(point, is_empty)| is_empty.then_some(point))
                     // .filter(|potential_point| !any_obstructions(point.as_point(), *potential_point, octtree, &navmesh) )
-                    .map(|point| (point, get_neighbors_h(point, octtree).filter(|(_,is_empty)| !*is_empty ).count()))
+                    .map(|point| {
+                        (
+                            point,
+                            get_neighbors_h(point, octtree)
+                                .filter(|(_, is_empty)| !*is_empty)
+                                .count(),
+                        )
+                    })
                     .reduce(|l, r| {
                         // if the amount of walls is the same check for distance
                         if l.1 == r.1 {
@@ -626,6 +760,13 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
                             r
                         }
                     })
+            };
+            if let Some(point) = brain.path.front()
+                && let Some(navmesh) = brain.navmesh.try_read()
+                // this just breaks this system :(
+                // && distance2d(point.as_point().0, brain.abs_origin) < navmesh.cell_size * 2.  // check if we are not able to fall
+                && let NavmeshStatus::Loaded(octtree) = &navmesh.navmesh
+                && let Some(point_offset) = get_drop_point(point.as_point(), octtree)
             {
                 if brain.down_tick > 16 {
                     // the worse way of getting a unit vector
@@ -673,18 +814,23 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
                 )
             };
 
+            // increment with tick interval for reachability tests
+            brain.last_point_reached_delta += helper.globals.absoluteFrameTime;
+
             // look 20 points ahead for when a bot overshoots points
+            // TODO: figure if restricting z is actaully a good idea
+            // this begin restriting point skipping to one point above or less and equals based on z pos
             if brain
                 .path
                 .iter()
                 .take(20)
                 .map(AsRef::as_ref)
-                // TODO: figure if this is actaully a good idea
-                // this begin restriting point skipping to one point above or less and equals based on z pos
                 .filter(|pos: &&Vector3| pos.z <= next_point.as_vec().z + navmesh.cell_size)
                 .any(is_in_hitbox)
+                && let Some(nav_point) = brain.path.pop_front()
             {
-                brain.path.pop_front();
+                brain.last_path_points.push(nav_point);
+                brain.last_point_reached_delta = 0.; // reset delta
             }
 
             brain.next_wall_point = None;
@@ -703,6 +849,7 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
 
         BotAction::DeadState => {
             brain.needs_new_path = true;
+            brain.path_receiver = None; // clear any paths under construction
             brain.path.clear();
             (Status::Success, 0.)
         }

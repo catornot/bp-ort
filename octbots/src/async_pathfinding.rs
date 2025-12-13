@@ -1,5 +1,7 @@
+use oktree::prelude::*;
 use parking_lot::RwLock;
 use rrplug::prelude::*;
+use rustc_hash::FxHashMap;
 use std::{
     sync::Arc,
     thread::{self, available_parallelism, JoinHandle},
@@ -9,7 +11,7 @@ use std::{
 use crate::{
     loader::{Navmesh, NavmeshStatus},
     nav_points::{vector3_to_tuvec, NavPoint},
-    pathfinding::find_path,
+    pathfinding::{find_path, AreaCost},
 };
 
 pub type PathReceiver = flume::Receiver<Option<Vec<NavPoint>>>;
@@ -17,6 +19,7 @@ pub type PathReceiver = flume::Receiver<Option<Vec<NavPoint>>>;
 pub struct Work {
     pub start: Vector3,
     pub end: Vector3,
+    pub area_cost: AreaCost, // migth be a bit expensive to move this around
     pub return_sender: flume::Sender<Option<Vec<NavPoint>>>,
 }
 
@@ -46,7 +49,12 @@ impl JobMarket {
         }
     }
 
-    pub fn find_path(&self, start: Vector3, end: Vector3) -> Option<PathReceiver> {
+    pub fn find_path(
+        &self,
+        start: Vector3,
+        end: Vector3,
+        area_cost: AreaCost,
+    ) -> Option<PathReceiver> {
         let (sender, receiver) = flume::unbounded();
 
         self.job_sender
@@ -54,6 +62,7 @@ impl JobMarket {
                 start,
                 end,
                 return_sender: sender,
+                area_cost,
             }))
             .ok()?;
         const fn check_sync<T: Sync + Send>() {}
@@ -89,6 +98,7 @@ fn worker(
             start,
             end,
             return_sender,
+            area_cost,
         })) = job_receiver.recv()
         {
             let navmesh = navmesh.read();
@@ -99,6 +109,7 @@ fn worker(
 
             _ = return_sender.send(find_path(
                 navmesh_tree,
+                area_cost,
                 vector3_to_tuvec(navmesh.cell_size, start),
                 vector3_to_tuvec(navmesh.cell_size, end),
                 navmesh.cell_size,

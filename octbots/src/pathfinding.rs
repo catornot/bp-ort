@@ -1,6 +1,6 @@
 use indexmap::{map::Entry, IndexMap};
 use oktree::prelude::*;
-use rustc_hash::FxHasher;
+use rustc_hash::{FxHashMap, FxHasher};
 use std::{cmp::Reverse, collections::BinaryHeap, hash::BuildHasherDefault, ops::Not};
 
 use crate::{loader::Octree32, nav_points::NavPoint};
@@ -8,6 +8,7 @@ use crate::{loader::Octree32, nav_points::NavPoint};
 type FxIndexMap<K, V> = IndexMap<K, V, BuildHasherDefault<FxHasher>>;
 type Cost = f64;
 type VisitedList = FxIndexMap<TUVec3u32, Visits>;
+pub type AreaCost = FxHashMap<TUVec3u32, Cost>;
 
 /// this would work with the current grid size ...
 const WALLRUN_MAX_DISTANCE: u32 = 20;
@@ -51,6 +52,7 @@ impl Eq for Node {}
 
 pub fn find_path(
     octtree: &Octree32,
+    area_cost: AreaCost,
     start: TUVec3u32,
     end: TUVec3u32,
     cell_size: f32,
@@ -148,7 +150,8 @@ pub fn find_path(
 
             // calculate heuristic cost
             let neighboor_ground_distance = find_ground_distance(octtree, neighbor);
-            let estimated_cost = heuristic(neighbor, end, start);
+            let estimated_cost = heuristic(neighbor, end, start)
+                + area_cost.get(&neighbor).copied().unwrap_or_default();
             let wallrun_distance = if find_wall_point(node_pos, octtree).is_some() {
                 wallrun_distance + 1
             } else {

@@ -1,12 +1,18 @@
 use rrplug::{high::squirrel::SuspendThread, prelude::*};
 
+use crate::pathfinding::AreaCost;
+
 pub fn octtree_register_sq_functions() {
     register_sq_functions(octtree_find_path);
 }
 
 #[rrplug::sqfunction(VM = "SERVER", ExportName = "OcttreeFindPath")]
 fn octtree_find_path(start: Vector3, end: Vector3) -> Result<SuspendThread<Vec<Vector3>>, String> {
-    let Some(recv) = crate::PLUGIN.wait().job_market.find_path(start, end) else {
+    let Some(recv) = crate::PLUGIN
+        .wait()
+        .job_market
+        .find_path(start, end, AreaCost::default())
+    else {
         return Err("couldn't start pathfinding".to_string());
     };
 
