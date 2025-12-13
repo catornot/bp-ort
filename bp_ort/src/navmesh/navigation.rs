@@ -60,13 +60,8 @@ impl Navigation {
                 m_excludeFlags: 0,
                 m_traverseFlags: (JumpTypes::SmallObjectsCrossing.into_u32()
                     | JumpTypes::CratesTraversal.into_u32()
-                    | JumpTypes::MediumGapCrossing.into_u32()
-                    | JumpTypes::WindowJumpDownUnused.into_u32()
                     | JumpTypes::ShortWallTraversal.into_u32()
-                    | JumpTypes::MediumJumpsAcrossSameLevel.into_u32()
-                    | JumpTypes::MediumTraversalIntoAdjacentLevels.into_u32()
-                    | JumpTypes::ShortJumpsAcrossSameLevel.into_u32()
-                    | JumpTypes::DiagonalMediumTraversal.into_u32())
+                    | JumpTypes::ShortJumpsAcrossSameLevel.into_u32())
                     * (hull == Hull::Human) as u32,
             },
             path: Vec::with_capacity(PATH_CAPACITY),
