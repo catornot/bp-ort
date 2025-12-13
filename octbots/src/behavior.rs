@@ -377,7 +377,14 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
         }
         BotAction::IsJump => match brain.path.front() {
             Some(point)
-                if point.as_vec().z > brain.abs_origin.z + 50.
+                if point.as_vec().z
+                    > brain.abs_origin.z
+                        + 50.
+                        + brain
+                            .next_wall_point
+                            .and_then(|_| brain.navmesh.try_read())
+                            .map(|navmesh| navmesh.cell_size)
+                            .unwrap_or_default() // add more leway when wallrunning
                     || bot.m_vecAbsVelocity == Vector3::ZERO =>
             {
                 (Status::Success, 0.)
@@ -563,7 +570,6 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
             }
         }
         BotAction::WallRun => (Status::Success, 0.),
-        // currently broken
         BotAction::IsGoingDown => match brain.path.front() {
             // should maybe check if the next points are not above
             Some(point)
@@ -581,13 +587,40 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
             let distance2d = |p: TUVec3<u32>, v: Vector3| {
                 ((p.x as f32 - v.x).powi(2) + ((p.y as f32 - v.y).powi(2))).sqrt()
             };
+            // INFO: this could actually help sometimes, by checking if there is anything between the bot and the go down better point
+            // currently doesn't work tho
+            // let any_obstructions =
+            //     |start: TUVec3u32, end: TUVec3u32, octtree: &Octree32, navmesh: &Navmesh| {
+            //         octtree
+            //             .ray_cast(&RayCast3d::new(
+            //                 UVec3::new(start.0.x, start.0.y, start.0.z).as_vec3a(),
+            //                 Dir3A::new_unchecked((UVec3::new(start.0.x, start.0.y, start.0.z).as_vec3a() - UVec3::new(end.0.x, end.0.y, end.0.z).as_vec3a()).normalize()),
+            //                 navmesh.cell_size,
+            //             ))
+            //             .element
+            //             .and_then(|element| octtree.get_element(element))
+            //         .is_some()
+            //     };
             if let Some(point) = brain.path.front()
                 && let Some(navmesh) = brain.navmesh.try_read()
+                // this just breaks this system :(
+                // && distance2d(point.as_point().0, brain.abs_origin) < navmesh.cell_size * 2.  // check if we are not able to fall
                 && let NavmeshStatus::Loaded(octtree) = &navmesh.navmesh
                 && let Some(point_offset) = get_neighbors_h(point.as_point(), octtree)
                     .filter_map(|(point, is_empty)| is_empty.then_some(point))
+                    // .filter(|potential_point| !any_obstructions(point.as_point(), *potential_point, octtree, &navmesh) )
+                    .map(|point| (point, get_neighbors_h(point, octtree).filter(|(_,is_empty)| !*is_empty ).count()))
                     .reduce(|l, r| {
-                        if distance2d(l.0, brain.origin) > distance2d(r.0, brain.origin) {
+                        // if the amount of walls is the same check for distance
+                        if l.1 == r.1 {
+                            if distance2d(l.0 .0, brain.abs_origin)
+                                < distance2d(r.0 .0, brain.abs_origin)
+                            {
+                                l
+                            } else {
+                                r
+                            }
+                        } else if l.1 < r.1 {
                             l
                         } else {
                             r
@@ -596,7 +629,7 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
             {
                 if brain.down_tick > 16 {
                     // the worse way of getting a unit vector
-                    let offset = (tuvec_to_vector3(navmesh.cell_size, point_offset)
+                    let offset = (tuvec_to_vector3(navmesh.cell_size, point_offset.0)
                         - point.as_vec())
                         * Vector3::new(1., 1., 1.);
 
@@ -614,12 +647,22 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
             }
         }
         BotAction::FinishMove => '_move: {
-            let Some(_) = brain.path.front() else {
+            let Some(next_point) = brain.path.front() else {
+                break '_move (Status::Failure, 0.);
+            };
+            let Some(navmesh) = brain.navmesh.try_read() else {
                 break '_move (Status::Failure, 0.);
             };
 
-            let hitbox: Capsule = Capsule::new_z(50., 25.)
-                .transform_by(&[brain.origin.x, brain.origin.y, brain.origin.z].into());
+            let hitbox: Capsule = Capsule::new_z(
+                50. + brain
+                    .next_wall_point
+                    .and_then(|_| brain.navmesh.try_read())
+                    .map(|navmesh| navmesh.cell_size * 2.)
+                    .unwrap_or_default(), // add more leway when wallrunning
+                25.,
+            )
+            .transform_by(&[brain.origin.x, brain.origin.y, brain.origin.z].into());
             let is_in_hitbox = |target: &Vector3| {
                 hitbox.intersects_local_ray(
                     &parry3d::query::Ray::new(
@@ -636,6 +679,9 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
                 .iter()
                 .take(20)
                 .map(AsRef::as_ref)
+                // TODO: figure if this is actaully a good idea
+                // this begin restriting point skipping to one point above or less and equals based on z pos
+                .filter(|pos: &&Vector3| pos.z <= next_point.as_vec().z + navmesh.cell_size)
                 .any(is_in_hitbox)
             {
                 brain.path.pop_front();
