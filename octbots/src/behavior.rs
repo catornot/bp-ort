@@ -1,7 +1,7 @@
 use bevy_math::{bounding::RayCast3d, prelude::*};
 use bonsai_bt::{
     Action,
-    Behavior::{AlwaysSucceed, Select, WhenAny},
+    Behavior::{AlwaysSucceed, If, Select, WhenAny},
     Event, Sequence, Status, UpdateArgs, BT, RUNNING,
 };
 use itertools::Itertools;
@@ -22,7 +22,7 @@ use shared::{
     utils::{get_player_index, lookup_ent, nudge_type},
 };
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{BTreeMap, HashMap, VecDeque},
     f32::consts::PI,
     mem::MaybeUninit,
     ops::Not,
@@ -70,6 +70,9 @@ struct BotBrain {
     area_cost: AreaCost,
     last_path_points: Vec<NavPoint>,
     last_point_reached_delta: f32,
+
+    // targeting
+    hates: BTreeMap<usize, u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -101,11 +104,6 @@ pub fn drop_behaviors() {
 }
 
 pub extern "C" fn init_bot(edict: u16, client: &CClient) {
-    let dead_state = Sequence(vec![
-        Action(BotAction::IsDead),
-        Action(BotAction::DeadState),
-    ]);
-
     let target_moving = Sequence(vec![
         Action(BotAction::CanMove),
         Action(BotAction::CheckReachability),
@@ -135,10 +133,17 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
     let target_tracking = Sequence(vec![
         Action(BotAction::FindTarget),
         Action(BotAction::RenderPath),
-        WhenAny(vec![Action(BotAction::FindPath), dead_state, target_moving]),
+        WhenAny(vec![Action(BotAction::FindPath), target_moving]),
     ]);
 
-    let routine = Sequence(vec![Action(BotAction::CheckNavmesh), target_tracking]);
+    let routine = Sequence(vec![
+        Action(BotAction::CheckNavmesh),
+        If(
+            Box::new(Action(BotAction::IsDead)),
+            Box::new(Action(BotAction::DeadState)),
+            Box::new(target_tracking),
+        ),
+    ]);
 
     log::info!(
         "init bot {} with {edict}",
@@ -168,6 +173,7 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
             area_cost: AreaCost::default(),
             last_path_points: Vec::new(),
             last_point_reached_delta: 0.,
+            hates: BTreeMap::new(),
         },
     ));
 }
@@ -208,15 +214,35 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
 
     bt.tick(&e, &mut |args, brain| match args.action {
         BotAction::FindTarget => 'target: {
+            let mut v = Vector3::ZERO;
+            let base = Vec3::new(brain.origin.x, brain.origin.y, brain.origin.z);
             let Some(current_target) = (0..helper.globals.maxPlayers)
                 .flat_map(|i| unsafe { (helper.sv_funcs.get_player_by_index)(i + 1).as_ref() })
                 .filter(|other| get_player_index(other) != get_player_index(bot))
-                .map(|other| get_player_index(other) as i32 + 1)
-                .next()
+                .map(|other| {
+                    (
+                        unsafe { *other.get_origin(&mut v) },
+                        get_player_index(other),
+                    )
+                })
+                .map(|(Vector3 { x, y, z }, index)| (Vec3::new(x, y, z), index))
+                .reduce(|left, rigth| {
+                    if (left.0.distance(base) as u32)
+                        .saturating_sub(brain.hates.get(&left.1).copied().unwrap_or_default() * 50)
+                        < (rigth.0.distance(base) as u32).saturating_sub(
+                            brain.hates.get(&rigth.1).copied().unwrap_or_default() * 50,
+                        )
+                    {
+                        left
+                    } else {
+                        rigth
+                    }
+                })
+                .map(|(_, index)| index)
             else {
                 break 'target (Status::Failure, 0.);
             };
-            brain.current_target = Some(current_target);
+            brain.current_target = Some(current_target as i32 + 1);
 
             (Status::Success, 0.)
         }
@@ -848,8 +874,16 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
 
         BotAction::DeadState => {
             brain.needs_new_path = true;
+            // this a bit dangerous since if FindPath is running in parallel it can cause lot's of tasks to get pushed to the worker threads which will overwhelm them
             brain.path_receiver = None; // clear any paths under construction
             brain.path.clear();
+
+            if let Some(player) = lookup_ent(bot.m_lastDeathInfo.m_hAttacker, helper.sv_funcs)
+                .and_then::<&CPlayer, _>(|ent| ent.dynamic_cast())
+            {
+                *brain.hates.entry(get_player_index(player)).or_default() += 1;
+            }
+
             (Status::Success, 0.)
         }
     });
