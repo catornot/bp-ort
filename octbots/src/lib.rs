@@ -23,6 +23,7 @@ use crate::async_pathfinding::JobMarket;
 mod async_pathfinding;
 mod behavior;
 mod loader;
+mod movement;
 mod nav_points;
 mod pathfinding;
 mod sqapi;
