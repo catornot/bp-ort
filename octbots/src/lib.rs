@@ -27,6 +27,7 @@ mod movement;
 mod nav_points;
 mod pathfinding;
 mod sqapi;
+mod targeting;
 
 const PLUGIN_DLL_NAME: *const i8 = c"octbots.dll".as_ptr();
 

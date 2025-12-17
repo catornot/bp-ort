@@ -1,3 +1,4 @@
+use bitflags::bitflags;
 use rrplug::{
     bindings::{
         class_types::{
@@ -62,41 +63,41 @@ pub enum TraceCollisionGroup {
     BlockWeaponsAndPhysics = 19,
 }
 
-#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
-#[repr(C)]
-pub enum Contents {
-    // r1/scripts/vscripts/_consts.nut:1159
-    EMPTY = 0x00,
-    SOLID = 0x01,
-    WINDOW = 0x02, // bulletproof glass etc. (transparent but solid)
-    AUX = 0x04,    // unused ?
-    GRATE = 0x08,  // allows bullets & vis
-    SLIME = 0x10,
-    WATER = 0x20,
-    WINDOW_NO_COLLIDE = 0x40,
-    ISOPAQUE = 0x80,         // blocks AI Line Of Sight, may be non - solid
-    TEST_FOG_VOLUME = 0x100, // cannot be seen through, but may be non - solid
-    UNUSED_1 = 0x200,
-    BLOCK_LIGHT = 0x400,
-    TEAM_1 = 0x800,
-    TEAM_2 = 0x1000,
-    IGNORE_NODRAW_OPAQUE = 0x2000, // ignore opaque if Surface.NO_DRAW
-    MOVEABLE = 0x4000,
-    PLAYER_CLIP = 0x10000, // blocks human players
-    MONSTER_CLIP = 0x20000,
-    BRUSH_PAINT = 0x40000,
-    BLOCK_LOS = 0x80000, // block AI line of sight
-    NO_CLIMB = 0x100000,
-    TITAN_CLIP = 0x200000, // blocks titan players
-    BULLET_CLIP = 0x400000,
-    UNUSED_5 = 0x800000,
-    ORIGIN = 0x1000000,  // removed before bsping an entity
-    MONSTER = 0x2000000, // should never be on a brush, only in game
-    DEBRIS = 0x4000000,
-    DETAIL = 0x8000000,       // brushes to be added after vis leafs
-    TRANSLUCENT = 0x10000000, // auto set if any surface has trans
-    LADDER = 0x20000000,
-    HITBOX = 0x40000000, // use accurate hitboxes on trace
+bitflags! {
+    pub struct Contents: u32 {
+        // r1/scripts/vscripts/_consts.nut:1159
+        const EMPTY = 0x00;
+        const SOLID = 0x01;
+        const WINDOW = 0x02; // bulletproof glass etc. (transparent but solid)
+        const AUX = 0x04;    // unused ?
+        const GRATE = 0x08;  // allows bullets & vis
+        const SLIME = 0x10;
+        const WATER = 0x20;
+        const WINDOW_NO_COLLIDE = 0x40;
+        const ISOPAQUE = 0x80;         // blocks AI Line Of Sight, may be non - solid
+        const TEST_FOG_VOLUME = 0x100; // cannot be seen through, but may be non - solid
+        const UNUSED_1 = 0x200;
+        const BLOCK_LIGHT = 0x400;
+        const TEAM_1 = 0x800;
+        const TEAM_2 = 0x1000;
+        const IGNORE_NODRAW_OPAQUE = 0x2000; // ignore opaque if Surface.NO_DRAW
+        const MOVEABLE = 0x4000;
+        const PLAYER_CLIP = 0x10000; // blocks human players
+        const MONSTER_CLIP = 0x20000;
+        const BRUSH_PAINT = 0x40000;
+        const BLOCK_LOS = 0x80000; // block AI line of sight
+        const NO_CLIMB = 0x100000;
+        const TITAN_CLIP = 0x200000; // blocks titan players
+        const BULLET_CLIP = 0x400000;
+        const UNUSED_5 = 0x800000;
+        const ORIGIN = 0x1000000;  // removed before bsping an entity
+        const MONSTER = 0x2000000; // should never be on a brush, only in game
+        const DEBRIS = 0x4000000;
+        const DETAIL = 0x8000000;       // brushes to be added after vis leafs
+        const TRANSLUCENT = 0x10000000; // auto set if any surface has trans
+        const LADDER = 0x20000000;
+        const HITBOX = 0x40000000; // use accurate hitboxes on trace
+    }
 }
 
 #[repr(C)]

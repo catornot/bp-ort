@@ -3,19 +3,14 @@ use bonsai_bt::Status;
 use oktree::prelude::*;
 use parry3d::shape::Capsule;
 use parry3d::{self, query::RayCast};
-use rrplug::{
-    bindings::class_types::{cbaseentity::CBaseEntity, cplayer::CPlayer},
-    prelude::*,
-};
+use rrplug::{bindings::class_types::cplayer::CPlayer, prelude::*};
 use shared::cmds_helper::CUserCmdHelper;
+use shared::utils::{trace_hull, trace_ray};
 use shared::{
-    bindings::{
-        Action as MoveAction, CGameTrace, CTraceFilterSimple, Contents, Ray, TraceCollisionGroup,
-        VectorAligned,
-    },
-    utils::{lookup_ent, nudge_type},
+    bindings::{Action as MoveAction, Contents, TraceCollisionGroup},
+    utils::lookup_ent,
 };
-use std::{f32::consts::PI, mem::MaybeUninit, ops::Not};
+use std::{f32::consts::PI, ops::Not};
 
 use crate::behavior::BotBrain;
 use crate::pathfinding::AreaCost;
@@ -28,14 +23,16 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct Movement {
+    /// if the bot is allowed to move, set by other systems
+    /// should maybe be some sort of moveType?
+    pub can_move: bool,
     pub next_wall_point: Option<Vector3>,
     pub next_point_override: Option<Vector3>,
     /// lock on view from the enemy targeting system
     /// when false the movement system can control the view angles
     pub view_lock: bool,
     /// clamped angles for the targeting sytem when wallrunning
-    /// maybe should be a [[Option<f32>]]
-    pub clamped_view: f32,
+    pub clamped_view: Option<f32>,
 
     // juump
     pub jump_tick: u32,
@@ -51,6 +48,7 @@ pub struct Movement {
 
 #[derive(Debug, Clone)]
 pub enum MovementAction {
+    StartMoving,
     CanMove,
     CheckReachability,
     Move,
@@ -80,8 +78,14 @@ pub fn run_movement(
     helper: &CUserCmdHelper,
 ) -> (Status, f64) {
     match movement {
+        MovementAction::StartMoving => {
+            brain.m.view_lock = false;
+            brain.m.clamped_view = None;
+            brain.m.can_move = true;
+            (Status::Success, 0.)
+        }
         MovementAction::CanMove => {
-            if brain.path.is_empty() {
+            if brain.path.is_empty() || !brain.m.can_move {
                 (Status::Failure, 0.)
             } else {
                 let debug = crate::ENGINE_INTERFACES.wait().debug_overlay;
@@ -104,79 +108,43 @@ pub fn run_movement(
             }
         }
         MovementAction::CheckReachability => {
-            let build_ray = |v1: Vector3, v2: Vector3| Ray {
-                start: VectorAligned { vec: v1, w: 0. },
-                delta: VectorAligned {
-                    vec: v2 - v1,
-                    w: 0.,
-                },
-                offset: VectorAligned {
-                    vec: Vector3::new(0., 0., 0.),
-                    w: 0.,
-                },
-                unk3: 0.,
-                unk4: 0,
-                unk5: 0.,
-                unk6: 1103806595072,
-                unk7: 0.,
-                is_ray: true,
-                is_swept: false,
-                is_smth: false,
-                flags: 0,
-                unk8: 0,
-            };
+            const HIGH_OFFSET: Vector3 = Vector3::new(0., 0., 100.);
+            const LOW_OFFSET: Vector3 = Vector3::new(0., 0., 40.);
             if let Some(point) = brain.path.front()
                 && let Some(navmesh) = brain.navmesh.try_read()
                 && let NavmeshStatus::Loaded(_) = &navmesh.navmesh
-                && unsafe {
-                    let mut result_low = MaybeUninit::<CGameTrace>::zeroed();
-                    let mut result_high = MaybeUninit::<CGameTrace>::zeroed();
-                    const HIGH_OFFSET: Vector3 = Vector3::new(0., 0., 100.);
-                    const LOW_OFFSET: Vector3 = Vector3::new(0., 0., 40.);
-                    let ray_low =
-                        build_ray(brain.abs_origin + LOW_OFFSET, point.as_vec() + LOW_OFFSET);
-                    let ray_high =
-                        build_ray(brain.abs_origin + HIGH_OFFSET, point.as_vec() + HIGH_OFFSET);
-
-                    let filter: *const CTraceFilterSimple = &CTraceFilterSimple {
-                        vtable: helper.sv_funcs.simple_filter_vtable,
-                        unk: 0,
-                        pass_ent: nudge_type::<&CBaseEntity>(bot),
-                        should_hit_func: std::ptr::null(),
-                        collision_group: TraceCollisionGroup::None as i32,
-                    };
-
-                    (helper.engine_funcs.trace_ray_filter)(
-                        (*helper.sv_funcs.ctraceengine) as *const libc::c_void,
-                        &ray_high,
-                        Contents::SOLID as u32
-                            | Contents::MOVEABLE as u32
-                            | Contents::WINDOW as u32
-                            | Contents::MONSTER as u32
-                            | Contents::GRATE as u32
-                            | Contents::PLAYER_CLIP as u32,
-                        filter.cast(),
-                        result_high.as_mut_ptr(),
-                    );
-
-                    (helper.engine_funcs.trace_ray_filter)(
-                        (*helper.sv_funcs.ctraceengine) as *const libc::c_void,
-                        &ray_low,
-                        Contents::SOLID as u32
-                            | Contents::MOVEABLE as u32
-                            | Contents::WINDOW as u32
-                            | Contents::MONSTER as u32
-                            | Contents::GRATE as u32
-                            | Contents::PLAYER_CLIP as u32,
-                        filter.cast(),
-                        result_low.as_mut_ptr(),
-                    );
-
-                    result_low
-                        .assume_init()
-                        .fraction
-                        .max(result_high.assume_init().fraction)
-                } != 1.0
+                && trace_ray(
+                    brain.abs_origin + LOW_OFFSET,
+                    point.as_vec() + LOW_OFFSET,
+                    Some(bot),
+                    TraceCollisionGroup::None,
+                    Contents::SOLID
+                        | Contents::MOVEABLE
+                        | Contents::WINDOW
+                        | Contents::MONSTER
+                        | Contents::GRATE
+                        | Contents::PLAYER_CLIP,
+                    helper.sv_funcs,
+                    helper.engine_funcs,
+                )
+                .fraction
+                .max(
+                    trace_ray(
+                        brain.abs_origin + HIGH_OFFSET,
+                        point.as_vec() + HIGH_OFFSET,
+                        Some(bot),
+                        TraceCollisionGroup::None,
+                        Contents::SOLID
+                            | Contents::MOVEABLE
+                            | Contents::WINDOW
+                            | Contents::MONSTER
+                            | Contents::GRATE
+                            | Contents::PLAYER_CLIP,
+                        helper.sv_funcs,
+                        helper.engine_funcs,
+                    )
+                    .fraction,
+                ) != 1.0
             {
                 *brain.m.area_cost.entry(point.as_point()).or_default() += 100.;
                 // also add to the last 5 points
@@ -232,12 +200,14 @@ pub fn run_movement(
 
             const TURN_RATE: f32 = PI / 3.;
             let angle = (target.y - brain.origin.y).atan2(target.x - brain.origin.x);
-            brain.next_cmd.world_view_angles.y = angle
-                .clamp(angle - TURN_RATE, angle + TURN_RATE)
-                .to_degrees()
-                * brain.m.view_lock.not() as i32 as f32
-                + brain.angles.y * brain.m.view_lock as i32 as f32;
-            brain.next_cmd.world_view_angles.x = 0.;
+
+            if !brain.m.view_lock {
+                brain.next_cmd.world_view_angles.y = angle
+                    .clamp(angle - TURN_RATE, angle + TURN_RATE)
+                    .to_degrees()
+                    + brain.angles.y * brain.m.view_lock as i32 as f32;
+                brain.next_cmd.world_view_angles.x = 0.;
+            }
 
             let forward_vector = Vec2::new(
                 brain.next_cmd.world_view_angles.y.to_radians().cos(),
@@ -427,52 +397,33 @@ pub fn run_movement(
                         - Vec3::splat(1.))
                     .abs());
 
-                    brain.m.next_wall_point = unsafe {
-                        let mut result = MaybeUninit::<CGameTrace>::zeroed();
-                        let mut ray = MaybeUninit::<Ray>::zeroed().assume_init(); // all zeros is correct for Ray
-                        ray.unk6 = 0;
-                        let wall_pos = tuvec_to_vector3(navmesh.cell_size, wall_point);
-                        (helper.sv_funcs.create_trace_hull)(
-                            &mut ray,
-                            point.as_ref(),
-                            &wall_pos,
-                            &Vector3::new(
+                    brain.m.next_wall_point = Some(
+                        trace_hull(
+                            *point.as_ref(),
+                            tuvec_to_vector3(navmesh.cell_size, wall_point),
+                            Vector3::new(
                                 -navmesh.cell_size * diff.x,
                                 -navmesh.cell_size * diff.y,
                                 -navmesh.cell_size * diff.z,
                             ),
-                            &Vector3::new(
+                            Vector3::new(
                                 navmesh.cell_size * diff.x,
                                 navmesh.cell_size * diff.y,
                                 navmesh.cell_size * diff.z,
                             ),
-                        );
-
-                        let filter: *const CTraceFilterSimple = &CTraceFilterSimple {
-                            vtable: helper.sv_funcs.simple_filter_vtable,
-                            unk: 0,
-                            pass_ent: std::ptr::null(),
-                            should_hit_func: std::ptr::null(),
-                            collision_group: TraceCollisionGroup::None as i32,
-                        };
-
-                        ray.is_smth = false;
-
-                        (helper.engine_funcs.trace_ray_filter)(
-                            (*helper.sv_funcs.ctraceengine) as *const libc::c_void,
-                            &ray,
-                            Contents::SOLID as u32
-                                | Contents::MOVEABLE as u32
-                                | Contents::WINDOW as u32
-                                | Contents::MONSTER as u32
-                                | Contents::GRATE as u32
-                                | Contents::PLAYER_CLIP as u32,
-                            filter.cast(),
-                            result.as_mut_ptr(),
-                        );
-
-                        Some(result.assume_init().end_pos)
-                    };
+                            None,
+                            TraceCollisionGroup::None,
+                            Contents::SOLID
+                                | Contents::MOVEABLE
+                                | Contents::WINDOW
+                                | Contents::MONSTER
+                                | Contents::GRATE
+                                | Contents::PLAYER_CLIP,
+                            helper.sv_funcs,
+                            helper.engine_funcs,
+                        )
+                        .end_pos,
+                    );
 
                     (Status::Success, 0.)
                 }
