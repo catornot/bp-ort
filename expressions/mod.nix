@@ -33,6 +33,6 @@ pkgs.stdenv.mkDerivation rec {
   meta = {
     description = pname;
     homepage = "https://github.com/catornot/bp-ort";
-    license = lib.licenses.unlicense;
+    license = lib.licenses.asl20;
   };
 }
