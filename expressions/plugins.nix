@@ -29,7 +29,7 @@ rustPlatform.buildRustPackage {
   meta = {
     description = "A collection of plugins for northstar related to bots";
     homepage = "https://github.com/catornot/bp-ort";
-    license = lib.licenses.unlicense;
+    license = lib.licenses.asl20;
     maintainers = [ "cat_or_not" ];
   };
 
