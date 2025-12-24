@@ -73,17 +73,18 @@
               mod = self.packages.${system}.mod;
               inherit version;
             };
+            plugins = native-pkgs.symlinkJoin {
+              name = "plugins";
+              paths = with self.packages.${system}; [
+                bp-ort
+                octbots
+                ranim
+                serialized-io
+              ];
+            };
             mod = native-pkgs.callPackage ./expressions/mod.nix {
-              plugins = native-pkgs.symlinkJoin {
-                name = "plugins";
-                # must have at least one plugin
-                paths = with self.packages.${system}; [
-                  bp-ort
-                  octbots
-                  ranim
-                  serialized-io
-                ];
-              };
+              # must have at least one plugin
+              plugins = self.packages.${system}.plugins;
               inherit version;
             };
             bspeater = native-pkgs.callPackage ./expressions/bspeater.nix {
@@ -113,7 +114,7 @@
               ];
 
               text = ''
-                DISPLAY=:0 :w
+                DISPLAY=:0
                 tracy target/trace.tracy
               '';
             };
