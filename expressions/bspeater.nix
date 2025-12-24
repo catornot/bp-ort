@@ -25,7 +25,7 @@ rustPlatform.buildRustPackage (final: {
     xorg.libXrandr
     alsa-lib-with-plugins
     wayland
-    glfw-wayland
+    glfw
     udev
   ];
 
@@ -47,7 +47,7 @@ rustPlatform.buildRustPackage (final: {
     xorg.libXrandr
     alsa-lib-with-plugins
     wayland
-    glfw-wayland
+    glfw
     udev
   ];
 
