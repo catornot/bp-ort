@@ -151,6 +151,8 @@
 
         devShell.native = pkgs.mkShell rec {
           nativeBuildInputs = with native-pkgs; [
+            cargo-deny
+            cargo-audit
             bacon
             toolchain-linux
             clang
@@ -170,7 +172,7 @@
             xorg.libXrandr
             alsa-lib-with-plugins
             wayland
-            glfw-wayland
+            glfw
             udev
             pkg-config
           ];
@@ -187,7 +189,7 @@
             xorg.libXrandr
             alsa-lib-with-plugins
             wayland
-            glfw-wayland
+            glfw
             udev
           ];
 
