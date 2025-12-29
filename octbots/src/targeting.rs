@@ -16,7 +16,7 @@ use shared::{
 use std::{
     collections::BTreeMap,
     f32::consts::{PI, TAU},
-    hash::{DefaultHasher, Hash, Hasher},
+    hash::{Hash, Hasher},
 };
 
 use crate::behavior::BotAction;
