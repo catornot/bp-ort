@@ -14,6 +14,7 @@ use std::{f32::consts::PI, ops::Not};
 
 use crate::behavior::BotBrain;
 use crate::pathfinding::AreaCost;
+use crate::targeting::natural_aim;
 use crate::{
     behavior::BotAction,
     loader::{Navmesh, NavmeshStatus},
@@ -202,11 +203,17 @@ pub fn run_movement(
             let angle = (target.y - brain.origin.y).atan2(target.x - brain.origin.x);
 
             if !brain.m.view_lock {
-                brain.next_cmd.world_view_angles.y = angle
-                    .clamp(angle - TURN_RATE, angle + TURN_RATE)
-                    .to_degrees()
-                    + brain.angles.y * brain.m.view_lock as i32 as f32;
-                brain.next_cmd.world_view_angles.x = 0.;
+                brain.next_cmd.world_view_angles = natural_aim(
+                    brain.angles,
+                    Vector3::new(
+                        0.,
+                        angle
+                            .clamp(angle - TURN_RATE, angle + TURN_RATE)
+                            .to_degrees()
+                            + brain.angles.y * brain.m.view_lock as i32 as f32,
+                        0.,
+                    ),
+                );
             }
 
             let forward_vector = Vec2::new(

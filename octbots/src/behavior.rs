@@ -97,8 +97,8 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
     ]);
 
     let targetting = Sequence(vec![
-        Action(TargetingAction::TargetSwitching.into()),
         Action(TargetingAction::Shoot.into()),
+        Action(TargetingAction::TargetSwitching.into()),
     ]);
 
     let target_tracking = Sequence(vec![
@@ -142,6 +142,9 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
             t: Targeting {
                 current_target: Target::None,
                 last_target: Target::None,
+                reacts_at: 0.,
+                spread: Vec::new(),
+                spread_rigth: true,
                 hates: BTreeMap::default(),
             },
 
@@ -264,7 +267,11 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
             if status != RUNNING {
                 brain.path_receiver.take();
             }
-            status
+            if status.0 == Status::Failure {
+                RUNNING
+            } else {
+                status
+            }
         }
         BotAction::RenderPath => 'render: {
             if brain.path.is_empty() {
