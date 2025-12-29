@@ -25,15 +25,9 @@ pkgs.stdenv.mkDerivation rec {
   noUnpack = true;
   phases = [ "installPhase" ];
   installPhase = ''
-    mkdir -p $out/mods
     mkdir -p $out/plugins
 
     cp ${plugins}/bin/* $out/plugins/
-
-    cp -r ${../cat_or_not.BotExtras} $out/mods/cat_or_not.BotExtras
-    cp ${../cat_or_not.BotExtras/icon.png} $out/icon.png
-    cp ${../README.md} $out/README.md
-    cp ${manifest} $out/manifest.json
   '';
 
   meta = {
