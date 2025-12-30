@@ -12,6 +12,16 @@ pub type AreaCost = FxHashMap<TUVec3u32, Cost>;
 
 /// this would work with the current grid size ...
 const WALLRUN_MAX_DISTANCE: u32 = 20;
+pub const DEFAULT_MAX_ITERATIONS: usize = u16::MAX as usize * 30;
+
+#[derive(Debug, Clone, Copy)]
+pub enum Goal {
+    Point(TUVec3u32),
+    ClosestToPoint(TUVec3u32),
+    /// more like max distance honestly
+    Distance(usize),
+    Area(TUVec3u32, f64),
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct Node {
@@ -50,15 +60,49 @@ impl Ord for Node {
 }
 impl Eq for Node {}
 
-pub fn find_path(
+impl Goal {
+    pub fn is_inside(&self, point: &TUVec3u32) -> bool {
+        match self {
+            Goal::Point(tuvec3u32) => point == tuvec3u32,
+            Goal::ClosestToPoint(tuvec3u32) => point == tuvec3u32,
+            Goal::Distance(_) => false,
+            Goal::Area(_, _) => self.distance(point) <= 0.,
+        }
+    }
+
+    pub fn distance(&self, point: &TUVec3u32) -> f64 {
+        fn distance3(pos: &TUVec3u32, target: &TUVec3u32) -> f64 {
+            (((pos.0.x as i64 - target.0.x as i64).pow(2)
+                + (pos.0.y as i64 - target.0.y as i64).pow(2)
+                + (pos.0.z as i64 - target.0.z as i64).pow(2)) as f64)
+                .sqrt()
+        }
+
+        match self {
+            Goal::Point(tuvec3u32) => distance3(point, tuvec3u32),
+            Goal::ClosestToPoint(tuvec3u32) => distance3(point, tuvec3u32),
+            Goal::Distance(_) => 1.,
+            Goal::Area(tuvec3u32, radius) => (distance3(point, tuvec3u32) - *radius).max(0.),
+        }
+    }
+}
+
+pub fn find_path<const MAX_ITERATIONS: usize>(
     octtree: &Octree32,
     area_cost: AreaCost,
     start: TUVec3u32,
-    end: TUVec3u32,
+    end: Goal,
     cell_size: f32,
 ) -> Option<Vec<NavPoint>> {
     // log::info!("{start:?} and {end:?}");
-    if octtree.get(&start.0).is_some() || octtree.get(&end.0).is_some() {
+    if octtree.get(&start.0).is_some()
+        || match end {
+            Goal::Point(tuvec3u32) | Goal::ClosestToPoint(tuvec3u32) | Goal::Area(tuvec3u32, _) => {
+                octtree.get(&tuvec3u32.0).is_some()
+            }
+            Goal::Distance(_) => false,
+        }
+    {
         return None;
     }
 
@@ -88,7 +132,7 @@ pub fn find_path(
 
     let mut iterations = 0usize;
     while let Some(Reverse(node)) = open_list.pop()
-        && iterations < u16::MAX as usize * 30
+        && iterations < MAX_ITERATIONS
     {
         iterations += 1;
         let (
@@ -133,7 +177,13 @@ pub fn find_path(
         }
 
         // Check if we've reached the goal
-        if end == node_pos {
+        if end.is_inside(&node_pos)
+            || (matches!(end, Goal::Distance(distance) if path_length(&visited_list, node.index, start_index ) >= distance)
+                && visited_list
+                    .get_index(node.index)
+                    .map(|(point, _)| pass_ground_distance(find_ground_distance(octtree, *point)))
+                    .unwrap_or_default())
+        {
             return get_path(visited_list, node.index, start_index, octtree, cell_size);
         }
 
@@ -150,7 +200,7 @@ pub fn find_path(
 
             // calculate heuristic cost
             let neighboor_ground_distance = find_ground_distance(octtree, neighbor);
-            let estimated_cost = heuristic(neighbor, end, start)
+            let estimated_cost = heuristic(neighbor, start, end)
                 + area_cost.get(&neighbor).copied().unwrap_or_default();
             let wallrun_distance = if find_wall_point(node_pos, octtree).is_some() {
                 wallrun_distance + 1
@@ -212,18 +262,37 @@ pub fn find_path(
         }
     }
 
-    None
+    match end {
+        Goal::ClosestToPoint(_) => {
+            let end_index = visited_list
+                .keys()
+                .filter_map(|point| Some((end.distance(point), visited_list.get_index_of(point)?)))
+                .reduce(|closer, other| if closer.0 < other.0 { closer } else { other })
+                .unwrap_or((0., usize::MAX))
+                .1;
+            get_path(visited_list, end_index, start_index, octtree, cell_size)
+        }
+        Goal::Distance(_) => {
+            let end_index = visited_list
+                .keys()
+                .flat_map(|point| {
+                    pass_ground_distance(find_ground_distance(octtree, *point))
+                        .then_some(())
+                        .and_then(|_| visited_list.get_index_of(point))
+                })
+                .map(|index| (path_length(&visited_list, index, start_index), index))
+                .reduce(|closer, other| if closer.0 < other.0 { closer } else { other })
+                .unwrap_or((0, usize::MAX))
+                .1;
+            get_path(visited_list, end_index, start_index, octtree, cell_size)
+        }
+
+        Goal::Area(_, _) | Goal::Point(_) => None,
+    }
 }
 
-fn heuristic(neighbor: TUVec3u32, end: TUVec3u32, start: TUVec3u32) -> Cost {
-    fn distance3(pos: TUVec3u32, target: TUVec3u32) -> f64 {
-        (((pos.0.x as i64 - target.0.x as i64).pow(2)
-            + (pos.0.y as i64 - target.0.y as i64).pow(2)
-            + (pos.0.z as i64 - target.0.z as i64).pow(2)) as f64)
-            .sqrt()
-    }
-
-    (distance3(neighbor, end) / distance3(start, end)) * 2.0
+fn heuristic(neighbor: TUVec3u32, start: TUVec3u32, end: Goal) -> Cost {
+    (end.distance(&neighbor) / end.distance(&start)) * 2.0
 }
 
 pub fn get_neighbors_h<'b>(
@@ -370,6 +439,32 @@ fn get_path(
 
     path.reverse();
     Some(path)
+}
+
+fn path_length(visited_list: &VisitedList, mut index: usize, start: usize) -> usize {
+    let mut length = 0;
+
+    while index != start {
+        if let Some((
+            _,
+            &Visits {
+                parent: parent_index,
+                cost: _,
+                ground_distance: _,
+                wallrun_distance: _,
+                wallhop: _,
+                wallhop_offset: _,
+            },
+        )) = visited_list.get_index(index)
+        {
+            length += 1;
+            index = parent_index
+        } else {
+            return 0;
+        }
+    }
+
+    length
 }
 
 pub fn find_wall_point(point: TUVec3u32, octtree: &Octree32) -> Option<TUVec3u32> {

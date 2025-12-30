@@ -1,13 +1,14 @@
+use bevy_math::UVec3;
 use bonsai_bt::{
     Action,
     Behavior::{AlwaysSucceed, If, Select, WhenAny},
     Event, Sequence, Status, UpdateArgs, BT, RUNNING,
 };
 use itertools::Itertools;
-use oktree::prelude::TUVec3u32;
+use oktree::prelude::*;
 use parking_lot::RwLock;
 use rrplug::{
-    bindings::class_types::{client::CClient, cplayer::CPlayer},
+    bindings::class_types::{cbaseentity::CBaseEntity, client::CClient, cplayer::CPlayer},
     prelude::*,
 };
 use shared::{
@@ -21,11 +22,11 @@ use std::{
 };
 
 use crate::{
-    async_pathfinding::PathReceiver,
+    async_pathfinding::{GoalFloat, PathReceiver},
     loader::{Navmesh, NavmeshStatus, Octree32},
     movement::{run_movement, Movement, MovementAction},
     nav_points::{tuvec_to_vector3, vector3_to_tuvec, NavPoint},
-    pathfinding::AreaCost,
+    pathfinding::{find_path, AreaCost, Goal},
     targeting::{run_targeting, Target, Targeting, TargetingAction},
 };
 
@@ -91,7 +92,7 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
                 Action(MovementAction::GoDownBetter.into()),
             ]),
         ]))),
-        Action(MovementAction::Move.into()),
+        AlwaysSucceed(Box::new(Action(MovementAction::Move.into()))),
         Action(MovementAction::FinishMove.into()),
     ]);
 
@@ -106,7 +107,7 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
         Action(MovementAction::StartMoving.into()),
         WhenAny(vec![
             Action(BotAction::FindPath),
-            Sequence(vec![targetting, target_moving]),
+            Sequence(vec![targetting, AlwaysSucceed(Box::new(target_moving))]),
         ]),
     ]);
 
@@ -207,16 +208,57 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
         }
         BotAction::FindPath => 'path: {
             let navmesh = brain.navmesh.read();
-            let Some(end) = brain.t.current_target.to_position(helper) else {
+            let Some(end) = brain.t.current_target.to_goal(helper) else {
                 break 'path (Status::Failure, 0.);
             };
 
-            let NavmeshStatus::Loaded(octree) = &navmesh.navmesh else {
+            let NavmeshStatus::Loaded(octtree) = &navmesh.navmesh else {
                 break 'path (Status::Failure, 0.);
             };
 
             if !brain.needs_new_path {
                 break 'path RUNNING;
+            }
+
+            // dedup this function lol
+            fn distance2d(p: Vector3, v: Vector3) -> f32 {
+                ((p.x - v.x).powi(2) + ((p.y - v.y).powi(2))).sqrt()
+            }
+            // TODO: test if this actually works lol
+            if brain.path.is_empty()
+                && brain.path_receiver.is_none()
+                && let Some(distance) = brain
+                    .t
+                    .current_target
+                    .to_position(helper)
+                    .map(|pos| distance2d(pos, brain.abs_origin))
+                && distance > 1000.
+                && let Some(pos) = match end {
+                    GoalFloat::Point(pos) | GoalFloat::ClosestToPoint(pos) => Some(pos),
+                    _ => None,
+                }
+            {
+                brain.path.extend(
+                    find_path::<1000>(
+                        octtree,
+                        brain.m.area_cost.clone(),
+                        find_closest_navpoint(
+                            brain.origin,
+                            bot,
+                            navmesh.cell_size,
+                            octtree,
+                            helper,
+                        )
+                        .unwrap_or_else(|| vector3_to_tuvec(navmesh.cell_size, brain.origin)),
+                        Goal::ClosestToPoint(
+                            find_closest_navpoint(pos, bot, navmesh.cell_size, octtree, helper)
+                                .unwrap_or_else(|| vector3_to_tuvec(navmesh.cell_size, pos)),
+                        ),
+                        navmesh.cell_size,
+                    )
+                    .into_iter()
+                    .flat_map(|vec| vec.into_iter()),
+                );
             }
 
             let start = brain
@@ -232,14 +274,25 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
                 brain.path_receiver = crate::PLUGIN.wait().job_market.find_path(
                     tuvec_to_vector3(
                         navmesh.cell_size,
-                        find_closest_navpoint(start, navmesh.cell_size, octree, helper)
+                        find_closest_navpoint(start, bot, navmesh.cell_size, octtree, helper)
                             .unwrap_or_else(|| vector3_to_tuvec(navmesh.cell_size, start)),
                     ),
-                    tuvec_to_vector3(
-                        navmesh.cell_size,
-                        find_closest_navpoint(end, navmesh.cell_size, octree, helper)
-                            .unwrap_or_else(|| vector3_to_tuvec(navmesh.cell_size, end)),
-                    ),
+                    match end {
+                        GoalFloat::Point(end) => GoalFloat::Point(tuvec_to_vector3(
+                            navmesh.cell_size,
+                            find_closest_navpoint(end, bot, navmesh.cell_size, octtree, helper)
+                                .unwrap_or_else(|| vector3_to_tuvec(navmesh.cell_size, end)),
+                        )),
+                        GoalFloat::ClosestToPoint(end) => {
+                            GoalFloat::ClosestToPoint(tuvec_to_vector3(
+                                navmesh.cell_size,
+                                find_closest_navpoint(end, bot, navmesh.cell_size, octtree, helper)
+                                    .unwrap_or_else(|| vector3_to_tuvec(navmesh.cell_size, end)),
+                            ))
+                        }
+                        GoalFloat::Distance(distance) => GoalFloat::Distance(distance),
+                        GoalFloat::Area(pos, radius) => GoalFloat::Area(pos, radius),
+                    },
                     brain.m.area_cost.clone(),
                 );
             }
@@ -272,11 +325,7 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
                 status
             }
         }
-        BotAction::RenderPath => 'render: {
-            if brain.path.is_empty() {
-                break 'render (Status::Success, 0.);
-            }
-
+        BotAction::RenderPath => {
             let debug = crate::ENGINE_INTERFACES.wait().debug_overlay;
             brain
                 .path
@@ -328,27 +377,87 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
     bt.blackboard().next_cmd
 }
 
+pub extern "C" fn test_closest_navpoint(helper: &CUserCmdHelper, bot: &mut CPlayer) -> CUserCmd {
+    let mut behavior_static = BEHAVIOR.write();
+    let Some(bt) = behavior_static.get_mut(&(get_player_index(bot) as u16)) else {
+        return CUserCmd::new_empty(helper);
+    };
+
+    let mut v = Vector3::ZERO;
+    unsafe {
+        (helper.sv_funcs.calc_absolute_velocity)(
+            nudge_type::<&CPlayer>(bot),
+            &nudge_type::<*const CPlayer>(bot),
+            0,
+            0,
+        );
+        (helper.sv_funcs.calc_origin)(
+            nudge_type::<&CPlayer>(bot),
+            &nudge_type::<*const CPlayer>(bot),
+            0,
+            0,
+        );
+    };
+    bt.blackboard_mut().next_cmd = CUserCmd::new_empty(helper);
+    bt.blackboard_mut().origin = unsafe { *bot.get_origin(&mut v) };
+    bt.blackboard_mut().angles = unsafe { *bot.eye_angles(&mut v) };
+    bt.blackboard_mut().abs_origin = bot.m_vecAbsOrigin;
+
+    let navmesh = bt.blackboard().navmesh.read();
+    let NavmeshStatus::Loaded(octtree) = &navmesh.navmesh else {
+        return CUserCmd::new_empty(helper);
+    };
+
+    if let Some(point) = find_closest_navpoint(
+        bt.blackboard().origin,
+        bot,
+        navmesh.cell_size,
+        octtree,
+        helper,
+    ) {
+        let debug = crate::ENGINE_INTERFACES.wait().debug_overlay;
+        unsafe {
+            debug.AddLineOverlay(
+                &bt.blackboard().origin,
+                &tuvec_to_vector3(navmesh.cell_size, point),
+                200,
+                0,
+                0,
+                true,
+                0.1,
+            )
+        }
+    } else {
+        log::warn!(
+            "no point found {}",
+            unsafe { std::ffi::CStr::from_ptr(bot.m_szNetname.as_ptr()) }.to_string_lossy()
+        );
+    }
+
+    CUserCmd::new_empty(helper)
+}
+
 /// aka a empty one
+/// TODO: cleanup this shit
+/// holy shit this is so bad
 pub fn find_closest_navpoint(
     position: Vector3,
+    ent: &CBaseEntity,
     cell_size: f32,
     navmesh: &Octree32,
     helper: &CUserCmdHelper,
 ) -> Option<TUVec3u32> {
     let mut searched = BTreeSet::default();
-    fn search_neighboors(
+    fn search_neighboors<'a>(
         start: Vector3,
+        ent: Option<&CBaseEntity>,
         point: TUVec3u32,
         cell_size: f32,
-        navmesh: &Octree32,
-        helper: &CUserCmdHelper,
-        searched: &mut BTreeSet<TUVec3u32>,
-    ) -> Option<TUVec3u32> {
-        if searched.len() > 32 {
-            return None;
-        }
-
-        let result = [
+        navmesh: &'a Octree32,
+        helper: &'a CUserCmdHelper,
+        searched: &'a mut BTreeSet<TUVec3u32>,
+    ) -> Vec<Result<TUVec3u32, TUVec3u32>> {
+        [
             [1, 0, 0],
             [0, 1, 0],
             [0, 0, 1],
@@ -377,7 +486,7 @@ pub fn find_closest_navpoint(
             (trace_ray(
                 start,
                 tuvec_to_vector3(cell_size, neighboor),
-                None,
+                ent,
                 TraceCollisionGroup::None,
                 Contents::SOLID
                     | Contents::MOVEABLE
@@ -389,25 +498,74 @@ pub fn find_closest_navpoint(
                 helper.engine_funcs,
             )
             .fraction
-                == 1.0)
+                == 1.)
                 .then_some(Ok(neighboor))
         })
-        .collect::<Vec<Result<_, _>>>();
-
-        result.iter().find_map(|r| r.ok()).or_else(|| {
-            result
-                .into_iter()
-                .flat_map(|r| r.err())
-                .find_map(|pos| search_neighboors(start, pos, cell_size, navmesh, helper, searched))
-        })
+        .collect::<Vec<Result<_, _>>>()
     }
 
-    search_neighboors(
-        position,
-        vector3_to_tuvec(cell_size, position),
-        cell_size,
-        navmesh,
-        helper,
-        &mut searched,
-    )
+    let initial_point = vector3_to_tuvec(cell_size, position);
+    let mut searches = vec![Err(initial_point)];
+    while let Some(search) = searches
+        .iter()
+        .copied()
+        .find(|r| r.is_ok())
+        .or_else(|| searches.pop())
+        && searched.len() <= 32
+    {
+        match search {
+            Ok(point) => {
+                // TODO: check for wallrun
+                return Some(point).map(|point| snap_to_ground(navmesh, point).unwrap_or(point));
+            }
+            Err(bad_point) => searches.extend_from_slice(&search_neighboors(
+                position,
+                Some(ent),
+                bad_point,
+                cell_size,
+                navmesh,
+                helper,
+                &mut searched,
+            )),
+        }
+        searches.sort_by(|this, other| {
+            let this_unwrapped = match this {
+                Ok(pos) | Err(pos) => pos,
+            };
+            let other_unwrapped = match other {
+                Ok(pos) | Err(pos) => pos,
+            };
+            (UVec3::new(initial_point.0.x, initial_point.0.y, initial_point.0.z)
+                .as_vec3()
+                .distance(
+                    UVec3::new(this_unwrapped.0.x, this_unwrapped.0.y, this_unwrapped.0.z)
+                        .as_vec3(),
+                ))
+            .total_cmp(
+                &UVec3::new(initial_point.0.x, initial_point.0.y, initial_point.0.z)
+                    .as_vec3()
+                    .distance(
+                        UVec3::new(
+                            other_unwrapped.0.x,
+                            other_unwrapped.0.y,
+                            other_unwrapped.0.z,
+                        )
+                        .as_vec3(),
+                    ),
+            )
+            .reverse()
+        });
+    }
+    None
+}
+
+fn snap_to_ground(octtree: &Octree32, point: TUVec3u32) -> Option<TUVec3u32> {
+    (point.0.z.saturating_sub(1000)..point.0.z)
+        .rev()
+        .find_map(|z| {
+            octtree
+                .get(&TUVec3::new(point.0.x, point.0.y, z))
+                .is_some()
+                .then_some(TUVec3u32::new(point.0.x, point.0.y, z.checked_add(1)?))
+        })
 }

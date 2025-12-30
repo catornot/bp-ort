@@ -9,14 +9,22 @@ use std::{
 use crate::{
     loader::{Navmesh, NavmeshStatus},
     nav_points::{vector3_to_tuvec, NavPoint},
-    pathfinding::{find_path, AreaCost},
+    pathfinding::{find_path, AreaCost, Goal, DEFAULT_MAX_ITERATIONS},
 };
 
 pub type PathReceiver = flume::Receiver<Option<Vec<NavPoint>>>;
 
+#[derive(Debug, Clone, Copy)]
+pub enum GoalFloat {
+    Point(Vector3),
+    ClosestToPoint(Vector3),
+    Distance(usize),
+    Area(Vector3, f64),
+}
+
 pub struct Work {
     pub start: Vector3,
-    pub end: Vector3,
+    pub end: GoalFloat,
     pub area_cost: AreaCost, // migth be a bit expensive to move this around
     pub return_sender: flume::Sender<Option<Vec<NavPoint>>>,
 }
@@ -50,7 +58,7 @@ impl JobMarket {
     pub fn find_path(
         &self,
         start: Vector3,
-        end: Vector3,
+        end: GoalFloat,
         area_cost: AreaCost,
     ) -> Option<PathReceiver> {
         let (sender, receiver) = flume::unbounded();
@@ -105,11 +113,20 @@ fn worker(
                 continue;
             };
 
-            _ = return_sender.send(find_path(
+            _ = return_sender.send(find_path::<DEFAULT_MAX_ITERATIONS>(
                 navmesh_tree,
                 area_cost,
                 vector3_to_tuvec(navmesh.cell_size, start),
-                vector3_to_tuvec(navmesh.cell_size, end),
+                match end {
+                    GoalFloat::Point(pos) => Goal::Point(vector3_to_tuvec(navmesh.cell_size, pos)),
+                    GoalFloat::ClosestToPoint(pos) => {
+                        Goal::ClosestToPoint(vector3_to_tuvec(navmesh.cell_size, pos))
+                    }
+                    GoalFloat::Distance(distance) => Goal::Distance(distance),
+                    GoalFloat::Area(pos, radius) => {
+                        Goal::Area(vector3_to_tuvec(navmesh.cell_size, pos), radius)
+                    }
+                },
                 navmesh.cell_size,
             ));
         }

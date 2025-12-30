@@ -113,7 +113,15 @@ impl Plugin for OctBots {
                     100,
                     behavior::wallpathfining_bots,
                 ) {
-                    log::error!("failed to register a simulation function");
+                    log::error!("100: failed to register a simulation function");
+                }
+
+                if !interface.register_simulation(
+                    PLUGIN_DLL_NAME,
+                    101,
+                    behavior::test_closest_navpoint,
+                ) {
+                    log::error!("101: failed to register a simulation function");
                 }
             };
 

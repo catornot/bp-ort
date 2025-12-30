@@ -81,7 +81,7 @@ impl Plugin for R2Mole {
         }
     }
 
-    fn runframe(&self, engine_token: EngineToken) {
+    fn runframe(&self, _engine_token: EngineToken) {
         // if let Ok(masterserver_cvar) =
         //     ConVarStruct::find_convar_by_name("ns_masterserver_hostname", engine_token)
         // {

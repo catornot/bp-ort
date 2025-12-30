@@ -86,7 +86,7 @@ pub fn run_movement(
             (Status::Success, 0.)
         }
         MovementAction::CanMove => {
-            if brain.path.is_empty() || !brain.m.can_move {
+            if !brain.m.can_move {
                 (Status::Failure, 0.)
             } else {
                 let debug = crate::ENGINE_INTERFACES.wait().debug_overlay;
@@ -110,7 +110,7 @@ pub fn run_movement(
         }
         MovementAction::CheckReachability => {
             const HIGH_OFFSET: Vector3 = Vector3::new(0., 0., 100.);
-            const LOW_OFFSET: Vector3 = Vector3::new(0., 0., 40.);
+            const LOW_OFFSET: Vector3 = Vector3::new(0., 0., 10.);
             if let Some(point) = brain.path.front()
                 && let Some(navmesh) = brain.navmesh.try_read()
                 && let NavmeshStatus::Loaded(_) = &navmesh.navmesh
@@ -158,7 +158,12 @@ pub fn run_movement(
                     .for_each(|point| {
                         *brain.m.area_cost.entry(point.as_point()).or_default() += 100.;
                     });
+                // also add to the next point
+                brain.path.iter().rev().skip(1).take(1).for_each(|point| {
+                    *brain.m.area_cost.entry(point.as_point()).or_default() += 100.;
+                });
 
+                brain.path_next_request = helper.globals.curTime + 0.1;
                 brain.m.last_point_reached_delta = 0.;
                 brain.path.clear();
                 brain.needs_new_path = true;
@@ -178,7 +183,12 @@ pub fn run_movement(
                     .for_each(|point| {
                         *brain.m.area_cost.entry(point.as_point()).or_default() += 100.;
                     });
+                // also add to the next point
+                brain.path.iter().rev().skip(1).take(1).for_each(|point| {
+                    *brain.m.area_cost.entry(point.as_point()).or_default() += 100.;
+                });
 
+                brain.path_next_request = helper.globals.curTime + 0.1;
                 brain.m.last_point_reached_delta = 0.;
                 brain.path.clear();
                 brain.needs_new_path = true;
@@ -393,7 +403,7 @@ pub fn run_movement(
                         // check next path 
                         && is_wallrun_point(point) =>
                 {
-                    let diff = dbg!((Vec3::new(
+                    let diff = (Vec3::new(
                         point.as_point().0.x as f32 - wall_point.0.x as f32,
                         point.as_point().0.y as f32 - wall_point.0.y as f32,
                         point.as_point().0.z as f32 - wall_point.0.z as f32,
@@ -402,7 +412,7 @@ pub fn run_movement(
                     .min(Vec3::splat(1.))
                     .max(Vec3::ZERO)
                         - Vec3::splat(1.))
-                    .abs());
+                    .abs();
 
                     brain.m.next_wall_point = Some(
                         trace_hull(
@@ -452,8 +462,9 @@ pub fn run_movement(
         },
         MovementAction::GoDownBetter => {
             brain.m.down_tick += 1;
-            let distance2d = |p: TUVec3<u32>, v: Vector3| {
-                ((p.x as f32 - v.x).powi(2) + ((p.y as f32 - v.y).powi(2))).sqrt()
+            let distance2d = |p: TUVec3<u32>, v: Vector3, cell_size: f32| {
+                ((p.x as f32 * cell_size - v.x).powi(2) + ((p.y as f32 * cell_size - v.y).powi(2)))
+                    .sqrt()
             };
             // INFO: this could actually help sometimes, by checking if there is anything between the bot and the go down better point
             // currently doesn't work tho
@@ -469,7 +480,7 @@ pub fn run_movement(
             //             .and_then(|element| octtree.get_element(element))
             //         .is_some()
             //     };
-            let get_drop_point = |point: TUVec3u32, octtree| {
+            let get_drop_point = |point: TUVec3u32, octtree, cell_size| {
                 get_neighbors_h(point, octtree)
                     .filter_map(|(point, is_empty)| is_empty.then_some(point))
                     // .filter(|potential_point| !any_obstructions(point.as_point(), *potential_point, octtree, &navmesh) )
@@ -484,8 +495,8 @@ pub fn run_movement(
                     .reduce(|l, r| {
                         // if the amount of walls is the same check for distance
                         if l.1 == r.1 {
-                            if distance2d(l.0 .0, brain.abs_origin)
-                                < distance2d(r.0 .0, brain.abs_origin)
+                            if distance2d(l.0 .0, brain.abs_origin, cell_size)
+                                < distance2d(r.0 .0, brain.abs_origin, cell_size)
                             {
                                 l
                             } else {
@@ -503,7 +514,7 @@ pub fn run_movement(
                 // this just breaks this system :(
                 // && distance2d(point.as_point().0, brain.abs_origin) < navmesh.cell_size * 2.  // check if we are not able to fall
                 && let NavmeshStatus::Loaded(octtree) = &navmesh.navmesh
-                && let Some(point_offset) = get_drop_point(point.as_point(), octtree)
+                && let Some(point_offset) = get_drop_point(point.as_point(), octtree, navmesh.cell_size)
             {
                 if brain.m.down_tick > 16 {
                     // the worse way of getting a unit vector

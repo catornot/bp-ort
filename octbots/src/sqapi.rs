@@ -8,11 +8,11 @@ pub fn octtree_register_sq_functions() {
 
 #[rrplug::sqfunction(VM = "SERVER", ExportName = "OcttreeFindPath")]
 fn octtree_find_path(start: Vector3, end: Vector3) -> Result<SuspendThread<Vec<Vector3>>, String> {
-    let Some(recv) = crate::PLUGIN
-        .wait()
-        .job_market
-        .find_path(start, end, AreaCost::default())
-    else {
+    let Some(recv) = crate::PLUGIN.wait().job_market.find_path(
+        start,
+        crate::async_pathfinding::GoalFloat::Point(end),
+        AreaCost::default(),
+    ) else {
         return Err("couldn't start pathfinding".to_string());
     };
 

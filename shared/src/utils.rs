@@ -1,7 +1,7 @@
 use rrplug::{
     bindings::class_types::{cbaseentity::CBaseEntity, client::SignonState, cplayer::CPlayer},
     mid::utils::try_cstring,
-    prelude::{log, Vector3},
+    prelude::Vector3,
 };
 use std::{
     ffi::{c_char, c_void, CStr},
@@ -282,7 +282,9 @@ pub fn trace_ray(
     let filter: *const CTraceFilterSimple = &CTraceFilterSimple {
         vtable: server_funcs.simple_filter_vtable,
         unk: 0,
-        pass_ent: std::ptr::null(),
+        pass_ent: ent
+            .map(|e| e as *const CBaseEntity)
+            .unwrap_or(std::ptr::null()),
         should_hit_func: std::ptr::null(),
         collision_group: collision_group as i32,
     };

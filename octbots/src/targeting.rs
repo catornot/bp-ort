@@ -19,8 +19,8 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-use crate::behavior::BotAction;
 use crate::behavior::BotBrain;
+use crate::{async_pathfinding::GoalFloat, behavior::BotAction};
 
 #[derive(Debug, Clone)]
 pub struct Targeting {
@@ -43,7 +43,7 @@ pub enum TargetingAction {
 pub enum Target {
     Entity(EHandle, bool),
     Position(Vector3),
-    Area(Vector3, f32),
+    Area(Vector3, f64),
     Roam,
     None,
 }
@@ -53,7 +53,7 @@ impl PartialEq for Target {
         match (self, other) {
             (Target::Entity(this, _), Target::Entity(other, _)) => this == other,
             (Target::Position(this), Target::Position(other)) => this == other,
-            (Target::Area(this, _), Target::Area(other, _)) if this == other => todo!(),
+            (Target::Area(this, _), Target::Area(other, _)) => this == other,
             (Target::Roam, Target::Roam) => true,
             (Target::None, Target::None) => true,
             _ => false,
@@ -74,6 +74,16 @@ impl Target {
             Target::None => None,
         }
     }
+
+    pub fn to_goal(self, helper: &CUserCmdHelper) -> Option<GoalFloat> {
+        match self {
+            Target::Entity(_, _) => Some(GoalFloat::Point(self.to_position(helper)?)),
+            Target::Position(pos) => Some(GoalFloat::ClosestToPoint(pos)),
+            Target::Area(pos, radius) => Some(GoalFloat::Area(pos, radius)),
+            Target::Roam => Some(GoalFloat::Distance(15)),
+            Target::None => None,
+        }
+    }
 }
 
 impl From<TargetingAction> for BotAction {
@@ -89,8 +99,7 @@ pub fn run_targeting(
     helper: &CUserCmdHelper,
 ) -> (Status, f64) {
     match targeting {
-        TargetingAction::FindTarget => 'target: {
-            const Z_OFFSET: Vector3 = Vector3::new(0., 0., 25.);
+        TargetingAction::FindTarget => {
             let base = Vec3::new(brain.origin.x, brain.origin.y, brain.origin.z);
 
             fn make_player_iterator<'a>(
@@ -132,8 +141,8 @@ pub fn run_targeting(
                             brain.t.hates.get(&rigth.2).copied().unwrap_or_default() * 50,
                         )
                         && let trace = trace_ray(
-                            brain.origin + Z_OFFSET,
-                            Vector3::from(left.0.to_array()) + Z_OFFSET,
+                            brain.origin,
+                            Vector3::from(left.0.to_array()),
                             Some(bot),
                             TraceCollisionGroup::BlockWeaponsAndPhysics,
                             Contents::SOLID
@@ -150,8 +159,8 @@ pub fn run_targeting(
                         Some(left)
                     } else if left.is_none()
                         && let trace = trace_ray(
-                            brain.origin + Z_OFFSET,
-                            Vector3::from(rigth.0.to_array()) + Z_OFFSET,
+                            brain.origin,
+                            Vector3::from(rigth.0.to_array()),
                             Some(bot),
                             TraceCollisionGroup::BlockWeaponsAndPhysics,
                             Contents::SOLID
@@ -187,7 +196,7 @@ pub fn run_targeting(
                         .map(|(_, _, _, handle)| (handle, false))
                 })
             else {
-                brain.t.current_target = Target::None;
+                brain.t.current_target = Target::Roam;
                 return (Status::Success, 0.);
             };
             brain.t.current_target = Target::Entity(current_target.0, current_target.1);
@@ -232,7 +241,29 @@ pub fn run_targeting(
                     // brain.next_cmd.world_view_angles =
                     //     look_at(brain.origin, unsafe { *ent.get_origin(&mut v) })
                     //         + brain.t.spread.pop().unwrap_or_default();
-                    brain.m.can_move = true;
+
+                    let mut v = Vector3::ZERO;
+                    if let Some(point) = brain.path.get(1)
+                        && trace_ray(
+                            unsafe { *ent.get_origin(&mut v) },
+                            point.as_vec(),
+                            Some(bot),
+                            TraceCollisionGroup::None,
+                            Contents::SOLID
+                                | Contents::MOVEABLE
+                                | Contents::WINDOW
+                                | Contents::MONSTER
+                                | Contents::GRATE
+                                | Contents::PLAYER_CLIP,
+                            helper.sv_funcs,
+                            helper.engine_funcs,
+                        )
+                        .fraction
+                            < 1.
+                    {
+                        brain.m.can_move = false;
+                    }
+
                     brain.m.view_lock = true;
                 }
             } else if let Target::Entity(handle, false) = brain.t.current_target
