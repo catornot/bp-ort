@@ -553,6 +553,7 @@ pub struct Vertex {
     pub bone_id: [u8; MAX_NUM_BONES_PER_VERT],
 }
 
+unsafe impl Pod for Studiohdr {}
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Zeroable)]
 pub struct Studiohdr {
@@ -800,7 +801,7 @@ pub struct Compactedge {
     pub is_virtual: bool,
 }
 
-// static_assert(sizeof(compactedge_t) == 4);
+static ASSERT_EDGE: () = assert!(std::mem::size_of::<Compactedge>() == 4);
 
 #[bitfield(bits = 128)]
 #[repr(C)]

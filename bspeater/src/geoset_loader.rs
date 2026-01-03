@@ -1,6 +1,6 @@
 use crate::*;
-use bevy::math::DVec3;
-use rayon::prelude::*;
+use avian3d::math::PI;
+use bevy::math::{Affine3A, DVec3};
 
 pub fn geoset_to_meshes(
     BSPData {
@@ -176,21 +176,23 @@ fn prop_to_mesh(
     if props.len() <= index {
         return None;
     }
+
     let static_prop = props[index];
-    let transform = Transform::from_translation(static_prop.origin)
+    let transform = Transform::from_translation(static_prop.origin.xzy())
         .with_rotation(Quat::from_euler(
-            EulerRot::XYZ,
-            static_prop.angles.x,
-            static_prop.angles.y,
-            static_prop.angles.z,
+            EulerRot::XYZEx,
+            static_prop.angles.x.to_radians(),
+            static_prop.angles.y.to_radians(),
+            static_prop.angles.z.to_radians(),
         ))
         .with_scale(Vec3::splat(static_prop.scale))
-        .compute_affine();
+        .compute_matrix();
 
     if let Some(model_data) = model_data
         .get(static_prop.model_index as usize)
         .and_then(|o| o.as_ref())
-    // .filter(|_| static_prop.solid == 1)
+        .filter(|_| static_prop.solid == 6)
+    // figure what this actually is ^ rigth vphysics stuff I rember
     {
         indices.extend(&model_data.1);
         pushing_vertices.extend(
@@ -198,9 +200,8 @@ fn prop_to_mesh(
                 .0
                 .iter()
                 .copied()
-                .map(|vert| transform.transform_point3(vert)),
+                .map(|vert| transform.mul_vec4(vert.extend(1.)).xyz()),
         );
-        println!("phys model");
     } else {
         // println!("no phys model");
     }
