@@ -1,5 +1,5 @@
 use bevy_math::prelude::*;
-use bonsai_bt::Status;
+use bonsai_bt::Status::{self, Failure, Success};
 use rrplug::{
     bindings::class_types::{
         cbaseentity::CBaseEntity,
@@ -37,6 +37,7 @@ pub enum TargetingAction {
     FindTarget,
     TargetSwitching,
     Shoot,
+    Melee,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -288,6 +289,32 @@ pub fn run_targeting(
 
             (Status::Success, 0.)
         }
+        TargetingAction::Melee
+            if let Target::Entity(handle, true) = brain.t.current_target
+                && let Some(ent) = lookup_ent(handle, helper.sv_funcs) =>
+        {
+            let mut v = Vector3::ZERO;
+            let target = unsafe { *ent.get_origin(&mut v) };
+            let is_titan = unsafe { (helper.sv_funcs.is_titan)(nudge_type::<&CBaseEntity>(bot)) };
+            if (!is_titan
+                && (brain.origin.x - target.x).powi(2) * (brain.origin.y - target.y).powi(2)
+                    < 81000.
+                && (brain.origin.z - target.z).abs() < 50.)
+                || (is_titan
+                    && (brain.origin.x - target.x).powi(2) * (brain.origin.y - target.y).powi(2)
+                        < 850000.
+                    && (brain.origin.z - target.z).abs() < 200.)
+            {
+                brain.m.view_lock = true;
+                brain.next_cmd.buttons |= MoveAction::Melee as u32;
+                brain.next_cmd.world_view_angles =
+                    natural_aim(brain.angles, look_at(brain.origin, target));
+                (Success, 0.)
+            } else {
+                (Failure, 0.)
+            }
+        }
+        TargetingAction::Melee => (Failure, 0.),
     }
 }
 

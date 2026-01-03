@@ -68,12 +68,12 @@ pub fn drop_behaviors() {
 
 pub extern "C" fn init_bot(edict: u16, client: &CClient) {
     let target_moving = Sequence(vec![
-        Action(MovementAction::CanMove.into()),
-        Action(MovementAction::CheckReachability.into()),
-        AlwaysSucceed(Box::new(Sequence(vec![
+        Select(vec![
+            // because we can't stop moving if we are wallrunning
             Action(MovementAction::IsWallRun.into()),
-            Action(MovementAction::WallRun.into()),
-        ]))),
+            Action(MovementAction::CanMove.into()),
+        ]),
+        Action(MovementAction::CheckReachability.into()),
         AlwaysSucceed(Box::new(Select(vec![
             Sequence(vec![
                 Action(MovementAction::IsJump.into()),
@@ -97,7 +97,10 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
     ]);
 
     let targetting = Sequence(vec![
-        Action(TargetingAction::Shoot.into()),
+        AlwaysSucceed(Box::new(Select(vec![
+            Action(TargetingAction::Melee.into()),
+            Action(TargetingAction::Shoot.into()),
+        ]))),
         Action(TargetingAction::TargetSwitching.into()),
     ]);
 

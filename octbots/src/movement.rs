@@ -60,7 +60,6 @@ pub enum MovementAction {
     IsCrawling,
     Crawl,
     IsWallRun,
-    WallRun,
     IsGoingDown,
     GoDownBetter,
     FinishMove,
@@ -158,8 +157,8 @@ pub fn run_movement(
                     .for_each(|point| {
                         *brain.m.area_cost.entry(point.as_point()).or_default() += 100.;
                     });
-                // also add to the next point
-                brain.path.iter().rev().skip(1).take(1).for_each(|point| {
+                // also add to the next 2 point
+                brain.path.iter().rev().skip(1).take(2).for_each(|point| {
                     *brain.m.area_cost.entry(point.as_point()).or_default() += 100.;
                 });
 
@@ -183,8 +182,8 @@ pub fn run_movement(
                     .for_each(|point| {
                         *brain.m.area_cost.entry(point.as_point()).or_default() += 100.;
                     });
-                // also add to the next point
-                brain.path.iter().rev().skip(1).take(1).for_each(|point| {
+                // also add to the next 2 point
+                brain.path.iter().rev().skip(1).take(2).for_each(|point| {
                     *brain.m.area_cost.entry(point.as_point()).or_default() += 100.;
                 });
 
@@ -447,7 +446,6 @@ pub fn run_movement(
                 _ => (Status::Failure, 0.),
             }
         }
-        MovementAction::WallRun => (Status::Success, 0.),
         MovementAction::IsGoingDown => match brain.path.front() {
             // should maybe check if the next points are not above
             Some(point)
