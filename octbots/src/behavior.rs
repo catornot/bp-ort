@@ -2,11 +2,13 @@ use bevy_math::UVec3;
 use bonsai_bt::{
     Action,
     Behavior::{AlwaysSucceed, If, Select, WhenAny},
-    Event, Sequence, Status, UpdateArgs, BT, RUNNING,
+    Event, Sequence,
+    Status::{self},
+    UpdateArgs, BT, RUNNING,
 };
 use itertools::Itertools;
 use oktree::prelude::*;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use rrplug::{
     bindings::class_types::{cbaseentity::CBaseEntity, client::CClient, cplayer::CPlayer},
     prelude::*,
@@ -17,22 +19,31 @@ use shared::{
     utils::{get_player_index, is_alive, lookup_ent, nudge_type, trace_ray},
 };
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
+    collections::{BTreeSet, HashMap, VecDeque},
     sync::{Arc, LazyLock},
 };
 
 use crate::{
     async_pathfinding::{GoalFloat, PathReceiver},
+    gamemode_cp::{run_cp, GamemodeCP, GamemodeCPAction, SharedGamemodeCP},
     loader::{Navmesh, NavmeshStatus, Octree32},
     movement::{run_movement, Movement, MovementAction},
     nav_points::{tuvec_to_vector3, vector3_to_tuvec, NavPoint},
-    pathfinding::{find_path, AreaCost, Goal},
-    targeting::{run_targeting, Target, Targeting, TargetingAction},
+    pathfinding::{find_path, Goal},
+    targeting::{run_targeting, Targeting, TargetingAction},
 };
 
 static BEHAVIOR: LazyLock<RwLock<HashMap<u16, BT<BotAction, BotBrain>>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
+static SHARED: LazyLock<Arc<Mutex<SharedBotBrain>>> =
+    LazyLock::new(|| Arc::new(Mutex::new(SharedBotBrain::default())));
 
+#[derive(Debug, Clone, Default)]
+pub struct SharedBotBrain {
+    pub cp: SharedGamemodeCP,
+}
+
+#[derive(Debug, Clone)]
 pub struct BotBrain {
     pub navmesh: Arc<RwLock<Navmesh>>,
     pub path_receiver: Option<PathReceiver>,
@@ -45,10 +56,13 @@ pub struct BotBrain {
     pub last_alive_state: bool,
     pub looked_at_death_record: bool,
     pub needs_new_path: bool,
+    gamemode: String,
+    pub shared: Arc<Mutex<SharedBotBrain>>,
 
     /// movement
     pub m: Movement,
     pub t: Targeting,
+    pub cp: GamemodeCP,
 }
 
 #[derive(Debug, Clone)]
@@ -60,10 +74,13 @@ pub enum BotAction {
     DeadState,
     Movement(MovementAction),
     Targeting(TargetingAction),
+    GamemodeCP(GamemodeCPAction),
+    IsGamemode(&'static str),
 }
 
 pub fn drop_behaviors() {
     BEHAVIOR.write().clear();
+    *SHARED.lock() = Default::default();
 }
 
 pub extern "C" fn init_bot(edict: u16, client: &CClient) {
@@ -104,6 +121,15 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
         Action(TargetingAction::TargetSwitching.into()),
     ]);
 
+    let gamemode_cp = AlwaysSucceed(Box::new(Sequence(vec![
+        Select(vec![
+            Action(BotAction::IsGamemode("cp")),
+            Action(BotAction::IsGamemode("mcp")),
+        ]),
+        Action(GamemodeCPAction::UpdateGamemodeState.into()),
+        Action(GamemodeCPAction::DetermineTarget.into()),
+    ])));
+
     let target_tracking = Sequence(vec![
         Action(TargetingAction::FindTarget.into()),
         Action(BotAction::RenderPath),
@@ -118,8 +144,17 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
         Action(BotAction::CheckNavmesh),
         If(
             Box::new(Action(BotAction::IsDead)),
-            Box::new(Action(BotAction::DeadState)),
-            Box::new(target_tracking),
+            Box::new(Sequence(vec![
+                Action(BotAction::DeadState),
+                Select(vec![Sequence(vec![
+                    Select(vec![
+                        Action(BotAction::IsGamemode("cp")),
+                        Action(BotAction::IsGamemode("mcp")),
+                    ]),
+                    Action(GamemodeCPAction::RemoveTarget.into()),
+                ])]),
+            ])),
+            Box::new(Sequence(vec![gamemode_cp, target_tracking])),
         ),
     ]);
 
@@ -141,29 +176,15 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
             angles: Vector3::ZERO,
             abs_origin: Vector3::ZERO,
             needs_new_path: true,
+            gamemode: String::new(),
 
-            t: Targeting {
-                current_target: Target::None,
-                last_target: Target::None,
-                reacts_at: 0.,
-                spread: Vec::new(),
-                spread_rigth: true,
-                hates: BTreeMap::default(),
-            },
+            t: Targeting::default(),
 
-            m: Movement {
-                can_move: true,
-                next_wall_point: None,
-                next_point_override: None,
-                view_lock: false,
-                clamped_view: Some(0.),
-                jump_tick: 0,
-                vault_tick: 0,
-                down_tick: 0,
-                area_cost: AreaCost::default(),
-                last_path_points: Vec::new(),
-                last_point_reached_delta: 0.,
-            },
+            m: Movement::default(),
+
+            cp: GamemodeCP::default(),
+
+            shared: Arc::clone(&*SHARED),
         },
     ));
 }
@@ -193,6 +214,10 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
     bt.blackboard_mut().origin = unsafe { *bot.get_origin(&mut v) };
     bt.blackboard_mut().angles = unsafe { *bot.eye_angles(&mut v) };
     bt.blackboard_mut().abs_origin = bot.m_vecAbsOrigin;
+    bt.blackboard_mut().gamemode =
+        ConVarStruct::find_convar_by_name("mp_gamemode", unsafe { EngineToken::new_unchecked() })
+            .map(|convar| convar.get_value_string())
+            .unwrap_or_default();
 
     if is_alive(bot) != bt.blackboard().last_alive_state {
         bt.reset_bt();
@@ -341,11 +366,8 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
 
             (Status::Success, 0.)
         }
-
         BotAction::Movement(movement) => run_movement(movement, brain, bot, helper),
-
         BotAction::Targeting(targeting) => run_targeting(targeting, brain, bot, helper),
-
         BotAction::IsDead => {
             if brain.last_alive_state {
                 brain.looked_at_death_record = false;
@@ -354,7 +376,6 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
                 (Status::Success, 0.)
             }
         }
-
         BotAction::DeadState => {
             brain.needs_new_path = true;
             // this a bit dangerous since if FindPath is running in parallel it can cause lot's of tasks to get pushed to the worker threads which will overwhelm them
@@ -371,6 +392,14 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
 
             (Status::Success, 0.)
         }
+        BotAction::IsGamemode(gamemode) => {
+            if &brain.gamemode == gamemode {
+                (Status::Success, 0.)
+            } else {
+                (Status::Failure, 0.)
+            }
+        }
+        BotAction::GamemodeCP(gamemode_cp) => run_cp(gamemode_cp, brain, bot, helper),
     });
 
     if bt.is_finished() {

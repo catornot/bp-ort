@@ -1,5 +1,6 @@
 #![feature(let_chains, mpmc_channel, stmt_expr_attributes, if_let_guard)]
 
+use nav_points::vector3_to_tuvec;
 use once_cell::sync::OnceCell;
 use parking_lot::{Mutex, RwLock};
 use rrplug::{
@@ -22,6 +23,7 @@ use crate::async_pathfinding::JobMarket;
 
 mod async_pathfinding;
 mod behavior;
+mod gamemode_cp;
 mod loader;
 mod movement;
 mod nav_points;
@@ -199,7 +201,8 @@ impl Plugin for OctBots {
             ENGINE_FUNCTIONS
                 .get()
                 .and_then(|funcs| funcs.host_state.as_ref())
-        } {
+        } && let Some(funcs) = SERVER_FUNCTIONS.get()
+        {
             let current_name =
                 unsafe { CStr::from_ptr(state.level_name.as_ptr()).to_string_lossy() };
             let mut load_nav = self.current_map.lock();
@@ -212,7 +215,42 @@ impl Plugin for OctBots {
                 match &navmesh.navmesh {
                     loader::NavmeshStatus::Unloaded => {}
                     loader::NavmeshStatus::Loading => {
-                        navmesh.try_loaded();
+                        if let Some(true) = navmesh.try_loaded()
+                            && let cell_size = navmesh.cell_size
+                            && let loader::NavmeshStatus::Loaded(octtree) = &mut navmesh.navmesh
+                            && ["cp", "mcp"].contains(
+                                &ConVarStruct::find_convar_by_name("mp_gamemode", unsafe {
+                                    EngineToken::new_unchecked()
+                                })
+                                .map(|convar| convar.get_value_string())
+                                .unwrap_or_default()
+                                .as_str(),
+                            )
+                        {
+                            log::info!("loading extra hardpoits into navmesh");
+                            let neighboor = (-3..=3).flat_map(|x| {
+                                (-3..=3).flat_map(move |y| (-2..=3).map(move |z| [x, y, z]))
+                            });
+
+                            let mut v = Vector3::ZERO;
+                            for point in
+                                shared::utils::get_ents_by_class_name(c"info_hardpoint", funcs)
+                                    .flat_map(|ent| unsafe { ent.as_ref() })
+                                    .map(|ent| unsafe { *ent.get_origin(&mut v) })
+                                    .map(|origin| vector3_to_tuvec(cell_size, origin))
+                                    .flat_map(|point| {
+                                        neighboor.clone().flat_map(move |offset| {
+                                            Some(oktree::prelude::TUVec3u32::new(
+                                                point.0.x.checked_add_signed(offset[0])?,
+                                                point.0.y.checked_add_signed(offset[1])?,
+                                                point.0.z.checked_add_signed(offset[2])?,
+                                            ))
+                                        })
+                                    })
+                            {
+                                _ = octtree.insert(point);
+                            }
+                        }
                     }
                     loader::NavmeshStatus::Loaded(_) => {}
                 }

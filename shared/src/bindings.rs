@@ -10,7 +10,7 @@ use rrplug::{
             convar::Color,
         },
         squirrelclasstypes::SQRESULT,
-        squirreldatatypes::{CSquirrelVM, HSquirrelVM, SQObject},
+        squirreldatatypes::{CSquirrelVM, HSquirrelVM, SQObject, SQTable},
     },
     high::vector::Vector3,
     offset_functions,
@@ -465,12 +465,10 @@ offset_functions! {
         is_titan = unsafe extern "C" fn(*const CBaseEntity) -> bool where offset(0x406a70);
         set_health = unsafe extern "C" fn(*mut CPlayer, i32, usize, usize) -> () where offset(0x42d7f0);
         create_script_instance = unsafe extern "C" fn(*mut CBaseEntity) -> *const SQObject where offset(0x43f2f0);
-        get_player_net_int = unsafe extern "C" fn(*const CPlayer, *const c_char) -> i32 where offset(0x5ddc30);
-        get_net_var_from_ent = unsafe extern "C" fn(*const CBaseEntity, *const c_char, i32, *mut i32) -> i32 where offset(0x1fa9c0);
-        get_entity_name = unsafe extern "C" fn(*const CPlayer) -> *const c_char where offset(0x4179b0);
-        ent_list = *const CEntInfo where offset(0x112d770);
         find_next_entity_by_class_name = unsafe extern "C" fn(*const c_void, *const CBaseEntity, *const c_char) -> *mut CBaseEntity where offset(0x44fdc0);
         some_magic_function_for_class_name = unsafe extern "C" fn(*mut *const c_char, *const c_char) -> *const *const c_char where offset(0x199e70);
+        get_entity_name = unsafe extern "C" fn(*const CPlayer) -> *const c_char where offset(0x4179b0);
+        ent_list = *const CEntInfo where offset(0x112d770);
         get_ent_by_script_name = unsafe extern "C" fn(*const c_void, *const c_char, *mut i32) -> *mut CBaseEntity where offset(0x455030);
         get_parent = unsafe extern "C" fn(*const CBaseEntity) -> *mut CBaseEntity where offset(0x445d50);
 
@@ -497,6 +495,7 @@ offset_functions! {
 
         sq_threadwakeup = unsafe extern "C" fn(sqvm: *const HSquirrelVM, i32, *const c_void, *const HSquirrelVM) -> SQRESULT where offset(0x8780);
         sq_suspendthread = unsafe extern "C" fn(sqvm: *const HSquirrelVM, *const *mut c_void, usize, *const HSquirrelVM) -> SQRESULT where offset(0x434f0);
+        sq_getcompilerkeywords = unsafe extern "C" fn(sqvm: *mut HSquirrelVM) -> *mut SQTable where offset(0x00bc70);
 
         some_global_for_threads = *mut c_void where offset(0x23683c8);
         fun_180042560 = unsafe extern "C" fn(*const *mut (), f32) -> *const HSquirrelVM where offset(0x42560);
@@ -507,6 +506,17 @@ offset_functions! {
         decoy_set_modifiers = unsafe extern "C" fn(*const CPlayerDecoy, i32) where offset(0x1c34d0);
         direction_to_angles = unsafe extern "C" fn(*const Vector3, *mut Vector3, *mut Vector3) where offset(0x6f8f20);
         is_in_some_busy_interaction = unsafe extern "C" fn(*const CPlayer) -> bool where offset(0x5d4d40);
+
+        get_value_for_key_string = unsafe extern "C" fn(*const CBaseEntity, *const c_char) -> *const c_char where offset(0x4457c0);
+        get_value_for_key_string_internal = unsafe extern "C" fn(*const CBaseEntity, *const c_char) -> *const c_char where offset(0x416f60);
+        get_global_net_int = unsafe extern "C" fn(*const c_char) -> i32 where offset(0x1fd230);
+        get_global_net_float = unsafe extern "C" fn(*const c_char) -> f64 where offset(0x1fd1a0);
+        get_player_net_int = unsafe extern "C" fn(*const CPlayer, *const c_char) -> i32 where offset(0x5ddc30);
+        get_net_var_from_ent = unsafe extern "C" fn(*const CBaseEntity, *const c_char, i32, *mut i32) -> i32 where offset(0x1fa9c0);
+        get_net_var_index = unsafe extern "C" fn(*const c_char, *const c_char, i32, u64, *mut c_char) -> i32 where offset(0x1fa510);
+        net_var_index_global = *mut u64 where offset(0xc69590);
+        net_var_global_ent = *const *mut CBaseEntity where offset(0x00c6b7a8);
+        get_some_net_var_csqvm = unsafe extern "C" fn() -> *mut CSquirrelVM where offset(0x2a0bb0);
     }
 }
 // very intersting call at server.dll + 0x151782

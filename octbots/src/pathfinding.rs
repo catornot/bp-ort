@@ -286,8 +286,27 @@ pub fn find_path<const MAX_ITERATIONS: usize>(
                 .1;
             get_path(visited_list, end_index, start_index, octtree, cell_size)
         }
+        Goal::Area(_, distance) => {
+            let end_index = visited_list
+                .keys()
+                .filter_map(|point| Some((end.distance(point), visited_list.get_index_of(point)?)))
+                .fold(None::<(f64, usize)>, |closer, other| {
+                    if let Some(closer) = closer
+                        && closer.0 < other.0
+                    {
+                        Some(closer)
+                    } else if other.0 < distance {
+                        Some(other)
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or((0., usize::MAX))
+                .1;
+            get_path(visited_list, end_index, start_index, octtree, cell_size)
+        }
 
-        Goal::Area(_, _) | Goal::Point(_) => None,
+        Goal::Point(_) => None,
     }
 }
 

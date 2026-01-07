@@ -213,12 +213,8 @@ fn try_refresh_hardpoint(helper: &CUserCmdHelper) -> EngineToken {
     data.hardpoints.clear();
 
     data.hardpoints.extend(
-        get_ents_by_class_name(c"info_hardpoint", helper.sv_funcs).map(|ent| unsafe {
-            *ent.cast::<CPlayer>()
-                .as_ref()
-                .unwrap_unchecked()
-                .get_origin(&mut v)
-        }),
+        get_ents_by_class_name(c"info_hardpoint", helper.sv_funcs)
+            .map(|ent| unsafe { *ent.as_ref().unwrap_unchecked().get_origin(&mut v) }),
     );
 
     token

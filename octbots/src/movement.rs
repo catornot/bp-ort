@@ -22,7 +22,7 @@ use crate::{
     pathfinding::get_neighbors_h,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Movement {
     /// if the bot is allowed to move, set by other systems
     /// should maybe be some sort of moveType?

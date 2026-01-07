@@ -1,7 +1,10 @@
 use rrplug::{
-    bindings::class_types::{cbaseentity::CBaseEntity, client::SignonState, cplayer::CPlayer},
+    bindings::{
+        class_types::{cbaseentity::CBaseEntity, client::SignonState, cplayer::CPlayer},
+        squirrelfunctions::SQUIRREL_SERVER_FUNCS,
+    },
     mid::utils::try_cstring,
-    prelude::Vector3,
+    prelude::{log, HSquirrelVM, Vector3},
 };
 use std::{
     ffi::{c_char, c_void, CStr},
@@ -169,6 +172,7 @@ pub fn send_client_print(player: &CPlayer, msg: &str) -> Option<()> {
     None
 }
 
+#[doc(alias = "get_from_ehandle")]
 pub fn lookup_ent(handle: i32, server_funcs: &ServerFunctions) -> Option<&CBaseEntity> {
     let entry_index = (handle & 0xffff) as usize;
     let serial_number = handle >> 0x10;
@@ -351,4 +355,78 @@ pub fn trace_hull(
 
 pub fn is_alive(ent: &CBaseEntity) -> bool {
     ent.m_lifeState == 0
+}
+
+pub fn get_value_for_key_string(ent: &CBaseEntity, key: &CStr) -> Option<String> {
+    // let mut buf = [0i8; 1028];
+
+    unsafe {
+        (0..ent.genericKeyValueCount)
+            .filter_map(|i| {
+                let keyvalue = ent
+                    .genericKeyValues
+                    .byte_offset(i as isize * 0x10)
+                    .cast::<*const c_char>();
+                Some((
+                    CStr::from_ptr(keyvalue.as_ref()?.as_ref()?),
+                    CStr::from_ptr(keyvalue.byte_offset(0x8).as_ref()?.as_ref()?),
+                ))
+            })
+            .find_map(|(key_cmp, value)| {
+                (key_cmp == key).then(|| value.to_string_lossy().to_string())
+            })
+    }
+}
+
+pub fn get_global_net_int(global: impl AsRef<str>, server_funcs: &ServerFunctions) -> i32 {
+    log::info!("global net int");
+    let compiler_keywords = unsafe {
+        let sqvm = (server_funcs.sq_getcompilerkeywords)(
+            (server_funcs.get_some_net_var_csqvm)()
+                .as_ref()
+                .unwrap()
+                .sqvm,
+        )
+        .cast::<HSquirrelVM>()
+        .as_mut()
+        .unwrap();
+        (SQUIRREL_SERVER_FUNCS.wait().sq_getstring)(sqvm, 2)
+    };
+
+    #[allow(clippy::precedence)]
+    unsafe {
+        log::info!(
+            "global net index {}",
+            CStr::from_ptr(compiler_keywords).to_string_lossy()
+        );
+        let index = (server_funcs.get_net_var_index)(
+            compiler_keywords,
+            compiler_keywords,
+            0,
+            0xffffffff,
+            std::ptr::null_mut(),
+        );
+
+        log::info!("global net int {}", global.as_ref());
+        let mut buf = 0i32;
+        if let Some(ent) = (*server_funcs.net_var_global_ent).as_ref() {
+            (server_funcs.get_net_var_from_ent)(
+                ent,
+                try_cstring(global.as_ref()).unwrap().as_ptr(),
+                index,
+                &mut buf,
+            );
+        }
+
+        buf
+    }
+}
+
+pub fn get_global_net_float(global: impl AsRef<str>, server_funcs: &ServerFunctions) -> f32 {
+    // unsafe {
+    //     (server_funcs.get_global_net_float)(
+    //         try_cstring(global.as_ref()).unwrap_or_default().as_ptr(),
+    //     ) as f32
+    // }
+    0.
 }

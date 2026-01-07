@@ -1,5 +1,5 @@
 use bevy_math::prelude::*;
-use bonsai_bt::Status::{self, Failure, Success};
+use bonsai_bt::Status;
 use rrplug::{
     bindings::class_types::{
         cbaseentity::CBaseEntity,
@@ -22,13 +22,14 @@ use std::{
 use crate::behavior::BotBrain;
 use crate::{async_pathfinding::GoalFloat, behavior::BotAction};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Targeting {
+    pub mode: TargetingMode,
     pub current_target: Target,
-    pub last_target: Target,
-    pub reacts_at: f32,
-    pub spread: Vec<Vector3>,
-    pub spread_rigth: bool,
+    last_target: Target,
+    reacts_at: f32,
+    spread: Vec<Vector3>,
+    spread_rigth: bool,
     pub hates: BTreeMap<usize, u32>,
 }
 
@@ -40,13 +41,22 @@ pub enum TargetingAction {
     Melee,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum Target {
     Entity(EHandle, bool),
     Position(Vector3),
     Area(Vector3, f64),
     Roam,
+    #[default]
     None,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub enum TargetingMode {
+    Passive,
+    PassbyAgressive,
+    #[default]
+    Agressive,
 }
 
 impl PartialEq for Target {
@@ -134,6 +144,12 @@ pub fn run_targeting(
             }
 
             let Some(current_target) = make_player_iterator(bot, helper)
+                .filter(|_| {
+                    matches!(
+                        brain.t.mode,
+                        TargetingMode::Agressive | TargetingMode::PassbyAgressive
+                    )
+                })
                 .fold(None::<(Vec3, &CBaseEntity, usize, i32)>, |left, rigth| {
                     if let Some(left) = left
                         && (left.0.distance(base) as u32).saturating_sub(
@@ -183,6 +199,7 @@ pub fn run_targeting(
                 .map(|(_, _, _, handle)| (handle, true))
                 .or_else(|| {
                     make_player_iterator(bot, helper)
+                        .filter(|_| matches!(brain.t.mode, TargetingMode::Agressive))
                         .reduce(|left, rigth| {
                             if (left.0.distance(base) as u32).saturating_sub(
                                 brain.t.hates.get(&left.2).copied().unwrap_or_default() * 50,
@@ -197,7 +214,12 @@ pub fn run_targeting(
                         .map(|(_, _, _, handle)| (handle, false))
                 })
             else {
-                brain.t.current_target = Target::Roam;
+                if !matches!(
+                    brain.t.current_target,
+                    Target::Position(_) | Target::Area(_, _)
+                ) {
+                    brain.t.current_target = Target::Roam;
+                }
                 return (Status::Success, 0.);
             };
             brain.t.current_target = Target::Entity(current_target.0, current_target.1);
@@ -309,12 +331,12 @@ pub fn run_targeting(
                 brain.next_cmd.buttons |= MoveAction::Melee as u32;
                 brain.next_cmd.world_view_angles =
                     natural_aim(brain.angles, look_at(brain.origin, target));
-                (Success, 0.)
+                (Status::Success, 0.)
             } else {
-                (Failure, 0.)
+                (Status::Failure, 0.)
             }
         }
-        TargetingAction::Melee => (Failure, 0.),
+        TargetingAction::Melee => (Status::Failure, 0.),
     }
 }
 
