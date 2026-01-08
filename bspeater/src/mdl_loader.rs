@@ -1,10 +1,10 @@
-use std::{mem::size_of, path::PathBuf};
-
+use anyhow::anyhow;
 use bevy::prelude::*;
 use bytemuck::offset_of;
 use itertools::Itertools;
+use std::{mem::size_of, path::PathBuf};
 
-use crate::{Compacttriangle, PhyHeader, PhySection, PhyVertex, SeekRead, StaticProp, Studiohdr};
+use crate::{Compacttriangle, PhyHeader, PhySection, PhyVertex, StaticProp, Studiohdr};
 
 pub fn extract_game_lump_models(
     game_lump: Vec<u8>,
@@ -34,7 +34,7 @@ pub fn extract_game_lump_models(
                 .unwrap_or(name)
                 .to_lowercase()
         })
-        .map(|name| (std::fs::File::open(merged_dir.join(&name)), name))
+        .map(|name| (std::fs::read(merged_dir.join(&name)), name))
         .map(|(err, name)| {
             if err.is_err() {
                 eprintln!("failed to load: {name} because of {err:?}");
@@ -42,7 +42,7 @@ pub fn extract_game_lump_models(
             }
             err.expect("must load all models")
         })
-        .map(|mut buf| extract_mdl_physics(&mut buf))
+        .map(|buf| extract_mdl_physics(&buf))
         .map(|model_data| model_data.inspect_err(|err| eprintln!("{err}")).ok())
         .collect::<Vec<Option<(Vec<Vec3>, Vec<u32>)>>>();
 
@@ -70,28 +70,23 @@ pub fn extract_game_lump_models(
     (static_props, models)
 }
 
-fn extract_mdl_physics(reader: &mut dyn SeekRead) -> anyhow::Result<(Vec<Vec3>, Vec<u32>)> {
-    // SAFETY: probably safe it's the same size yk
-    let header = unsafe {
-        let mut buf = [0; size_of::<Studiohdr>()];
-        reader.read_exact(&mut buf)?;
-        std::mem::transmute::<[u8; size_of::<Studiohdr>()], Studiohdr>(buf)
+fn extract_mdl_physics(buf: &[u8]) -> anyhow::Result<(Vec<Vec3>, Vec<u32>)> {
+    let header = {
+        let buf: [u8; size_of::<Studiohdr>()] = std::array::from_fn(|i| buf[i]);
+        *bytemuck::from_bytes::<Studiohdr>(&buf)
     };
-    // let mut header_buffer = vec![];
-    // reader.read_exact(&mut header_buffer).ok()?;
-    // let header =
-
-    // dbg!(String::from_utf8_lossy(&header.name));
 
     if header.phy_size == 0 {
         anyhow::bail!("mdl model is malformed with zero physics");
     }
 
-    // TODO: throw errors
-    reader.seek(std::io::SeekFrom::Start(header.phy_offset as u64))?;
-    // let mut phy = vec![0; header.phy_size as usize];
-    let mut phy = vec![0; header.phy_size as u64 as usize];
-    _ = reader.read(&mut phy)?;
+    let phy = buf
+        .get(
+            header.phy_offset as u64 as usize
+                ..(header.phy_offset + header.phy_size) as u64 as usize,
+        )
+        .ok_or_else(|| anyhow!("didn't fit or smth"))?
+        .to_vec();
 
     let phy_header_offset = size_of::<PhyHeader>();
     let _phy_header = *bytemuck::try_from_bytes::<PhyHeader>(&phy[0..size_of::<PhyHeader>()])

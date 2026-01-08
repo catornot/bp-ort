@@ -248,7 +248,7 @@ fn debug_contents(
 ) -> Result<(), BevyError> {
     let Transform {
         translation,
-        rotation: _,
+        rotation,
         scale: _,
     } = *camera.single()?;
 
@@ -256,13 +256,7 @@ fn debug_contents(
         .cast_ray(
             Ray3d::new(
                 translation,
-                // Dir3::new(
-                //     Transform::from_rotation(rotation)
-                //         .transform_point(Vec3::X)
-                //         .normalize(),
-                // )
-                // .unwrap_or(),
-                Dir3::X,
+                Dir3::new(rotation.mul_vec3(-Vec3::Z).normalize()).unwrap_or(Dir3::X),
             ),
             &MeshRayCastSettings::default(),
         )

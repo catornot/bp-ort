@@ -1,10 +1,42 @@
 use crate::*;
 use bevy::math::DVec3;
 
-const EXTRA_FLAGS: &[(&str, [(i32, i32); 3])] = &[(
-    "mp_black_water_canal",
-    [(0, 0), (0, Contents::WINDOW_NO_COLLIDE as i32), (0, 0)],
-)];
+const EXTRA_FLAGS: &[(&str, [(i32, i32); 3])] = &[
+    (
+        "mp_black_water_canal",
+        [(0, 0), (0, Contents::WINDOW_NO_COLLIDE as i32), (0, 0)],
+    ),
+    (
+        "mp_colony02",
+        [(0, 0), (0, Contents::WINDOW_NO_COLLIDE as i32), (0, 0)],
+    ),
+];
+const SHOULD_CHECK_WINDOW_NO_COLLIDE: &[(&str, bool)] = &[
+    ("mp_angel_city", true),
+    ("mp_black_water_canal", true),
+    ("mp_grave", true),
+    ("mp_colony02", true),
+    ("mp_complex3", true),
+    ("mp_crashsite3", true),
+    ("mp_drydock", true),
+    ("mp_eden", true),
+    ("mp_thaw", true),
+    ("mp_forwardbase_kodai", true),
+    ("mp_glitch", true),
+    ("mp_homestead", true),
+    ("mp_relic02", true),
+    ("mp_rise", true),
+    ("mp_wargames", true),
+    ("mp_lobby", true),
+    ("mp_lf_deck", true),
+    ("mp_lf_meadow", true),
+    ("mp_lf_stacks", true),
+    ("mp_lf_township", true),
+    ("mp_lf_traffic", true),
+    ("mp_lf_uma", true),
+    ("mp_coliseum", true),
+    ("mp_coliseum_column", true),
+];
 
 pub fn geoset_to_meshes(
     BSPData {
@@ -24,6 +56,11 @@ pub fn geoset_to_meshes(
     map_name: &str,
 ) -> Vec<Mesh> {
     let extra_flags = EXTRA_FLAGS
+        .iter()
+        .find_map(|(name, rest)| (*name == map_name).then_some(rest))
+        .copied()
+        .unwrap_or_default();
+    let should_check_window_no_collide = SHOULD_CHECK_WINDOW_NO_COLLIDE
         .iter()
         .find_map(|(name, rest)| (*name == map_name).then_some(rest))
         .copied()
@@ -73,13 +110,14 @@ pub fn geoset_to_meshes(
                     ty,
                     ((primative >> 8) & 0x1FFFFF) as usize,
                     unique_contents[primative as usize & 0xFF],
+                    unique_contents[primative as usize & 0xFF],
                 ))
             }
         })
-        .collect::<std::collections::HashSet<(PrimitiveType, usize, i32)>>()
+        .collect::<std::collections::HashSet<(PrimitiveType, usize, i32, i32)>>()
         // maybe this doesn't improve anything but it's cool
         .into_par_iter()
-        .filter_map(|(ty, index, contents)| {
+        .filter_map(|(ty, index, contents, flags)| {
             let mut pushing_vertices: Vec<Vec3> = Vec::new();
             let mut indices = Vec::new();
 
@@ -106,6 +144,25 @@ pub fn geoset_to_meshes(
                     &mut pushing_vertices,
                     &mut indices,
                 )?,
+            }
+
+            // just check if the surface is not flat which means we have a huge wall here that is marked WINDOW_NO_COLLIDE therefore it needs to be gone
+            if should_check_window_no_collide
+                && flags & Contents::WINDOW_NO_COLLIDE as i32 != 0
+                && (pushing_vertices
+                    .iter()
+                    .map(|v| v.y as i64)
+                    .max()
+                    .unwrap_or_default()
+                    - pushing_vertices
+                        .iter()
+                        .map(|v| v.y as i64)
+                        .min()
+                        .unwrap_or_default())
+                .abs()
+                    > 200
+            {
+                return None;
             }
 
             Some(
