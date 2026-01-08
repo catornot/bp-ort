@@ -103,20 +103,23 @@ fn extract_mdl_physics(reader: &mut dyn SeekRead) -> anyhow::Result<(Vec<Vec3>, 
 
     let tri_offset = phy_header_offset + offset_of!(section, PhySection, tri);
     let indicies = Vec::from_iter(
-        (0..(section.ledge.n_triangles as usize).min(phy.len()))
+        (0..(section.ledge.n_triangles as usize))
             .map(|i| {
                 tri_offset + size_of::<Compacttriangle>() * i
                     ..tri_offset + size_of::<Compacttriangle>() * (i + 1)
             })
-            .filter_map(|range| {
-                Some(
-                    *bytemuck::try_from_bytes::<Compacttriangle>(phy.get(range)?)
-                        .expect("out of range maybe for compact tri"),
+            .map(|range| {
+                *bytemuck::try_from_bytes::<Compacttriangle>(
+                    phy.get(range).expect("out of range maybe for compact tri"),
                 )
+                .expect("couldn't get tri")
             })
-            .flat_map(|triangle| [triangle.edge1(), triangle.edge2(), triangle.edge3()])
+            .flat_map(|triangle| {
+                [triangle.edge1(), triangle.edge2(), triangle.edge3()]
+                    .into_iter()
+                    .rev()
+            })
             .map(|edge| edge.start_point_index() as u32)
-            .rev()
             .collect::<Vec<u32>>(),
     );
 
@@ -125,19 +128,16 @@ fn extract_mdl_physics(reader: &mut dyn SeekRead) -> anyhow::Result<(Vec<Vec3>, 
         + section.ledge.c_point_offset as usize;
 
     let vertices = Vec::from_iter(
-        (0..indicies
-            .iter()
-            .copied()
-            .max()
-            .unwrap_or(0)
-            .min(phy.len() as u32) as usize
-            + 1)
+        (0..indicies.iter().copied().max().unwrap_or(0) as usize + 1)
             .map(|i| {
                 phys_vertex_offset + size_of::<PhyVertex>() * i
                     ..phys_vertex_offset + size_of::<PhyVertex>() * (i + 1)
             })
-            .filter_map(|range| {
-                Some(*bytemuck::try_from_bytes::<PhyVertex>(phy.get(range)?).ok()?)
+            .map(|range| {
+                *bytemuck::try_from_bytes::<PhyVertex>(
+                    phy.get(range).expect("out of range maybe for phyvertex"),
+                )
+                .expect("couldn't get phy")
             }),
     )
     .iter()

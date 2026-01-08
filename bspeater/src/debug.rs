@@ -1,7 +1,7 @@
 use bevy::{input::common_conditions::input_just_pressed, prelude::*};
 use bevy_fly_camera::FlyCamera;
 use oktree::prelude::*;
-use std::{iter, ops::BitAnd, sync::Arc};
+use std::{ops::BitAnd, sync::Arc};
 
 use crate::{
     ATTRIBUTE_PRIMATIVE_TYPE, ATTRIBUTE_UNIQUE_CONTENTS, CELL_SIZE, ChunkCells, DebugAmount,
@@ -248,7 +248,7 @@ fn debug_contents(
 ) -> Result<(), BevyError> {
     let Transform {
         translation,
-        rotation,
+        rotation: _,
         scale: _,
     } = *camera.single()?;
 

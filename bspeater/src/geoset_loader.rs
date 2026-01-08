@@ -1,6 +1,10 @@
 use crate::*;
-use avian3d::math::PI;
-use bevy::math::{Affine3A, DVec3};
+use bevy::math::DVec3;
+
+const EXTRA_FLAGS: &[(&str, [(i32, i32); 3])] = &[(
+    "mp_black_water_canal",
+    [(0, 0), (0, Contents::WINDOW_NO_COLLIDE as i32), (0, 0)],
+)];
 
 pub fn geoset_to_meshes(
     BSPData {
@@ -17,7 +21,14 @@ pub fn geoset_to_meshes(
         props,
         model_data,
     }: BSPData,
+    map_name: &str,
 ) -> Vec<Mesh> {
+    let extra_flags = EXTRA_FLAGS
+        .iter()
+        .find_map(|(name, rest)| (*name == map_name).then_some(rest))
+        .copied()
+        .unwrap_or_default();
+
     geo_sets
         .into_iter()
         .flat_map(|geoset| {
@@ -30,8 +41,28 @@ pub fn geoset_to_meshes(
                 .chain(geoset.prim_count.eq(&1).then_some(geoset.prim_start))
         })
         .filter_map(|primative| {
-            let flag = Contents::SOLID as i32 | Contents::PLAYER_CLIP as i32;
-            let no_flag = Contents::WINDOW_NO_COLLIDE as i32;
+            let ty =
+                PrimitiveType::try_from((primative >> 29) & 0x7).expect("invalid primative type");
+            let (flag, no_flag) = match ty {
+                PrimitiveType::Brush => (
+                    Contents::SOLID as i32 | Contents::PLAYER_CLIP as i32,
+                    Contents::WINDOW_NO_COLLIDE as i32,
+                ),
+                PrimitiveType::Tricoll => (
+                    Contents::SOLID as i32
+                        | Contents::PLAYER_CLIP as i32
+                        | Contents::BULLET_CLIP as i32,
+                    0,
+                ),
+                PrimitiveType::Prop => (Contents::SOLID as i32 | Contents::PLAYER_CLIP as i32, 0),
+            };
+
+            let extra_flags = extra_flags
+                .get((ty as usize).saturating_sub(1))
+                .copied()
+                .unwrap_or_default();
+            let (flag, no_flag) = (flag | extra_flags.0, no_flag | extra_flags.1);
+
             // if it doesn't contain any
             if unique_contents[primative as usize & 0xFF] & flag == 0
                 || unique_contents[primative as usize & 0xFF] & no_flag != 0
@@ -39,8 +70,7 @@ pub fn geoset_to_meshes(
                 None
             } else {
                 Some((
-                    PrimitiveType::try_from((primative >> 29) & 0x7)
-                        .expect("invalid primative type"),
+                    ty,
                     ((primative >> 8) & 0x1FFFFF) as usize,
                     unique_contents[primative as usize & 0xFF],
                 ))
@@ -180,7 +210,7 @@ fn prop_to_mesh(
     let static_prop = props[index];
     let transform = Transform::from_translation(static_prop.origin.xzy())
         .with_rotation(Quat::from_euler(
-            EulerRot::XYZEx,
+            EulerRot::XYZ,
             static_prop.angles.x.to_radians(),
             static_prop.angles.y.to_radians(),
             static_prop.angles.z.to_radians(),
@@ -191,6 +221,8 @@ fn prop_to_mesh(
     if let Some(model_data) = model_data
         .get(static_prop.model_index as usize)
         .and_then(|o| o.as_ref())
+        .cloned()
+        // .or_else(|| Some(ico(Sphere::new(static_prop.scale * 3.), 3)))
         .filter(|_| static_prop.solid == 6)
     // figure what this actually is ^ rigth vphysics stuff I rember
     {
@@ -268,3 +300,32 @@ fn calculate_intersection_point(planes: [&Vec4; 3]) -> Option<DVec3> {
 
     Some(DVec3::new(d.dot(u), m3.dot(v), -m2.dot(v)) / denom)
 }
+
+// pub fn ico(sphere: Sphere, subdivisions: u32) -> (Vec<Vec3>, Vec<u32>) {
+//     use hexasphere::shapes::IcoSphere;
+//     let generated = IcoSphere::new(subdivisions as usize, |point| {
+//         let inclination = ops::acos(point.y);
+//         let azimuth = ops::atan2(point.z, point.x);
+
+//         let norm_inclination = inclination / PI;
+//         let norm_azimuth = 0.5 - (azimuth / core::f32::consts::TAU);
+
+//         [norm_azimuth, norm_inclination]
+//     });
+
+//     let raw_points = generated.raw_points();
+
+//     let points = raw_points
+//         .iter()
+//         .map(|&p| (p * sphere.radius).into())
+//         .map(Vec3::from_array)
+//         .collect::<Vec<Vec3>>();
+
+//     let mut indices = Vec::with_capacity(generated.indices_per_main_triangle() * 20);
+
+//     for i in 0..20 {
+//         generated.get_indices(i, &mut indices);
+//     }
+
+//     (points, indices)
+// }

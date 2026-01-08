@@ -5,7 +5,7 @@ use anyhow::Context;
 use avian3d::prelude::*;
 use bevy::{
     asset::RenderAssetUsages,
-    pbr::wireframe::WireframeConfig,
+    pbr::wireframe::{WireframeConfig, WireframePlugin},
     prelude::*,
     render::{
         RenderPlugin,
@@ -272,20 +272,23 @@ fn main() -> anyhow::Result<()> {
     println!("vertices {:#?}", vertices.len());
     println!("normals {:#?}", normals.len());
 
-    let meshes = geoset_loader::geoset_to_meshes(BSPData {
-        vertices,
-        tricoll_headers,
-        tricoll_triangles,
-        geo_sets,
-        col_primatives,
-        unique_contents,
-        brushes,
-        brush_side_plane_offsets,
-        brush_planes,
-        grid,
-        props,
-        model_data,
-    });
+    let meshes = geoset_loader::geoset_to_meshes(
+        BSPData {
+            vertices,
+            tricoll_headers,
+            tricoll_triangles,
+            geo_sets,
+            col_primatives,
+            unique_contents,
+            brushes,
+            brush_side_plane_offsets,
+            brush_planes,
+            grid,
+            props,
+            model_data,
+        },
+        &map_name,
+    );
     // let meshes = model_data
     //     .iter()
     //     .flatten()
@@ -336,8 +339,8 @@ fn main() -> anyhow::Result<()> {
         }),
         FlyCameraPlugin,
         PhysicsPlugins::default(),
-        PhysicsDebugPlugin::default(),
-        // WireframePlugin::default(),
+        // PhysicsDebugPlugin::default(),
+        WireframePlugin::default(),
     ))
     .init_resource::<WireframeConfig>()
     .init_resource::<ChunkCells>()
