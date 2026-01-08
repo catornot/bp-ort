@@ -104,53 +104,42 @@ pub fn run_cp(
             if let Some(closest) = cp
                 .capture_points
                 .iter()
+                .filter(|capture_point| {
+                    !(0..helper.globals.maxPlayers)
+                        .flat_map(|i| unsafe { (helper.sv_funcs.get_player_by_index)(i).as_ref() })
+                        .filter(|player| {
+                            !ptr::eq(*player, bot) && player.m_iTeamNum == bot.m_iTeamNum
+                        })
+                        .map(|player| unsafe { *player.get_origin(&mut v) })
+                        .any(|origin| distance3(capture_point.origin, origin) < 300.)
+                        || cp.capture_point_claims[bot.m_iTeamNum as usize]
+                            .entry(capture_point.group)
+                            .or_default()
+                            .as_ref()
+                            == Some(&get_entity_handle(bot))
+                })
                 .fold(None, |first: Option<&CapturePoint>, second| {
                     if let Some(first) = first
                         && distance3(first.origin, brain.abs_origin)
                             <= distance3(second.origin, brain.abs_origin)
-                        && second.team != bot.m_iTeamNum
                     {
                         Some(first)
-                    } else if cp.capture_point_claims[bot.m_iTeamNum as usize]
-                        .entry(second.group)
-                        .or_default()
-                        .as_ref()
-                        == Some(&get_entity_handle(bot))
-                        || second.team != bot.m_iTeamNum
-                    {
-                        Some(second)
                     } else {
-                        None
+                        Some(second)
                     }
                 })
                 .or_else(|| {
                     cp.capture_points
                         .iter()
                         .fold(None, |first: Option<&CapturePoint>, second| {
-                            if !(0..helper.globals.maxPlayers)
-                                .flat_map(|i| unsafe {
-                                    (helper.sv_funcs.get_player_by_index)(i).as_ref()
-                                })
-                                .filter(|player| {
-                                    !ptr::eq(*player, bot) && player.m_iTeamNum == bot.m_iTeamNum
-                                })
-                                .map(|player| unsafe { *player.get_origin(&mut v) })
-                                .any(|origin| {
-                                    first
-                                        .map(|first| distance3(first.origin, origin))
-                                        .unwrap_or(f32::MAX)
-                                        .min(distance3(second.origin, origin))
-                                        < 300.
-                                })
+                            if let Some(first) = first
+                                && distance3(first.origin, brain.abs_origin)
+                                    <= distance3(second.origin, brain.abs_origin)
+                                && second.team != bot.m_iTeamNum
                             {
-                                if let Some(first) = first
-                                    && distance3(first.origin, brain.abs_origin)
-                                        <= distance3(second.origin, brain.abs_origin)
-                                {
-                                    Some(first)
-                                } else {
-                                    Some(second)
-                                }
+                                Some(first)
+                            } else if second.team != bot.m_iTeamNum {
+                                Some(second)
                             } else {
                                 None
                             }
