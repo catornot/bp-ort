@@ -3,6 +3,7 @@ use rrplug::bindings::{
     cvar::convar::{FCVAR_CLIENTDLL, FCVAR_GAMEDLL, FCVAR_GAMEDLL_FOR_REMOTE_CLIENTS},
 };
 use rrplug::prelude::*;
+use shared::utils::is_alive;
 
 use crate::{
     admin_abuse::{
@@ -67,6 +68,10 @@ fn health_server_command(command: CCommandResult) {
 }
 
 fn set_health(player: &mut CPlayer, mut health: i32) {
+    if !is_alive(player) {
+        return;
+    }
+
     if health >= 524286 {
         health = 524286;
     }

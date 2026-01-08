@@ -17,8 +17,7 @@ use crate::bindings::{CMoveHelperServer, CUserCmd, SERVER_FUNCTIONS};
 
 static_detour! {
     static Physics_RunThinkFunctions: unsafe extern "C" fn(bool);
-    // static CClient__Connect: unsafe extern "C" fn(CClientPtr, *const c_char, *const c_void, c_char, *const c_void, [c_char;256] this is a *mut c_char, *const c_void ) -> bool;
-    static SomeFuncInConnectProcedure: unsafe extern "C" fn(*mut CClient, *const c_void);
+    static CClientConnectSetUid: unsafe extern "C" fn(*mut CClient, *const c_void);
     static CreateNullUserCmd: unsafe extern "C" fn(*mut CUserCmd) -> *mut CUserCmd;
     static FUN_18069e7a0: unsafe extern "C" fn(*mut c_void, *mut CPlayer, *const c_void);
     static CMoveHelperServer__PlayerFallingDamage: unsafe extern "C" fn(*mut CMoveHelperServer, *mut c_void, *const c_void, *const c_void);
@@ -231,8 +230,8 @@ pub fn hook_server(addr: *const c_void) {
     }
 }
 
-pub fn subfunc_cclient_connect_hook(this: *mut CClient, unk1: *const c_void) {
-    unsafe { SomeFuncInConnectProcedure.call(this, unk1) }
+pub fn cclient_connect_set_uid_hook(this: *mut CClient, unk1: *const c_void) {
+    unsafe { CClientConnectSetUid.call(this, unk1) }
 
     if let Some(client) = unsafe { this.as_mut() } {
         unsafe { set_stuff_on_join(client) }
@@ -243,10 +242,10 @@ pub fn hook_engine(addr: *const c_void) {
     log::info!("hooking bot engine functions");
 
     unsafe {
-        SomeFuncInConnectProcedure
+        CClientConnectSetUid
             .initialize(
                 mem::transmute(addr.offset(0x106270)),
-                subfunc_cclient_connect_hook, // so since we can't double hook, I found a function that can be hook in CClient__Connect
+                cclient_connect_set_uid_hook, // so since we can't double hook, I found a function that can be hook in CClient__Connect
             )
             .expect("failed to hook SomeFuncInConnectProcedure")
             .enable()

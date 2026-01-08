@@ -53,7 +53,7 @@ mod netvars;
 mod set_on_join;
 mod simple_bot_manager;
 
-pub const DEFAULT_SIMULATE_TYPE: i32 = 6;
+pub const DEFAULT_SIMULATE_TYPE: i32 = 100;
 
 static BASE_AIM_PENALTY: OnceCell<ConVarStruct> = OnceCell::new();
 static CLAN_TAG_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();

@@ -1,22 +1,46 @@
 use indexmap::{map::Entry, IndexMap};
 use oktree::prelude::*;
-use rustc_hash::FxHasher;
+use rustc_hash::{FxHashMap, FxHasher};
 use std::{cmp::Reverse, collections::BinaryHeap, hash::BuildHasherDefault, ops::Not};
 
 use crate::{loader::Octree32, nav_points::NavPoint};
 
 type FxIndexMap<K, V> = IndexMap<K, V, BuildHasherDefault<FxHasher>>;
 type Cost = f64;
-type VisitedList = FxIndexMap<TUVec3u32, (usize, Cost, u32, u32)>;
+type VisitedList = FxIndexMap<TUVec3u32, Visits>;
+pub type AreaCost = FxHashMap<TUVec3u32, Cost>;
 
 /// this would work with the current grid size ...
 const WALLRUN_MAX_DISTANCE: u32 = 20;
+pub const DEFAULT_MAX_ITERATIONS: usize = u16::MAX as usize * 30;
+
+#[derive(Debug, Clone, Copy)]
+pub enum Goal {
+    Point(TUVec3u32),
+    ClosestToPoint(TUVec3u32),
+    /// more like max distance honestly
+    Distance(usize),
+    Area(TUVec3u32, f64),
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct Node {
     index: usize,
     cost: Cost,
     estimated_cost: Cost,
+}
+
+/// a place to visit or visited
+#[derive(Debug, Clone, Copy)]
+pub struct Visits {
+    parent: usize,
+    cost: Cost,
+    ground_distance: u32,
+    wallrun_distance: u32,
+    /// the the wall jump been used?
+    wallhop: bool,
+    // when was it used?
+    wallhop_offset: u32,
 }
 
 impl PartialEq for Node {
@@ -36,14 +60,49 @@ impl Ord for Node {
 }
 impl Eq for Node {}
 
-pub fn find_path(
+impl Goal {
+    pub fn is_inside(&self, point: &TUVec3u32) -> bool {
+        match self {
+            Goal::Point(tuvec3u32) => point == tuvec3u32,
+            Goal::ClosestToPoint(tuvec3u32) => point == tuvec3u32,
+            Goal::Distance(_) => false,
+            Goal::Area(_, _) => self.distance(point) <= 0.,
+        }
+    }
+
+    pub fn distance(&self, point: &TUVec3u32) -> f64 {
+        fn distance3(pos: &TUVec3u32, target: &TUVec3u32) -> f64 {
+            (((pos.0.x as i64 - target.0.x as i64).pow(2)
+                + (pos.0.y as i64 - target.0.y as i64).pow(2)
+                + (pos.0.z as i64 - target.0.z as i64).pow(2)) as f64)
+                .sqrt()
+        }
+
+        match self {
+            Goal::Point(tuvec3u32) => distance3(point, tuvec3u32),
+            Goal::ClosestToPoint(tuvec3u32) => distance3(point, tuvec3u32),
+            Goal::Distance(_) => 1.,
+            Goal::Area(tuvec3u32, radius) => (distance3(point, tuvec3u32) - *radius).max(0.),
+        }
+    }
+}
+
+pub fn find_path<const MAX_ITERATIONS: usize>(
     octtree: &Octree32,
+    area_cost: AreaCost,
     start: TUVec3u32,
-    end: TUVec3u32,
+    end: Goal,
     cell_size: f32,
 ) -> Option<Vec<NavPoint>> {
     // log::info!("{start:?} and {end:?}");
-    if octtree.get(&start.0).is_some() || octtree.get(&end.0).is_some() {
+    if octtree.get(&start.0).is_some()
+        || match end {
+            Goal::Point(tuvec3u32) | Goal::ClosestToPoint(tuvec3u32) | Goal::Area(tuvec3u32, _) => {
+                octtree.get(&tuvec3u32.0).is_some()
+            }
+            Goal::Distance(_) => false,
+        }
+    {
         return None;
     }
 
@@ -55,7 +114,14 @@ pub fn find_path(
     let start_index = visited_list
         .insert_full(
             start,
-            (usize::MAX, 0., find_ground_distance(octtree, start), 0),
+            Visits {
+                parent: usize::MAX,
+                cost: 0.,
+                ground_distance: find_ground_distance(octtree, start),
+                wallrun_distance: 0,
+                wallhop: false,
+                wallhop_offset: 0,
+            },
         )
         .0;
     open_list.push(Reverse(Node {
@@ -66,72 +132,119 @@ pub fn find_path(
 
     let mut iterations = 0usize;
     while let Some(Reverse(node)) = open_list.pop()
-        && iterations < u16::MAX as usize * 30
+        && iterations < MAX_ITERATIONS
     {
         iterations += 1;
-        let (&node_pos, &(parent, cost, ground_distance, wallrun_distance)) =
-            visited_list.get_index(node.index).unwrap();
+        let (
+            &node_pos,
+            &Visits {
+                parent,
+                cost,
+                ground_distance,
+                wallrun_distance,
+                wallhop,
+                wallhop_offset,
+            },
+        ) = visited_list.get_index(node.index).unwrap();
 
         // If cost of new node from BinaryHeap is higher than the best cost, skip it
         // This implies we've already found a better path to this node
         if node.cost > cost
             && (visited_list
                 .get_index(parent)
-                .map(|(parent_pos, (_, _, parent_distance, wallrun_distance))| {
-                    (parent_pos, *parent_distance, *wallrun_distance)
-                })
+                .map(
+                    |(
+                        parent_pos,
+                        Visits {
+                            parent: _,
+                            cost: _,
+                            ground_distance: parent_distance,
+                            wallrun_distance,
+                            wallhop: _,
+                            wallhop_offset: _,
+                        },
+                    )| { (parent_pos, *parent_distance, *wallrun_distance) },
+                )
                 .map(|(parent_pos, parent_distance, wallrun_distance)| {
                     fall_condition(&node_pos, ground_distance, parent_pos, parent_distance)
                         && wallrun_distance < WALLRUN_MAX_DISTANCE
                 })
                 .unwrap_or_default()
-                || pass_ground_distance(ground_distance))
+                || pass_ground_distance(ground_distance)
+                || pass_hop_distance(ground_distance, wallhop_offset))
         {
             continue;
         }
 
         // Check if we've reached the goal
-        if end == node_pos {
+        if end.is_inside(&node_pos)
+            || (matches!(end, Goal::Distance(distance) if path_length(&visited_list, node.index, start_index ) >= distance)
+                && visited_list
+                    .get_index(node.index)
+                    .map(|(point, _)| pass_ground_distance(find_ground_distance(octtree, *point)))
+                    .unwrap_or_default())
+        {
             return get_path(visited_list, node.index, start_index, octtree, cell_size);
         }
 
-        for (neighbor, edge_cost) in
-            get_neighbors(octtree, &visited_list, &node_pos, ground_distance)
-        {
+        for (neighbor, edge_cost) in get_neighbors(
+            octtree,
+            &visited_list,
+            &node_pos,
+            ground_distance,
+            wallhop_offset,
+        ) {
             // new cost to reach this node = edge cost + node cost
             // This is confirmed cost, not heuristic
             let new_cost = edge_cost + cost;
 
             // calculate heuristic cost
             let neighboor_ground_distance = find_ground_distance(octtree, neighbor);
-            let estimated_cost = heuristic(neighbor, end, start);
+            let estimated_cost = heuristic(neighbor, start, end)
+                + area_cost.get(&neighbor).copied().unwrap_or_default();
             let wallrun_distance = if find_wall_point(node_pos, octtree).is_some() {
                 wallrun_distance + 1
             } else {
                 0
+            };
+            // wallhop can only happen when the bot is on the ground and somewhere before the max jump distance
+            let wallhop = (wallhop || neighboor_ground_distance <= 1)
+                && pass_ground_distance(neighboor_ground_distance);
+            let wallhop_offset = if get_neighbors_h(node_pos, octtree)
+                .filter(|&(_, is_empty)| is_empty)
+                .count()
+                < 4
+            {
+                wallhop_offset
+            } else {
+                neighboor_ground_distance.min(MAX_DISTANCE)
             };
 
             let neighbor_index = match visited_list.entry(neighbor) {
                 Entry::Vacant(entry) => {
                     // This is the first time we're seeing this neighbor
                     let index = entry.index();
-                    entry.insert((
-                        node.index,
-                        new_cost,
-                        neighboor_ground_distance,
+                    entry.insert(Visits {
+                        parent: node.index,
+                        cost: new_cost,
+                        ground_distance: neighboor_ground_distance,
                         wallrun_distance,
-                    ));
+                        wallhop,
+                        wallhop_offset,
+                    });
                     index
                 }
                 Entry::Occupied(mut e) => {
-                    if e.get().1 > new_cost {
+                    if e.get().cost > new_cost {
                         // We've found a better path to this neighbor
-                        e.insert((
-                            node.index,
-                            new_cost,
-                            neighboor_ground_distance,
+                        e.insert(Visits {
+                            parent: node.index,
+                            cost: new_cost,
+                            ground_distance: neighboor_ground_distance,
                             wallrun_distance,
-                        ));
+                            wallhop,
+                            wallhop_offset,
+                        });
                         e.index()
                     } else {
                         // The existing path is better, do nothing
@@ -149,18 +262,56 @@ pub fn find_path(
         }
     }
 
-    None
+    match end {
+        Goal::ClosestToPoint(_) => {
+            let end_index = visited_list
+                .keys()
+                .filter_map(|point| Some((end.distance(point), visited_list.get_index_of(point)?)))
+                .reduce(|closer, other| if closer.0 < other.0 { closer } else { other })
+                .unwrap_or((0., usize::MAX))
+                .1;
+            get_path(visited_list, end_index, start_index, octtree, cell_size)
+        }
+        Goal::Distance(_) => {
+            let end_index = visited_list
+                .keys()
+                .flat_map(|point| {
+                    pass_ground_distance(find_ground_distance(octtree, *point))
+                        .then_some(())
+                        .and_then(|_| visited_list.get_index_of(point))
+                })
+                .map(|index| (path_length(&visited_list, index, start_index), index))
+                .reduce(|closer, other| if closer.0 < other.0 { closer } else { other })
+                .unwrap_or((0, usize::MAX))
+                .1;
+            get_path(visited_list, end_index, start_index, octtree, cell_size)
+        }
+        Goal::Area(_, distance) => {
+            let end_index = visited_list
+                .keys()
+                .filter_map(|point| Some((end.distance(point), visited_list.get_index_of(point)?)))
+                .fold(None::<(f64, usize)>, |closer, other| {
+                    if let Some(closer) = closer
+                        && closer.0 < other.0
+                    {
+                        Some(closer)
+                    } else if other.0 < distance {
+                        Some(other)
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or((0., usize::MAX))
+                .1;
+            get_path(visited_list, end_index, start_index, octtree, cell_size)
+        }
+
+        Goal::Point(_) => None,
+    }
 }
 
-fn heuristic(neighbor: TUVec3u32, end: TUVec3u32, start: TUVec3u32) -> Cost {
-    fn distance3(pos: TUVec3u32, target: TUVec3u32) -> f64 {
-        (((pos.0.x as i64 - target.0.x as i64).pow(2)
-            + (pos.0.y as i64 - target.0.y as i64).pow(2)
-            + (pos.0.z as i64 - target.0.z as i64).pow(2)) as f64)
-            .sqrt()
-    }
-
-    distance3(neighbor, end) / distance3(start, end)
+fn heuristic(neighbor: TUVec3u32, start: TUVec3u32, end: Goal) -> Cost {
+    (end.distance(&neighbor) / end.distance(&start)) * 2.0
 }
 
 pub fn get_neighbors_h<'b>(
@@ -185,6 +336,7 @@ fn get_neighbors<'a>(
     visited_list: &VisitedList,
     point: &'a TUVec3u32,
     ground_distance: u32,
+    wallhop_offset: u32,
 ) -> Vec<(TUVec3u32, Cost)> {
     [
         [1, 0, 0],
@@ -204,7 +356,16 @@ fn get_neighbors<'a>(
             ),
             visited_list
                 .get(point)
-                .map(|(_, _, distance, wallrun_distance)| (*distance, *wallrun_distance))
+                .map(
+                    |&Visits {
+                         parent: _,
+                         cost: _,
+                         ground_distance: distance,
+                         wallrun_distance,
+                         wallhop: _,
+                         wallhop_offset: _,
+                     }| (distance, wallrun_distance),
+                )
                 .unwrap_or_else(|| (find_ground_distance(octtree, *point), 0)),
         ))
     })
@@ -218,19 +379,21 @@ fn get_neighbors<'a>(
                         point,
                         ground_distance,
                     )
+                    || (get_neighbors_h(*neighboor_point, octtree)
+                        .filter(|&(_, is_empty)| is_empty)
+                        .count()
+                        < 4
+                        && pass_hop_distance(wallhop_offset, wallhop_offset)
+                        && neighboor_point.0.z == point.0.z)
                     || (find_wall_point(*neighboor_point, octtree).is_some()
                         && neighboor_point.0.z == point.0.z))
                 && *wallrun_distance < WALLRUN_MAX_DISTANCE
         },
     )
-    .map(|(point, (ground_distance, wallrun_distance))| {
+    .map(|(point, (_ground_distance, _wallrun_distance))| {
         (
             // this is some cost function
-            point,
-            1. + (1. - (ground_distance / MAX_DISTANCE) as f64)
-                .abs()
-                .clamp(0., 1.)
-                + (wallrun_distance as f64 / WALLRUN_MAX_DISTANCE as f64).clamp(0., 1.),
+            point, 1.,
         )
     })
     .collect()
@@ -246,16 +409,39 @@ fn get_path(
     let mut path = Vec::new();
 
     while index != start {
-        if let Some((pos, &(parent_index, _, ground_distance, _))) = visited_list.get_index(index) {
+        if let Some((
+            pos,
+            &Visits {
+                parent: parent_index,
+                cost: _,
+                ground_distance,
+                wallrun_distance: _,
+                wallhop: _,
+                wallhop_offset: _,
+            },
+        )) = visited_list.get_index(index)
+        {
             path.push(NavPoint::new(
-                (pos.0.z.saturating_sub(MAX_DISTANCE.saturating_sub(1))..=pos.0.z)
-                    .rev()
-                    .find(|z| {
-                        octtree
-                            .get(&TUVec3::new(pos.0.x, pos.0.y, z.saturating_sub(1)))
-                            .is_some()
+                visited_list
+                    .get_index(parent_index)
+                    .map(|(parent, _)| {
+                        parent.0.x == pos.0.x
+                            && parent.0.y == pos.0.y
+                            && parent.0.z.saturating_sub(0) == pos.0.z
                     })
-                    .map(|z| TUVec3u32::new(pos.0.x, pos.0.y, z))
+                    .unwrap_or_default()
+                    .not()
+                    .then(|| {
+                        (pos.0.z.saturating_sub(MAX_DISTANCE.saturating_sub(1))..=pos.0.z)
+                            .rev()
+                            .find(|z| {
+                                octtree
+                                    .get(&TUVec3::new(pos.0.x, pos.0.y, z.saturating_sub(1)))
+                                    .is_some()
+                            })
+                            .map(|z| TUVec3u32::new(pos.0.x, pos.0.y, z))
+                    })
+                    .flatten()
                     .unwrap_or(*pos),
                 ground_distance,
                 cell_size,
@@ -272,6 +458,32 @@ fn get_path(
 
     path.reverse();
     Some(path)
+}
+
+fn path_length(visited_list: &VisitedList, mut index: usize, start: usize) -> usize {
+    let mut length = 0;
+
+    while index != start {
+        if let Some((
+            _,
+            &Visits {
+                parent: parent_index,
+                cost: _,
+                ground_distance: _,
+                wallrun_distance: _,
+                wallhop: _,
+                wallhop_offset: _,
+            },
+        )) = visited_list.get_index(index)
+        {
+            length += 1;
+            index = parent_index
+        } else {
+            return 0;
+        }
+    }
+
+    length
 }
 
 pub fn find_wall_point(point: TUVec3u32, octtree: &Octree32) -> Option<TUVec3u32> {
@@ -336,13 +548,17 @@ fn fall_condition(
 }
 
 const MAX_DISTANCE: u32 = 6;
+const HOP_DISTANCE: u32 = 3;
 fn find_ground_distance(octtree: &Octree<u32, TUVec3u32>, point: TUVec3u32) -> u32 {
-    (point.0.z.saturating_sub(MAX_DISTANCE + 1)..point.0.z)
+    (point.0.z.saturating_sub(MAX_DISTANCE + HOP_DISTANCE + 1)..point.0.z)
         .rev()
         .position(|z| octtree.get(&TUVec3::new(point.0.x, point.0.y, z)).is_some())
-        .unwrap_or(MAX_DISTANCE as usize) as u32
+        .unwrap_or(usize::MAX) as u32
 }
 
 fn pass_ground_distance(distance: u32) -> bool {
     distance < MAX_DISTANCE
+}
+fn pass_hop_distance(distance: u32, wallhop_offset: u32) -> bool {
+    distance.saturating_sub(wallhop_offset) < HOP_DISTANCE
 }

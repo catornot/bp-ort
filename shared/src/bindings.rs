@@ -1,3 +1,4 @@
+use bitflags::bitflags;
 use rrplug::{
     bindings::{
         class_types::{
@@ -9,7 +10,7 @@ use rrplug::{
             convar::Color,
         },
         squirrelclasstypes::SQRESULT,
-        squirreldatatypes::{CSquirrelVM, HSquirrelVM, SQObject},
+        squirreldatatypes::{CSquirrelVM, HSquirrelVM, SQObject, SQTable},
     },
     high::vector::Vector3,
     offset_functions,
@@ -62,41 +63,41 @@ pub enum TraceCollisionGroup {
     BlockWeaponsAndPhysics = 19,
 }
 
-#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
-#[repr(C)]
-pub enum Contents {
-    // r1/scripts/vscripts/_consts.nut:1159
-    EMPTY = 0x00,
-    SOLID = 0x01,
-    WINDOW = 0x02, // bulletproof glass etc. (transparent but solid)
-    AUX = 0x04,    // unused ?
-    GRATE = 0x08,  // allows bullets & vis
-    SLIME = 0x10,
-    WATER = 0x20,
-    WINDOW_NO_COLLIDE = 0x40,
-    ISOPAQUE = 0x80,         // blocks AI Line Of Sight, may be non - solid
-    TEST_FOG_VOLUME = 0x100, // cannot be seen through, but may be non - solid
-    UNUSED_1 = 0x200,
-    BLOCK_LIGHT = 0x400,
-    TEAM_1 = 0x800,
-    TEAM_2 = 0x1000,
-    IGNORE_NODRAW_OPAQUE = 0x2000, // ignore opaque if Surface.NO_DRAW
-    MOVEABLE = 0x4000,
-    PLAYER_CLIP = 0x10000, // blocks human players
-    MONSTER_CLIP = 0x20000,
-    BRUSH_PAINT = 0x40000,
-    BLOCK_LOS = 0x80000, // block AI line of sight
-    NO_CLIMB = 0x100000,
-    TITAN_CLIP = 0x200000, // blocks titan players
-    BULLET_CLIP = 0x400000,
-    UNUSED_5 = 0x800000,
-    ORIGIN = 0x1000000,  // removed before bsping an entity
-    MONSTER = 0x2000000, // should never be on a brush, only in game
-    DEBRIS = 0x4000000,
-    DETAIL = 0x8000000,       // brushes to be added after vis leafs
-    TRANSLUCENT = 0x10000000, // auto set if any surface has trans
-    LADDER = 0x20000000,
-    HITBOX = 0x40000000, // use accurate hitboxes on trace
+bitflags! {
+    pub struct Contents: u32 {
+        // r1/scripts/vscripts/_consts.nut:1159
+        const EMPTY = 0x00;
+        const SOLID = 0x01;
+        const WINDOW = 0x02; // bulletproof glass etc. (transparent but solid)
+        const AUX = 0x04;    // unused ?
+        const GRATE = 0x08;  // allows bullets & vis
+        const SLIME = 0x10;
+        const WATER = 0x20;
+        const WINDOW_NO_COLLIDE = 0x40;
+        const ISOPAQUE = 0x80;         // blocks AI Line Of Sight, may be non - solid
+        const TEST_FOG_VOLUME = 0x100; // cannot be seen through, but may be non - solid
+        const UNUSED_1 = 0x200;
+        const BLOCK_LIGHT = 0x400;
+        const TEAM_1 = 0x800;
+        const TEAM_2 = 0x1000;
+        const IGNORE_NODRAW_OPAQUE = 0x2000; // ignore opaque if Surface.NO_DRAW
+        const MOVEABLE = 0x4000;
+        const PLAYER_CLIP = 0x10000; // blocks human players
+        const MONSTER_CLIP = 0x20000;
+        const BRUSH_PAINT = 0x40000;
+        const BLOCK_LOS = 0x80000; // block AI line of sight
+        const NO_CLIMB = 0x100000;
+        const TITAN_CLIP = 0x200000; // blocks titan players
+        const BULLET_CLIP = 0x400000;
+        const UNUSED_5 = 0x800000;
+        const ORIGIN = 0x1000000;  // removed before bsping an entity
+        const MONSTER = 0x2000000; // should never be on a brush, only in game
+        const DEBRIS = 0x4000000;
+        const DETAIL = 0x8000000;       // brushes to be added after vis leafs
+        const TRANSLUCENT = 0x10000000; // auto set if any surface has trans
+        const LADDER = 0x20000000;
+        const HITBOX = 0x40000000; // use accurate hitboxes on trace
+    }
 }
 
 #[repr(C)]
@@ -464,12 +465,10 @@ offset_functions! {
         is_titan = unsafe extern "C" fn(*const CBaseEntity) -> bool where offset(0x406a70);
         set_health = unsafe extern "C" fn(*mut CPlayer, i32, usize, usize) -> () where offset(0x42d7f0);
         create_script_instance = unsafe extern "C" fn(*mut CBaseEntity) -> *const SQObject where offset(0x43f2f0);
-        get_player_net_int = unsafe extern "C" fn(*const CPlayer, *const c_char) -> i32 where offset(0x5ddc30);
-        get_net_var_from_ent = unsafe extern "C" fn(*const CBaseEntity, *const c_char, i32, *mut i32) -> i32 where offset(0x1fa9c0);
-        get_entity_name = unsafe extern "C" fn(*const CPlayer) -> *const c_char where offset(0x4179b0);
-        ent_list = *const CEntInfo where offset(0x112d770);
         find_next_entity_by_class_name = unsafe extern "C" fn(*const c_void, *const CBaseEntity, *const c_char) -> *mut CBaseEntity where offset(0x44fdc0);
         some_magic_function_for_class_name = unsafe extern "C" fn(*mut *const c_char, *const c_char) -> *const *const c_char where offset(0x199e70);
+        get_entity_name = unsafe extern "C" fn(*const CPlayer) -> *const c_char where offset(0x4179b0);
+        ent_list = *const CEntInfo where offset(0x112d770);
         get_ent_by_script_name = unsafe extern "C" fn(*const c_void, *const c_char, *mut i32) -> *mut CBaseEntity where offset(0x455030);
         get_parent = unsafe extern "C" fn(*const CBaseEntity) -> *mut CBaseEntity where offset(0x445d50);
 
@@ -496,6 +495,7 @@ offset_functions! {
 
         sq_threadwakeup = unsafe extern "C" fn(sqvm: *const HSquirrelVM, i32, *const c_void, *const HSquirrelVM) -> SQRESULT where offset(0x8780);
         sq_suspendthread = unsafe extern "C" fn(sqvm: *const HSquirrelVM, *const *mut c_void, usize, *const HSquirrelVM) -> SQRESULT where offset(0x434f0);
+        sq_getcompilerkeywords = unsafe extern "C" fn(sqvm: *mut HSquirrelVM) -> *mut SQTable where offset(0x00bc70);
 
         some_global_for_threads = *mut c_void where offset(0x23683c8);
         fun_180042560 = unsafe extern "C" fn(*const *mut (), f32) -> *const HSquirrelVM where offset(0x42560);
@@ -506,6 +506,17 @@ offset_functions! {
         decoy_set_modifiers = unsafe extern "C" fn(*const CPlayerDecoy, i32) where offset(0x1c34d0);
         direction_to_angles = unsafe extern "C" fn(*const Vector3, *mut Vector3, *mut Vector3) where offset(0x6f8f20);
         is_in_some_busy_interaction = unsafe extern "C" fn(*const CPlayer) -> bool where offset(0x5d4d40);
+
+        get_value_for_key_string = unsafe extern "C" fn(*const CBaseEntity, *const c_char) -> *const c_char where offset(0x4457c0);
+        get_value_for_key_string_internal = unsafe extern "C" fn(*const CBaseEntity, *const c_char) -> *const c_char where offset(0x416f60);
+        get_global_net_int = unsafe extern "C" fn(*const c_char) -> i32 where offset(0x1fd230);
+        get_global_net_float = unsafe extern "C" fn(*const c_char) -> f64 where offset(0x1fd1a0);
+        get_player_net_int = unsafe extern "C" fn(*const CPlayer, *const c_char) -> i32 where offset(0x5ddc30);
+        get_net_var_from_ent = unsafe extern "C" fn(*const CBaseEntity, *const c_char, i32, *mut i32) -> i32 where offset(0x1fa9c0);
+        get_net_var_index = unsafe extern "C" fn(*const c_char, *const c_char, i32, u64, *mut c_char) -> i32 where offset(0x1fa510);
+        net_var_index_global = *mut u64 where offset(0xc69590);
+        net_var_global_ent = *const *mut CBaseEntity where offset(0x00c6b7a8);
+        get_some_net_var_csqvm = unsafe extern "C" fn() -> *mut CSquirrelVM where offset(0x2a0bb0);
     }
 }
 // very intersting call at server.dll + 0x151782

@@ -1,3 +1,4 @@
+#![feature(new_zeroed_alloc)]
 #![allow(clippy::missing_safety_doc)]
 pub mod bindings;
 pub mod cmds_helper;

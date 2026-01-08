@@ -1,5 +1,6 @@
 #![allow(unused)]
 
+use rrplug::bindings::class_types::cplayer::CPlayer;
 use rrplug::prelude::*;
 use rrplug::{
     bindings::{
@@ -8,7 +9,7 @@ use rrplug::{
     },
     mid::utils::from_char_ptr,
 };
-use shared::utils::lookup_ent;
+use shared::utils::{is_alive, lookup_ent, nudge_type};
 
 use crate::admin_abuse::completion_append_player_names;
 use crate::bindings::CLIENT_FUNCTIONS;
@@ -44,6 +45,14 @@ pub fn register_teleport_command(engine_data: &EngineData, token: EngineToken) {
         FCVAR_CLIENTDLL as i32,
         token,
     );
+
+    _ = engine_data.register_concommand(
+        "angles",
+        print_player_angles,
+        "",
+        FCVAR_CLIENTDLL as i32,
+        token,
+    );
 }
 
 #[rrplug::concommand]
@@ -53,6 +62,13 @@ fn print_player_position() -> Option<()> {
             .as_ref()?
             .get_origin()
     });
+
+    None
+}
+
+#[rrplug::concommand]
+fn print_player_angles() -> Option<()> {
+    log::info!("angles: catornot should find the function in c_player lol");
 
     None
 }
@@ -84,9 +100,12 @@ fn teleport_server_command(command: CCommandResult) -> Option<()> {
             ))
         })
         .find_map(|(player, name)| {
+            unsafe {
+                (funcs.calc_origin)(player, &nudge_type::<*const CPlayer>(player), 0, 0);
+            }
             name_target
                 .starts_with(name.as_str())
-                .then_some(unsafe { *player.get_origin(&mut v) })
+                .then_some(player.m_vecAbsOrigin)
         })?;
 
     // if unsafe { !(funcs.check_position)(&tp_location).is_null() } {
@@ -97,7 +116,7 @@ fn teleport_server_command(command: CCommandResult) -> Option<()> {
     execute_for_matches(
         command.get_arg(0),
         |player| {
-            if lookup_ent(player.m_hMoveParent, funcs).is_none() {
+            if lookup_ent(player.m_hMoveParent, funcs).is_none() && is_alive(player) {
                 unsafe { (funcs.set_origin)(player, &tp_location) }
             }
         },

@@ -1,17 +1,25 @@
 use rrplug::{
-    bindings::class_types::{cbaseentity::CBaseEntity, client::SignonState, cplayer::CPlayer},
+    bindings::{
+        class_types::{cbaseentity::CBaseEntity, client::SignonState, cplayer::CPlayer},
+        squirrelfunctions::SQUIRREL_SERVER_FUNCS,
+    },
     mid::utils::try_cstring,
+    prelude::{log, HSquirrelVM, Vector3},
 };
 use std::{
     ffi::{c_char, c_void, CStr},
     marker::PhantomData,
+    mem::MaybeUninit,
 };
 
 use windows_sys::Win32::System::{
     Diagnostics::Debug::WriteProcessMemory, Threading::GetCurrentProcess,
 };
 
-use crate::bindings::{ServerFunctions, ENGINE_FUNCTIONS};
+use crate::bindings::{
+    CGameTrace, CTraceFilterSimple, Contents, EngineFunctions, Ray, ServerFunctions,
+    TraceCollisionGroup, VectorAligned, ENGINE_FUNCTIONS,
+};
 
 pub struct ClassNameIter<'a> {
     // class_name: &'a CStr,
@@ -164,6 +172,7 @@ pub fn send_client_print(player: &CPlayer, msg: &str) -> Option<()> {
     None
 }
 
+#[doc(alias = "get_from_ehandle")]
 pub fn lookup_ent(handle: i32, server_funcs: &ServerFunctions) -> Option<&CBaseEntity> {
     let entry_index = (handle & 0xffff) as usize;
     let serial_number = handle >> 0x10;
@@ -189,6 +198,11 @@ pub fn lookup_ent(handle: i32, server_funcs: &ServerFunctions) -> Option<&CBaseE
             .ent
             .as_ref()
     }
+}
+
+/// who really knows what it does lol
+pub fn get_entity_handle(player: &CBaseEntity) -> i32 {
+    player.m_RefEHandle
 }
 
 pub fn get_net_var(
@@ -235,4 +249,184 @@ pub const fn nudge_type<O>(input: O) -> O {
 
 pub fn get_player_index(player: &CPlayer) -> usize {
     (player.m_Network.m_edict - 1) as usize
+}
+
+pub fn trace_ray(
+    start: Vector3,
+    end: Vector3,
+    ent: Option<&CBaseEntity>,
+    collision_group: TraceCollisionGroup,
+    contents: Contents,
+    server_funcs: &ServerFunctions,
+    engine_funcs: &EngineFunctions,
+) -> CGameTrace {
+    let ray = Ray {
+        start: VectorAligned { vec: start, w: 0. },
+        delta: VectorAligned {
+            vec: end - start,
+            w: 0.,
+        },
+        offset: VectorAligned {
+            vec: Vector3::ZERO,
+            w: 0.,
+        },
+        unk3: 0.,
+        unk4: 0,
+        unk5: 0.,
+        unk6: 1103806595072,
+        unk7: 0.,
+        is_ray: true,
+        is_swept: false,
+        is_smth: false,
+        flags: 0,
+        unk8: 0,
+    };
+    let mut result = MaybeUninit::zeroed();
+
+    let filter: *const CTraceFilterSimple = &CTraceFilterSimple {
+        vtable: server_funcs.simple_filter_vtable,
+        unk: 0,
+        pass_ent: ent
+            .map(|e| e as *const CBaseEntity)
+            .unwrap_or(std::ptr::null()),
+        should_hit_func: std::ptr::null(),
+        collision_group: collision_group as i32,
+    };
+
+    unsafe {
+        (engine_funcs.trace_ray_filter)(
+            // what why is there a deref here?
+            *(server_funcs.ctraceengine) as *const c_void,
+            &ray,
+            contents.bits(),
+            filter.cast(),
+            result.as_mut_ptr(),
+        );
+    }
+
+    unsafe { result.assume_init() }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn trace_hull(
+    start: Vector3,
+    end: Vector3,
+    min: Vector3,
+    max: Vector3,
+    ent: Option<&CBaseEntity>,
+    collision_group: TraceCollisionGroup,
+    contents: Contents,
+    server_funcs: &ServerFunctions,
+    engine_funcs: &EngineFunctions,
+) -> CGameTrace {
+    let mut ray = unsafe {
+        let mut ray = MaybeUninit::zeroed();
+        (server_funcs.create_trace_hull)(ray.as_mut_ptr(), &start, &end, &min, &max);
+        ray.assume_init()
+    };
+
+    ray.is_smth = false;
+
+    let mut result = MaybeUninit::zeroed();
+
+    let filter: *const CTraceFilterSimple = &CTraceFilterSimple {
+        vtable: server_funcs.simple_filter_vtable,
+        unk: 0,
+        pass_ent: ent
+            .map(|e| e as *const CBaseEntity)
+            .unwrap_or(std::ptr::null()),
+        should_hit_func: std::ptr::null(),
+        collision_group: collision_group as i32,
+    };
+
+    unsafe {
+        (engine_funcs.trace_ray_filter)(
+            // what why is there a deref here?
+            *(server_funcs.ctraceengine) as *const c_void,
+            &ray,
+            contents.bits(),
+            filter.cast(),
+            result.as_mut_ptr(),
+        );
+    }
+
+    unsafe { result.assume_init() }
+}
+
+pub fn is_alive(ent: &CBaseEntity) -> bool {
+    ent.m_lifeState == 0
+}
+
+pub fn get_value_for_key_string(ent: &CBaseEntity, key: &CStr) -> Option<String> {
+    // let mut buf = [0i8; 1028];
+
+    unsafe {
+        (0..ent.genericKeyValueCount)
+            .filter_map(|i| {
+                let keyvalue = ent
+                    .genericKeyValues
+                    .byte_offset(i as isize * 0x10)
+                    .cast::<*const c_char>();
+                Some((
+                    CStr::from_ptr(keyvalue.as_ref()?.as_ref()?),
+                    CStr::from_ptr(keyvalue.byte_offset(0x8).as_ref()?.as_ref()?),
+                ))
+            })
+            .find_map(|(key_cmp, value)| {
+                (key_cmp == key).then(|| value.to_string_lossy().to_string())
+            })
+    }
+}
+
+pub fn get_global_net_int(global: impl AsRef<str>, server_funcs: &ServerFunctions) -> i32 {
+    log::info!("global net int");
+    let compiler_keywords = unsafe {
+        let sqvm = (server_funcs.sq_getcompilerkeywords)(
+            (server_funcs.get_some_net_var_csqvm)()
+                .as_ref()
+                .unwrap()
+                .sqvm,
+        )
+        .cast::<HSquirrelVM>()
+        .as_mut()
+        .unwrap();
+        (SQUIRREL_SERVER_FUNCS.wait().sq_getstring)(sqvm, 2)
+    };
+
+    #[allow(clippy::precedence)]
+    unsafe {
+        log::info!(
+            "global net index {}",
+            CStr::from_ptr(compiler_keywords).to_string_lossy()
+        );
+        let index = (server_funcs.get_net_var_index)(
+            compiler_keywords,
+            compiler_keywords,
+            0,
+            0xffffffff,
+            std::ptr::null_mut(),
+        );
+
+        log::info!("global net int {}", global.as_ref());
+        let mut buf = 0i32;
+        if let Some(ent) = (*server_funcs.net_var_global_ent).as_ref() {
+            (server_funcs.get_net_var_from_ent)(
+                ent,
+                try_cstring(global.as_ref()).unwrap().as_ptr(),
+                index,
+                &mut buf,
+            );
+        }
+
+        buf
+    }
+}
+
+pub fn get_global_net_float(global: impl AsRef<str>, server_funcs: &ServerFunctions) -> f32 {
+    // unsafe {
+    //     (server_funcs.get_global_net_float)(
+    //         try_cstring(global.as_ref()).unwrap_or_default().as_ptr(),
+    //     ) as f32
+    // }
+    0.
 }
