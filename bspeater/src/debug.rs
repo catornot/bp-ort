@@ -1,7 +1,7 @@
 use bevy::{input::common_conditions::input_just_pressed, prelude::*};
 use bevy_fly_camera::FlyCamera;
 use oktree::prelude::*;
-use std::{iter, ops::BitAnd, sync::Arc};
+use std::{ops::BitAnd, sync::Arc};
 
 use crate::{
     ATTRIBUTE_PRIMATIVE_TYPE, ATTRIBUTE_UNIQUE_CONTENTS, CELL_SIZE, ChunkCells, DebugAmount,
@@ -256,19 +256,13 @@ fn debug_contents(
         .cast_ray(
             Ray3d::new(
                 translation,
-                // Dir3::new(
-                //     Transform::from_rotation(rotation)
-                //         .transform_point(Vec3::X)
-                //         .normalize(),
-                // )
-                // .unwrap_or(),
-                Dir3::X,
+                Dir3::new(rotation.mul_vec3(-Vec3::Z).normalize()).unwrap_or(Dir3::X),
             ),
             &MeshRayCastSettings::default(),
         )
         .first()
     else {
-        bevy::log::warn!("couldn't get anything in this ray cast odd");
+        // bevy::log::warn!("couldn't get anything in this ray cast odd");
         return Ok(());
     };
 

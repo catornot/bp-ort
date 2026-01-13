@@ -1,9 +1,10 @@
-use std::{mem::size_of, path::PathBuf};
-
+use anyhow::anyhow;
 use bevy::prelude::*;
 use bytemuck::offset_of;
+use itertools::Itertools;
+use std::{mem::size_of, path::PathBuf};
 
-use crate::{Compacttriangle, PhyHeader, PhySection, PhyVertex, SeekRead, StaticProp, Studiohdr};
+use crate::{Compacttriangle, PhyHeader, PhySection, PhyVertex, StaticProp, Studiohdr};
 
 pub fn extract_game_lump_models(
     game_lump: Vec<u8>,
@@ -33,18 +34,17 @@ pub fn extract_game_lump_models(
                 .unwrap_or(name)
                 .to_lowercase()
         })
-        .map(|name| (std::fs::File::open(merged_dir.join(&name)), name))
+        .map(|name| (std::fs::read(merged_dir.join(&name)), name))
         .map(|(err, name)| {
             if err.is_err() {
-                println!("failed to load: {name} because of {err:?}");
+                eprintln!("failed to load: {name} because of {err:?}");
                 panic!("must load all models");
             }
             err.expect("must load all models")
         })
-        .map(|mut buf| extract_mdl_physics(&mut buf))
+        .map(|buf| extract_mdl_physics(&buf))
+        .map(|model_data| model_data.inspect_err(|err| eprintln!("{err}")).ok())
         .collect::<Vec<Option<(Vec<Vec3>, Vec<u32>)>>>();
-
-    dbg!("what");
 
     // skip extra data
     let static_props = match extract_static_props(game_lump) {
@@ -55,33 +55,39 @@ pub fn extract_game_lump_models(
         }
     };
 
+    println!(
+        "models: {}/{} phys, static_props: {}/{} solid",
+        models.iter().flatten().count(),
+        models.len(),
+        static_props
+            .iter()
+            .filter_map(|prop| models.get(prop.model_index as usize))
+            .flatten()
+            .count(),
+        static_props.len()
+    );
+
     (static_props, models)
 }
 
-fn extract_mdl_physics(reader: &mut dyn SeekRead) -> Option<(Vec<Vec3>, Vec<u32>)> {
-    // SAFETY: probably safe it's the same size yk
-    let header = unsafe {
-        let mut buf = [0; size_of::<Studiohdr>()];
-        reader.read_exact(&mut buf).ok()?;
-        std::mem::transmute::<[u8; size_of::<Studiohdr>()], Studiohdr>(buf)
+fn extract_mdl_physics(buf: &[u8]) -> anyhow::Result<(Vec<Vec3>, Vec<u32>)> {
+    let header = {
+        let buf: [u8; size_of::<Studiohdr>()] = std::array::from_fn(|i| buf[i]);
+        *bytemuck::from_bytes::<Studiohdr>(&buf)
     };
 
-    // dbg!(String::from_utf8_lossy(&header.name));
-
     if header.phy_size == 0 {
-        println!("mdl model is malformed with zero physics");
-        return None;
+        anyhow::bail!("mdl model is malformed with zero physics");
     }
 
-    // TODO: throw errors
-    reader
-        .seek(std::io::SeekFrom::Start(header.phy_offset as u64))
-        .ok()?;
-    // let mut phy = vec![0; header.phy_size as usize];
-    let mut phy = vec![0; reader.stream_len().unwrap_or(header.phy_size as u64) as usize];
-    reader.read_exact(&mut phy).ok()?;
+    let phy = buf
+        .get(
+            header.phy_offset as u64 as usize
+                ..(header.phy_offset + header.phy_size) as u64 as usize,
+        )
+        .ok_or_else(|| anyhow!("didn't fit or smth"))?
+        .to_vec();
 
-    // SAFETY: probably not safe but it's almost ok
     let phy_header_offset = size_of::<PhyHeader>();
     let _phy_header = *bytemuck::try_from_bytes::<PhyHeader>(&phy[0..size_of::<PhyHeader>()])
         .expect("phy_header cound't get aquired");
@@ -92,18 +98,22 @@ fn extract_mdl_physics(reader: &mut dyn SeekRead) -> Option<(Vec<Vec3>, Vec<u32>
 
     let tri_offset = phy_header_offset + offset_of!(section, PhySection, tri);
     let indicies = Vec::from_iter(
-        (0..(section.ledge.n_triangles as usize).min(phy.len()))
+        (0..(section.ledge.n_triangles as usize))
             .map(|i| {
                 tri_offset + size_of::<Compacttriangle>() * i
                     ..tri_offset + size_of::<Compacttriangle>() * (i + 1)
             })
-            .filter_map(|range| {
-                Some(
-                    *bytemuck::try_from_bytes::<Compacttriangle>(phy.get(range)?)
-                        .expect("out of range maybe for compact tri"),
+            .map(|range| {
+                *bytemuck::try_from_bytes::<Compacttriangle>(
+                    phy.get(range).expect("out of range maybe for compact tri"),
                 )
+                .expect("couldn't get tri")
             })
-            .flat_map(|triangle| [triangle.edge1(), triangle.edge2(), triangle.edge3()])
+            .flat_map(|triangle| {
+                [triangle.edge1(), triangle.edge2(), triangle.edge3()]
+                    .into_iter()
+                    .rev()
+            })
             .map(|edge| edge.start_point_index() as u32)
             .collect::<Vec<u32>>(),
     );
@@ -111,31 +121,31 @@ fn extract_mdl_physics(reader: &mut dyn SeekRead) -> Option<(Vec<Vec3>, Vec<u32>
     let phys_vertex_offset = phy_header_offset
         + offset_of!(section, PhySection, ledge)
         + section.ledge.c_point_offset as usize;
-    Some((
-        Vec::from_iter(
-            (0..indicies
-                .iter()
-                .copied()
-                .max()
-                .unwrap_or(0)
-                .min(phy.len() as u32) as usize)
-                .map(|i| {
-                    phys_vertex_offset + size_of::<PhyVertex>() * i
-                        ..phys_vertex_offset + size_of::<PhyVertex>() * (i + 1)
-                })
-                .filter_map(|range| {
-                    Some(*bytemuck::try_from_bytes::<PhyVertex>(phy.get(range)?).ok()?)
-                }),
-        )
-        .iter()
-        .map(|vertex| vertex.pos * Vec3::splat(39.3701))
-        .collect(),
-        indicies,
-    ))
+
+    let vertices = Vec::from_iter(
+        (0..indicies.iter().copied().max().unwrap_or(0) as usize + 1)
+            .map(|i| {
+                phys_vertex_offset + size_of::<PhyVertex>() * i
+                    ..phys_vertex_offset + size_of::<PhyVertex>() * (i + 1)
+            })
+            .map(|range| {
+                *bytemuck::try_from_bytes::<PhyVertex>(
+                    phy.get(range).expect("out of range maybe for phyvertex"),
+                )
+                .expect("couldn't get phy")
+            }),
+    )
+    .iter()
+    .map(|vertex| vertex.pos * Vec3::splat(39.3701).with_y(-39.3701))
+    .collect_vec();
+
+    // println!("indicies: {}, vertices: {}", indicies.len(), vertices.len());
+    Ok((vertices, indicies))
 }
 
-fn extract_static_props(game_lump: impl Iterator<Item = u8>) -> Result<Vec<StaticProp>, String> {
-    let mut game_lump = game_lump.skip(8);
+fn extract_static_props(
+    mut game_lump: impl Iterator<Item = u8>,
+) -> Result<Vec<StaticProp>, String> {
     let static_prop_count = dbg!(i32::from_le_bytes(std::array::from_fn(|_| {
         game_lump
             .next()
@@ -143,7 +153,7 @@ fn extract_static_props(game_lump: impl Iterator<Item = u8>) -> Result<Vec<Stati
     })) as usize);
     let size = size_of::<StaticProp>();
     let buf = game_lump
-        .skip(4) // skip some more stuff
+        .skip(8) // skip some more stuff
         .collect::<Vec<u8>>()
         .get(0..static_prop_count * size_of::<StaticProp>())
         .expect("expected to have enough bytes for static props")
@@ -155,5 +165,5 @@ fn extract_static_props(game_lump: impl Iterator<Item = u8>) -> Result<Vec<Stati
         .into_iter()
         .array_chunks::<{ size_of::<StaticProp>() }>()
         .map(|chunk| *bytemuck::from_bytes::<StaticProp>(&chunk))
-        .collect())
+        .collect_vec())
 }

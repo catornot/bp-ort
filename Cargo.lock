@@ -1023,7 +1023,7 @@ dependencies = [
  "bevy_utils",
  "bitflags 2.10.0",
  "bytemuck",
- "hexasphere",
+ "hexasphere 15.1.0",
  "serde",
  "thiserror 2.0.16",
  "tracing",
@@ -1675,6 +1675,7 @@ dependencies = [
  "bytemuck",
  "clap",
  "flume",
+ "hexasphere 16.0.0",
  "indexmap",
  "itertools 0.14.0",
  "modular-bitfield",
@@ -2932,6 +2933,17 @@ checksum = "d9c9e718d32b6e6b2b32354e1b0367025efdd0b11d6a740b905ddf5db1074679"
 dependencies = [
  "constgebra",
  "glam 0.29.3",
+ "tinyvec",
+]
+
+[[package]]
+name = "hexasphere"
+version = "16.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29a164ceff4500f2a72b1d21beaa8aa8ad83aec2b641844c659b190cb3ea2e0b"
+dependencies = [
+ "constgebra",
+ "glam 0.30.8",
  "tinyvec",
 ]
 

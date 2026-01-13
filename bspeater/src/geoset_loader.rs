@@ -1,6 +1,42 @@
 use crate::*;
 use bevy::math::DVec3;
-use rayon::prelude::*;
+
+const EXTRA_FLAGS: &[(&str, [(i32, i32); 3])] = &[
+    (
+        "mp_black_water_canal",
+        [(0, 0), (0, Contents::WINDOW_NO_COLLIDE as i32), (0, 0)],
+    ),
+    (
+        "mp_colony02",
+        [(0, 0), (0, Contents::WINDOW_NO_COLLIDE as i32), (0, 0)],
+    ),
+];
+const SHOULD_CHECK_WINDOW_NO_COLLIDE: &[(&str, bool)] = &[
+    ("mp_angel_city", true),
+    ("mp_black_water_canal", true),
+    ("mp_grave", true),
+    ("mp_colony02", true),
+    ("mp_complex3", true),
+    ("mp_crashsite3", true),
+    ("mp_drydock", true),
+    ("mp_eden", true),
+    ("mp_thaw", true),
+    ("mp_forwardbase_kodai", true),
+    ("mp_glitch", true),
+    ("mp_homestead", true),
+    ("mp_relic02", true),
+    ("mp_rise", true),
+    ("mp_wargames", true),
+    ("mp_lobby", true),
+    ("mp_lf_deck", true),
+    ("mp_lf_meadow", true),
+    ("mp_lf_stacks", true),
+    ("mp_lf_township", true),
+    ("mp_lf_traffic", true),
+    ("mp_lf_uma", true),
+    ("mp_coliseum", true),
+    ("mp_coliseum_column", true),
+];
 
 pub fn geoset_to_meshes(
     BSPData {
@@ -17,7 +53,19 @@ pub fn geoset_to_meshes(
         props,
         model_data,
     }: BSPData,
+    map_name: &str,
 ) -> Vec<Mesh> {
+    let extra_flags = EXTRA_FLAGS
+        .iter()
+        .find_map(|(name, rest)| (*name == map_name).then_some(rest))
+        .copied()
+        .unwrap_or_default();
+    let should_check_window_no_collide = SHOULD_CHECK_WINDOW_NO_COLLIDE
+        .iter()
+        .find_map(|(name, rest)| (*name == map_name).then_some(rest))
+        .copied()
+        .unwrap_or_default();
+
     geo_sets
         .into_iter()
         .flat_map(|geoset| {
@@ -30,8 +78,28 @@ pub fn geoset_to_meshes(
                 .chain(geoset.prim_count.eq(&1).then_some(geoset.prim_start))
         })
         .filter_map(|primative| {
-            let flag = Contents::SOLID as i32 | Contents::PLAYER_CLIP as i32;
-            let no_flag = Contents::WINDOW_NO_COLLIDE as i32;
+            let ty =
+                PrimitiveType::try_from((primative >> 29) & 0x7).expect("invalid primative type");
+            let (flag, no_flag) = match ty {
+                PrimitiveType::Brush => (
+                    Contents::SOLID as i32 | Contents::PLAYER_CLIP as i32,
+                    Contents::WINDOW_NO_COLLIDE as i32,
+                ),
+                PrimitiveType::Tricoll => (
+                    Contents::SOLID as i32
+                        | Contents::PLAYER_CLIP as i32
+                        | Contents::BULLET_CLIP as i32,
+                    0,
+                ),
+                PrimitiveType::Prop => (Contents::SOLID as i32 | Contents::PLAYER_CLIP as i32, 0),
+            };
+
+            let extra_flags = extra_flags
+                .get((ty as usize).saturating_sub(1))
+                .copied()
+                .unwrap_or_default();
+            let (flag, no_flag) = (flag | extra_flags.0, no_flag | extra_flags.1);
+
             // if it doesn't contain any
             if unique_contents[primative as usize & 0xFF] & flag == 0
                 || unique_contents[primative as usize & 0xFF] & no_flag != 0
@@ -39,17 +107,17 @@ pub fn geoset_to_meshes(
                 None
             } else {
                 Some((
-                    PrimitiveType::try_from((primative >> 29) & 0x7)
-                        .expect("invalid primative type"),
+                    ty,
                     ((primative >> 8) & 0x1FFFFF) as usize,
+                    unique_contents[primative as usize & 0xFF],
                     unique_contents[primative as usize & 0xFF],
                 ))
             }
         })
-        .collect::<std::collections::HashSet<(PrimitiveType, usize, i32)>>()
+        .collect::<std::collections::HashSet<(PrimitiveType, usize, i32, i32)>>()
         // maybe this doesn't improve anything but it's cool
         .into_par_iter()
-        .filter_map(|(ty, index, contents)| {
+        .filter_map(|(ty, index, contents, flags)| {
             let mut pushing_vertices: Vec<Vec3> = Vec::new();
             let mut indices = Vec::new();
 
@@ -76,6 +144,25 @@ pub fn geoset_to_meshes(
                     &mut pushing_vertices,
                     &mut indices,
                 )?,
+            }
+
+            // just check if the surface is not flat which means we have a huge wall here that is marked WINDOW_NO_COLLIDE therefore it needs to be gone
+            if should_check_window_no_collide
+                && flags & Contents::WINDOW_NO_COLLIDE as i32 != 0
+                && (pushing_vertices
+                    .iter()
+                    .map(|v| v.y as i64)
+                    .max()
+                    .unwrap_or_default()
+                    - pushing_vertices
+                        .iter()
+                        .map(|v| v.y as i64)
+                        .min()
+                        .unwrap_or_default())
+                .abs()
+                    > 200
+            {
+                return None;
             }
 
             Some(
@@ -176,21 +263,25 @@ fn prop_to_mesh(
     if props.len() <= index {
         return None;
     }
+
     let static_prop = props[index];
-    let transform = Transform::from_translation(static_prop.origin)
+    let transform = Transform::from_translation(static_prop.origin.xzy())
         .with_rotation(Quat::from_euler(
             EulerRot::XYZ,
-            static_prop.angles.x,
-            static_prop.angles.y,
-            static_prop.angles.z,
+            static_prop.angles.x.to_radians(),
+            static_prop.angles.y.to_radians(),
+            static_prop.angles.z.to_radians(),
         ))
         .with_scale(Vec3::splat(static_prop.scale))
-        .compute_affine();
+        .compute_matrix();
 
     if let Some(model_data) = model_data
         .get(static_prop.model_index as usize)
         .and_then(|o| o.as_ref())
-    // .filter(|_| static_prop.solid == 1)
+        .cloned()
+        // .or_else(|| Some(ico(Sphere::new(static_prop.scale * 3.), 3)))
+        .filter(|_| static_prop.solid == 6)
+    // figure what this actually is ^ rigth vphysics stuff I rember
     {
         indices.extend(&model_data.1);
         pushing_vertices.extend(
@@ -198,9 +289,8 @@ fn prop_to_mesh(
                 .0
                 .iter()
                 .copied()
-                .map(|vert| transform.transform_point3(vert)),
+                .map(|vert| transform.mul_vec4(vert.extend(1.)).xyz()),
         );
-        println!("phys model");
     } else {
         // println!("no phys model");
     }
@@ -267,3 +357,32 @@ fn calculate_intersection_point(planes: [&Vec4; 3]) -> Option<DVec3> {
 
     Some(DVec3::new(d.dot(u), m3.dot(v), -m2.dot(v)) / denom)
 }
+
+// pub fn ico(sphere: Sphere, subdivisions: u32) -> (Vec<Vec3>, Vec<u32>) {
+//     use hexasphere::shapes::IcoSphere;
+//     let generated = IcoSphere::new(subdivisions as usize, |point| {
+//         let inclination = ops::acos(point.y);
+//         let azimuth = ops::atan2(point.z, point.x);
+
+//         let norm_inclination = inclination / PI;
+//         let norm_azimuth = 0.5 - (azimuth / core::f32::consts::TAU);
+
+//         [norm_azimuth, norm_inclination]
+//     });
+
+//     let raw_points = generated.raw_points();
+
+//     let points = raw_points
+//         .iter()
+//         .map(|&p| (p * sphere.radius).into())
+//         .map(Vec3::from_array)
+//         .collect::<Vec<Vec3>>();
+
+//     let mut indices = Vec::with_capacity(generated.indices_per_main_triangle() * 20);
+
+//     for i in 0..20 {
+//         generated.get_indices(i, &mut indices);
+//     }
+
+//     (points, indices)
+// }
