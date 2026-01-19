@@ -453,13 +453,13 @@ fn spawn_fake_player(
         }
     );
 
-    let mut shared_data = SHARED_BOT_DATA.get(token).borrow_mut();
-    if let Some(hardpoint) = shared_data
-        .claimed_hardpoints
-        .iter()
-        .find(|(_, index)| **index == handle as usize - 1)
-        .map(|(v, _)| v)
-        .cloned()
+    if let Ok(mut shared_data) = SHARED_BOT_DATA.get(token).try_borrow_mut()
+        && let Some(hardpoint) = shared_data
+            .claimed_hardpoints
+            .iter()
+            .find(|(_, index)| **index == handle as usize - 1)
+            .map(|(v, _)| v)
+            .cloned()
     {
         _ = shared_data
             .claimed_hardpoints

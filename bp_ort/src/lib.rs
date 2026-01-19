@@ -67,6 +67,7 @@ impl Plugin for HooksPlugin {
         if reloaded {
             panic!("bad things will happen if this is reloaded")
         }
+        unsafe { std::env::set_var("RUST_BACKTRACE", "1") };
 
         Self {
             bots: Bots::new(reloaded),

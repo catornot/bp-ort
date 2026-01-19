@@ -24,6 +24,7 @@ use crate::async_pathfinding::JobMarket;
 mod async_pathfinding;
 mod behavior;
 mod gamemode_cp;
+mod gamemode_ctf;
 mod loader;
 mod movement;
 mod nav_points;

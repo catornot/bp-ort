@@ -16,7 +16,7 @@ use rrplug::{
 use shared::{
     bindings::{CUserCmd, Contents, TraceCollisionGroup, SERVER_FUNCTIONS},
     cmds_helper::CUserCmdHelper,
-    utils::{get_player_index, is_alive, lookup_ent, nudge_type, trace_ray},
+    utils::{get_player_index, is_alive, nudge_type, trace_ray},
 };
 use std::{
     collections::{BTreeSet, HashMap, VecDeque},
@@ -25,7 +25,8 @@ use std::{
 
 use crate::{
     async_pathfinding::{GoalFloat, PathReceiver},
-    gamemode_cp::{run_cp, GamemodeCP, GamemodeCPAction, SharedGamemodeCP},
+    gamemode_cp::{run_cp, GamemodeCPAction, SharedGamemodeCP},
+    gamemode_ctf::{run_ctf, GamemodeCTFAction, SharedGamemodeCTF},
     loader::{Navmesh, NavmeshStatus, Octree32},
     movement::{run_movement, Movement, MovementAction},
     nav_points::{tuvec_to_vector3, vector3_to_tuvec, NavPoint},
@@ -41,6 +42,7 @@ static SHARED: LazyLock<Arc<Mutex<SharedBotBrain>>> =
 #[derive(Debug, Clone, Default)]
 pub struct SharedBotBrain {
     pub cp: SharedGamemodeCP,
+    pub ctf: SharedGamemodeCTF,
 }
 
 #[derive(Debug, Clone)]
@@ -62,7 +64,6 @@ pub struct BotBrain {
     /// movement
     pub m: Movement,
     pub t: Targeting,
-    pub cp: GamemodeCP,
 }
 
 #[derive(Debug, Clone)]
@@ -75,6 +76,7 @@ pub enum BotAction {
     Movement(MovementAction),
     Targeting(TargetingAction),
     GamemodeCP(GamemodeCPAction),
+    GamemodeCTF(GamemodeCTFAction),
     IsGamemode(&'static str),
 }
 
@@ -119,6 +121,7 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
             Action(TargetingAction::Shoot.into()),
         ]))),
         Action(TargetingAction::TargetSwitching.into()),
+        Action(TargetingAction::UpdateLastWeaponState.into()),
     ]);
 
     let gamemode_cp = AlwaysSucceed(Box::new(Sequence(vec![
@@ -128,6 +131,16 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
         ]),
         Action(GamemodeCPAction::UpdateGamemodeState.into()),
         Action(GamemodeCPAction::DetermineTarget.into()),
+        Action(GamemodeCPAction::RemoveTarget.into()),
+    ])));
+
+    let gamemode_ctf = AlwaysSucceed(Box::new(Sequence(vec![
+        Select(vec![
+            Action(BotAction::IsGamemode("ctf")),
+            Action(BotAction::IsGamemode("ctf_comp")),
+        ]),
+        Action(GamemodeCTFAction::UpdateGamemodeState.into()),
+        Action(GamemodeCTFAction::DetermineTarget.into()),
     ])));
 
     let target_tracking = Sequence(vec![
@@ -146,6 +159,7 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
             Box::new(Action(BotAction::IsDead)),
             Box::new(Sequence(vec![
                 Action(BotAction::DeadState),
+                Action(TargetingAction::OnDeathStartHate.into()),
                 Select(vec![Sequence(vec![
                     Select(vec![
                         Action(BotAction::IsGamemode("cp")),
@@ -154,7 +168,7 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
                     Action(GamemodeCPAction::RemoveTarget.into()),
                 ])]),
             ])),
-            Box::new(Sequence(vec![gamemode_cp, target_tracking])),
+            Box::new(Sequence(vec![gamemode_cp, gamemode_ctf, target_tracking])),
         ),
     ]);
 
@@ -181,8 +195,6 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
             t: Targeting::default(),
 
             m: Movement::default(),
-
-            cp: GamemodeCP::default(),
 
             shared: Arc::clone(&*SHARED),
         },
@@ -382,14 +394,6 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
             brain.path_receiver = None; // clear any paths under construction
             brain.path.clear();
 
-            if let Some(player) = lookup_ent(bot.m_lastDeathInfo.m_hAttacker, helper.sv_funcs)
-                .and_then::<&CPlayer, _>(|ent| ent.dynamic_cast())
-                && !brain.looked_at_death_record
-            {
-                *brain.t.hates.entry(get_player_index(player)).or_default() += 1;
-                brain.looked_at_death_record = true;
-            }
-
             (Status::Success, 0.)
         }
         BotAction::IsGamemode(gamemode) => {
@@ -400,6 +404,7 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
             }
         }
         BotAction::GamemodeCP(gamemode_cp) => run_cp(gamemode_cp, brain, bot, helper),
+        BotAction::GamemodeCTF(gamemode_ctf) => run_ctf(gamemode_ctf, brain, bot, helper),
     });
 
     if bt.is_finished() {

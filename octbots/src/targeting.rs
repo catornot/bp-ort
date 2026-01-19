@@ -4,6 +4,7 @@ use rrplug::{
     bindings::class_types::{
         cbaseentity::CBaseEntity,
         cplayer::{CPlayer, EHandle},
+        cweaponx::{CWeaponX, WeaponState},
     },
     prelude::*,
 };
@@ -14,6 +15,7 @@ use shared::{
     utils::{get_entity_handle, get_player_index, is_alive, lookup_ent, nudge_type, trace_ray},
 };
 use std::{
+    array,
     collections::BTreeMap,
     f32::consts::{PI, TAU},
     hash::{Hash, Hasher},
@@ -21,6 +23,9 @@ use std::{
 
 use crate::behavior::BotBrain;
 use crate::{async_pathfinding::GoalFloat, behavior::BotAction};
+
+const REACTON_TIME: f32 = 0.4;
+const SWITCH_TIME: f32 = 0.2;
 
 #[derive(Debug, Clone, Default)]
 pub struct Targeting {
@@ -30,7 +35,8 @@ pub struct Targeting {
     reacts_at: f32,
     spread: Vec<Vector3>,
     spread_rigth: bool,
-    pub hates: BTreeMap<usize, u32>,
+    hates: BTreeMap<usize, u32>,
+    last_weapon_state: WeaponState,
 }
 
 #[derive(Debug, Clone)]
@@ -39,6 +45,8 @@ pub enum TargetingAction {
     TargetSwitching,
     Shoot,
     Melee,
+    OnDeathStartHate,
+    UpdateLastWeaponState,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -234,6 +242,7 @@ pub fn run_targeting(
 
                 brain.t.last_target = brain.t.current_target;
                 brain.t.spread.clear();
+                brain.t.reacts_at = helper.globals.curTime + SWITCH_TIME;
             }
 
             (Status::Success, 0.)
@@ -243,8 +252,57 @@ pub fn run_targeting(
             if let Target::Entity(handle, true) = brain.t.current_target
                 && let Some(ent) = lookup_ent(handle, helper.sv_funcs)
             {
+                let enemy_is_titan = unsafe { (helper.sv_funcs.is_titan)(ent) };
+                let is_titan =
+                    unsafe { (helper.sv_funcs.is_titan)(nudge_type::<&CBaseEntity>(bot)) };
+                match (enemy_is_titan, is_titan) {
+                    (true, true) => brain.next_cmd.weaponselect = 0, // switch to default,
+                    (true, false) => brain.next_cmd.weaponselect = 1,
+                    (false, true) => brain.next_cmd.weaponselect = 0, // switch to default,
+                    (false, false) => brain.next_cmd.weaponselect = 0, // switch to default,
+                }
+
+                #[allow(clippy::nonminimal_bool)]
+                // one of the if statements inside throws this warning, I am not sure how to fix it, skill issue fr
                 if helper.globals.curTime > brain.t.reacts_at {
                     let mut v = Vector3::ZERO;
+
+                    let mut weapon_state = WeaponState::Nothing;
+                    if let Some(weapon) = lookup_ent(bot.m_inventory.activeWeapon, helper.sv_funcs)
+                        .and_then::<&CWeaponX, _>(|ent| ent.dynamic_cast())
+                    {
+                        log::info!("weapon.m_weapState {:?}", weapon.m_weapState);
+                        // log::info!("weapon.m_lastChargeLevel {}", weapon.m_lastChargeLevel);
+
+                        let is_charge_weapon = f32::from_ne_bytes(array::from_fn(|i| {
+                            // offset for is_charge_weapon
+                            weapon.m_modVars[0x31c..0x31c + 4][i]
+                        })) != 0.;
+                        let semi_auto_allowed_fire = !weapon.m_playerData.m_semiAutoTriggerDown
+                            || (weapon.m_weapState == WeaponState::Nothing
+                                && weapon.m_weapState == brain.t.last_weapon_state);
+                        let is_fully_zoomed_in = weapon.m_playerData.m_targetZoomFOV
+                                <= weapon.m_playerData.m_curZoomFOV
+                                // from some reason the targetZoomFOV can become like 1000 > sometimes
+                                || (weapon.m_playerData.m_targetZoomFOV - weapon.m_playerData.m_curZoomFOV).abs()
+                                    > 500.;
+                        brain.next_cmd.buttons |= if semi_auto_allowed_fire
+                            && is_fully_zoomed_in
+                            && (!is_charge_weapon
+                                || (is_charge_weapon
+                                    && get_weapon_charge_fraction(weapon, helper) < 1.0))
+                        {
+                            // MoveAction::Zoom as u32
+                            MoveAction::Attack as u32 | MoveAction::Zoom as u32
+                        } else {
+                            MoveAction::Zoom as u32
+                        };
+
+                        weapon_state = weapon.m_weapState;
+                    } else {
+                        brain.next_cmd.buttons |=
+                            MoveAction::Attack as u32 | MoveAction::Zoom as u32;
+                    }
 
                     if brain.t.spread.is_empty() {
                         generate_spread(
@@ -255,7 +313,6 @@ pub fn run_targeting(
                         brain.t.spread_rigth = !brain.t.spread_rigth;
                     }
 
-                    brain.next_cmd.buttons |= MoveAction::Attack as u32 | MoveAction::Zoom as u32;
                     brain.next_cmd.world_view_angles = natural_aim(
                         brain.angles,
                         look_at(brain.origin, unsafe { *ent.get_origin(&mut v) })
@@ -267,6 +324,7 @@ pub fn run_targeting(
 
                     let mut v = Vector3::ZERO;
                     if let Some(point) = brain.path.get(1)
+                        && weapon_state != WeaponState::Reload // run when reloading
                         && trace_ray(
                             unsafe { *ent.get_origin(&mut v) },
                             point.as_vec(),
@@ -305,7 +363,6 @@ pub fn run_targeting(
             // maybe add a check if ammo isn't full? then reload
 
             if let Target::Entity(_, false) = brain.t.current_target {
-                const REACTON_TIME: f32 = 0.4;
                 brain.t.reacts_at = helper.globals.curTime + REACTON_TIME;
             }
 
@@ -331,12 +388,31 @@ pub fn run_targeting(
                 brain.next_cmd.buttons |= MoveAction::Melee as u32;
                 brain.next_cmd.world_view_angles =
                     natural_aim(brain.angles, look_at(brain.origin, target));
+                brain.t.reacts_at = helper.globals.curTime + SWITCH_TIME;
                 (Status::Success, 0.)
             } else {
                 (Status::Failure, 0.)
             }
         }
         TargetingAction::Melee => (Status::Failure, 0.),
+        TargetingAction::OnDeathStartHate => {
+            if let Some(player) = lookup_ent(bot.m_lastDeathInfo.m_hAttacker, helper.sv_funcs)
+                .and_then::<&CPlayer, _>(|ent| ent.dynamic_cast())
+                && !brain.looked_at_death_record
+            {
+                *brain.t.hates.entry(get_player_index(player)).or_default() += 1;
+                brain.looked_at_death_record = true;
+            }
+            (Status::Success, 0.)
+        }
+        TargetingAction::UpdateLastWeaponState => {
+            if let Some(weapon) = lookup_ent(bot.m_inventory.activeWeapon, helper.sv_funcs)
+                .and_then::<&CWeaponX, _>(|ent| ent.dynamic_cast())
+            {
+                brain.t.last_weapon_state = weapon.m_weapState;
+            }
+            (Status::Success, 0.)
+        }
     }
 }
 
@@ -355,7 +431,7 @@ fn generate_spread(spread_buf: &mut Vec<Vector3>, spread_rigth: bool, seed: u64)
     const VALUES: usize = 30;
     const VALUES_BOTTOM: i32 = VALUES as i32 / -3;
     const VALUES_TOP: i32 = VALUES as i32 * 2 / 3;
-    const VALUES_STEP: f32 = 0.2;
+    const VALUES_STEP: f32 = 0.4;
     const PERMUTATIONS: u64 = 15;
     const Y_FLUTUATION_PERMUTATIONS: u64 = 10;
     const Y_FLUTUATION_PERMUTATIONS_MIN: u64 = 1;
@@ -412,4 +488,29 @@ fn angle_move_toward(from: f32, to: f32, delta: f32) -> f32 {
 fn angle_diff(from: f32, to: f32) -> f32 {
     let diff = (to - from).rem_euclid(TAU);
     (2.0 * diff).rem_euclid(TAU) - diff
+}
+
+fn get_weapon_charge_fraction(weapon: &CWeaponX, helper: &CUserCmdHelper) -> f32 {
+    let is_charge_weapon =
+        f32::from_ne_bytes(array::from_fn(|i| weapon.m_modVars[0x31c..0x31c + 4][i]));
+
+    if (0.0 < is_charge_weapon) && weapon.m_weapState as i32 - 5 < 2
+        || weapon.m_modVars[0x334] != 0 && (0 < weapon.m_lastChargeLevel)
+    {
+        return (helper.globals.exactCurTime - weapon.m_chargeStartTime) / is_charge_weapon;
+    }
+    let charge_rate = f32::from_ne_bytes(array::from_fn(|i| weapon.m_modVars[800..800 + 4][i]));
+    let charge_min = 0.0;
+    if 0.0 < charge_rate {
+        let charge_time = (helper.globals.exactCurTime - weapon.m_chargeEndTime)
+            - f32::from_ne_bytes(array::from_fn(|i| weapon.m_modVars[0x324..0x324 + 4][i])).max(0.);
+        let charge_diff = weapon.m_lastChargeFrac - charge_time / charge_rate;
+        if 0.0 < charge_diff {
+            charge_diff
+        } else {
+            charge_min
+        }
+    } else {
+        charge_min
+    }
 }

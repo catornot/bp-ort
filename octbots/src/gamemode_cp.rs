@@ -86,6 +86,7 @@ pub fn run_cp(
             }
             (Status::Success, 0.)
         }
+        // TODO: convert this into a behavior tree
         GamemodeCPAction::DetermineTarget => 'label: {
             let mut shared = brain.shared.lock();
             let cp = &mut shared.cp;
