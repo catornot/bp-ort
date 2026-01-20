@@ -16,6 +16,7 @@ pls refrain from downloading this mod if you don't know how, it's under active d
 you can contact me tho at:
 - [northstar discord](https://northstar.tf/discord) (as @cat_or_not)
 - me@catornot.net
+  - probably no replies due to how I setup it tho lol
 - [discussions](https://github.com/catornot/bp-ort/discussions)
 
 # Ongoing Rewrite
