@@ -5,21 +5,18 @@ use anyhow::Context;
 use avian3d::prelude::*;
 use bevy::{
     asset::RenderAssetUsages,
-    pbr::wireframe::{WireframeConfig, WireframePlugin},
+    camera_controller::free_camera::{FreeCamera, FreeCameraPlugin},
+    mesh::{MeshVertexAttribute, VertexFormat},
+    pbr::wireframe::WireframeConfig,
     prelude::*,
-    render::{
-        RenderPlugin,
-        mesh::{MeshVertexAttribute, VertexFormat},
-        settings::WgpuSettings,
-    },
+    render::{RenderPlugin, settings::WgpuSettings},
 };
-use bevy_fly_camera::{FlyCamera, FlyCameraPlugin};
 use clap::Parser;
 use itertools::Itertools;
 use oktree::{prelude::*, tree::Octree};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::{
-    fs::{self, File},
+    fs::File,
     io::{self, Read, Seek, SeekFrom, Write},
     ops::{Div, Not},
     path::{Path, PathBuf},
@@ -33,6 +30,7 @@ mod behavior;
 mod bindings;
 mod cli;
 mod debug;
+mod export;
 mod geoset_loader;
 mod mdl_loader;
 mod pathfinding;
@@ -105,8 +103,8 @@ fn read_lump_data<T>(
 
     reader.read_exact(&mut buf)?;
 
-    assert!(buf.len() % size == 0, "lump {id:?}");
-    assert!(buf.capacity() % size == 0, "lump {id:?}");
+    assert!(buf.len().is_multiple_of(size), "lump {id:?}");
+    assert!(buf.capacity().is_multiple_of(size), "lump {id:?}");
 
     let tricoll = unsafe {
         Vec::<T>::from_raw_parts(
@@ -132,6 +130,7 @@ fn main() -> anyhow::Result<()> {
         display,
         map_name,
         show_octtree,
+        show_grid_octtree,
         output,
     } = cli::BspeaterCli::parse();
 
@@ -293,7 +292,9 @@ fn main() -> anyhow::Result<()> {
     let mut app = App::new();
 
     app.add_plugins((
-        // TODO: actually make this non dependent on a display output since rn it needs a wayland compositor or x server to run lol
+        #[cfg(not(feature = "graphics"))]
+        MinimalPlugins,
+        #[cfg(feature = "graphics")]
         DefaultPlugins.set(RenderPlugin {
             render_creation: if display.not() {
                 WgpuSettings {
@@ -306,10 +307,13 @@ fn main() -> anyhow::Result<()> {
             },
             ..default()
         }),
-        FlyCameraPlugin,
         PhysicsPlugins::default(),
-        // PhysicsDebugPlugin::default(),
-        WireframePlugin::default(),
+        #[cfg(feature = "graphics")]
+        PhysicsDebugPlugin,
+        // #[cfg(feature = "graphics")]
+        // WireframePlugin::default(),
+        #[cfg(feature = "graphics")]
+        FreeCameraPlugin,
     ))
     .init_resource::<WireframeConfig>()
     .init_resource::<ChunkCells>()
@@ -320,6 +324,7 @@ fn main() -> anyhow::Result<()> {
     })
     .insert_resource(EarlyExit(!display))
     .insert_resource(DebugAmount {
+        grid: show_grid_octtree,
         octree: show_octtree,
     })
     .init_state::<ProcessingStep>();
@@ -385,7 +390,7 @@ fn main() -> anyhow::Result<()> {
             (
                 raycast_world.run_if(in_state(ProcessingStep::RayCasting)),
                 save_navmesh.run_if(in_state(ProcessingStep::Saving)),
-                save_meshes.run_if(in_state(ProcessingStep::Done)),
+                export::save_meshes.run_if(in_state(ProcessingStep::Done)),
                 exit_app_system
                     .run_if(in_state(ProcessingStep::Exit))
                     .run_if(|exit: Res<EarlyExit>| exit.0),
@@ -401,6 +406,7 @@ pub struct WorlExtends(Vec3, Vec3);
 
 #[derive(Resource, Clone, Copy, PartialEq)]
 struct DebugAmount {
+    grid: bool,
     octree: bool,
 }
 
@@ -416,12 +422,6 @@ struct EarlyExit(bool);
 #[derive(Component, Clone, Copy, PartialEq)]
 struct WireMe;
 
-#[derive(Component, Clone, Copy, PartialEq)]
-struct GridPos(IVec3);
-
-#[derive(Component, Clone, Copy, PartialEq)]
-struct HitStuff;
-
 #[derive(Debug, States, Hash, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 enum ProcessingStep {
     #[default]
@@ -435,10 +435,20 @@ enum ProcessingStep {
 fn setup(mut commands: Commands, mut wireframe_config: ResMut<WireframeConfig>) {
     commands.spawn((
         Camera3d::default(),
-        FlyCamera {
-            max_speed: 50.,
-            accel: 49.,
+        FreeCamera {
+            walk_speed: 800.,
+            run_speed: 400.,
             friction: 40.,
+            sensitivity: 0.4,
+            key_forward: KeyCode::KeyW,
+            key_back: KeyCode::KeyS,
+            key_left: KeyCode::KeyA,
+            key_right: KeyCode::KeyD,
+            key_up: KeyCode::KeyE,
+            key_down: KeyCode::KeyQ,
+            key_run: KeyCode::ShiftLeft,
+            mouse_key_cursor_grab: MouseButton::Left,
+            keyboard_key_toggle_cursor_grab: KeyCode::Space,
             ..default()
         },
     ));
@@ -459,7 +469,7 @@ fn calc_extents(
         .filter_map(|mesh| {
             mesh.attribute(Mesh::ATTRIBUTE_POSITION)
                 .map(|pos| match pos {
-                    bevy::render::mesh::VertexAttributeValues::Float32x3(vertexes) => vertexes
+                    bevy::mesh::VertexAttributeValues::Float32x3(vertexes) => vertexes
                         .iter()
                         .map(|pos| Vec3::from_array(*pos))
                         .fold((Vec3::ZERO, Vec3::ZERO), |current, cmp| {
@@ -493,20 +503,19 @@ fn raycast_world(
     let extends = *extends;
     let cuboid = Collider::cuboid(CELL_SIZE, CELL_SIZE, CELL_SIZE);
     let mut scale_cuboid = cuboid.clone();
-    scale_cuboid.scale_by(extends.0, 1);
+    scale_cuboid.scale_by(extends.0.abs() + extends.1.abs(), 1);
 
     // cast a shap cast over the whole world because it takes a few frames for avian get collisions up and running
     if ray_cast
-        .cast_shape(
+        .shape_intersections(
             &scale_cuboid,
-            Vec3::new(0., 0., extends.1.z),
+            Vec3::new(0., 0., 0.),
             Quat::default(),
-            Dir3::NEG_Y,
-            &shape_config,
             &SpatialQueryFilter::DEFAULT,
         )
-        .is_none()
+        .is_empty()
     {
+        bevy::log::info!("empty");
         return;
     }
 
@@ -552,16 +561,14 @@ fn raycast_world(
             let origin = vec.as_vec3() * Vec3::splat(CELL_SIZE);
             (
                 vec.to_array(),
-                ray_cast
-                    .cast_shape(
+                !ray_cast
+                    .shape_intersections(
                         &cuboid,
                         origin,
                         Quat::default(),
-                        Dir3::NEG_Y,
-                        &shape_config,
                         &SpatialQueryFilter::DEFAULT,
                     )
-                    .is_some(),
+                    .is_empty(),
                 true,
                 0., // ray_cast
                     //     .cast_ray(
@@ -598,6 +605,8 @@ fn raycast_world(
             // bevy::log::error!("tree: {err}");
         };
     }
+
+    bevy::log::info!("navmesh points: {}", full_vec.len());
 
     commands.remove_resource::<ChunkCells>();
     commands.insert_resource(ChunkCells {
@@ -637,7 +646,7 @@ fn save_navmesh(
         cells
             .collied_vec
             .iter()
-            .map(|inter| (UVec3::from_array(inter.cord).as_ivec3() - IVec3::splat(OFFSET)))
+            .map(|inter| UVec3::from_array(inter.cord).as_ivec3() - IVec3::splat(OFFSET))
             .collect(),
         (
             (extends.0 / Vec3::splat(CELL_SIZE)).as_ivec3(),
@@ -651,56 +660,7 @@ fn save_navmesh(
     next_state.set(ProcessingStep::Done);
 }
 
-fn save_meshes(
-    meshes_assets: Res<Assets<Mesh>>,
-    map_name: Res<WorldName>,
-    mut next_state: ResMut<NextState<ProcessingStep>>,
-) {
-    bevy::log::info!("trying to save meshes");
-
-    match bevy_gltf_export::export::export_meshes(
-        meshes_assets
-            .iter()
-            .map(|(_, mesh)| bevy_gltf_export::MeshData {
-                mesh,
-                material: None,
-                transform: Some(
-                    Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::PI / 2.))
-                        .with_scale(Vec3::NEG_ONE),
-                ),
-            }),
-        Some(map_name.map_name.clone()),
-        |_| None,
-        bevy_gltf_export::CompressGltfOptions {
-            skip_materials: true,
-        },
-    ) {
-        Err(err) => {
-            bevy::log::error!("coudln't save meshes {err:?}");
-        }
-        Ok(gltf) => {
-            match gltf.to_bytes() {
-                Ok(bytes) => {
-                    if let Err(err) = fs::write(
-                        map_name
-                            .output
-                            .join(&map_name.map_name)
-                            .with_extension("glb"),
-                        bytes,
-                    ) {
-                        bevy::log::error!("false we didn't save {err:?}")
-                    }
-                }
-                Err(err) => bevy::log::error!("false we didn't save {err:?}"),
-            }
-            bevy::log::info!("saved meshes");
-        }
-    }
-
-    next_state.set(ProcessingStep::Exit);
-}
-
-fn exit_app_system(mut writer: EventWriter<AppExit>) {
+fn exit_app_system(mut writer: MessageWriter<AppExit>) {
     writer.write(AppExit::Success);
 }
 

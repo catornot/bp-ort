@@ -1,5 +1,6 @@
 [toolchain]
-channel = "nightly-2025-05-08"
+# update nix flakes to get later nightly versions
+channel = "nightly-2025-09-11"
 components = [ "rustfmt", "rust-analyzer", "clippy", "rust-src", "rust-std", "rust-docs", "rustc" ]
 targets = [ "x86_64-pc-windows-gnu", "x86_64-unknown-linux-gnu" ]
 

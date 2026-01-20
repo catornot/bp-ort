@@ -1,5 +1,7 @@
-use bevy::{input::common_conditions::input_just_pressed, prelude::*};
-use bevy_fly_camera::FlyCamera;
+use bevy::{
+    camera_controller::free_camera::FreeCamera, input::common_conditions::input_just_pressed,
+    prelude::*,
+};
 use oktree::prelude::*;
 use std::{ops::BitAnd, sync::Arc};
 
@@ -141,12 +143,16 @@ fn update_pos_text(
 }
 
 fn debug_world(
-    camera: Query<&Transform, (With<FlyCamera>, Without<WireMe>)>,
+    camera: Query<&Transform, (With<FreeCamera>, Without<WireMe>)>,
     debug_amount: Res<DebugAmount>,
     cells: Res<ChunkCells>,
     mut gizmos: Gizmos,
 ) -> Result<(), BevyError> {
     let origin = camera.single()?.translation;
+
+    if !debug_amount.grid {
+        return Ok(());
+    }
 
     for pos in cells
         .collied_vec
@@ -157,7 +163,7 @@ fn debug_world(
         })
         .filter(|pos| pos.distance(origin) < 500.)
     {
-        gizmos.cuboid(
+        gizmos.cube(
             Transform::from_translation(pos).with_scale(Vec3::splat(CELL_SIZE)),
             Color::srgba_u8(255, 0, 0, 255),
         );
@@ -181,7 +187,7 @@ fn debug_world(
         })
         .filter(|(center, _)| center.distance(origin) < 500.)
     {
-        gizmos.cuboid(
+        gizmos.cube(
             Transform::from_translation(center).with_scale(scale),
             Color::srgba_u8(255, 255, 0, 255),
         );
@@ -206,7 +212,7 @@ fn debug_pathfinding(
 }
 
 fn add_pathfinding_points(
-    camera: Query<&Transform, (With<FlyCamera>, Without<WireMe>)>,
+    camera: Query<&Transform, (With<FreeCamera>, Without<WireMe>)>,
     mut points: ResMut<PathfindingPoints>,
 ) -> Result<(), BevyError> {
     let origin = camera.single()?.translation.trunc();
@@ -239,8 +245,8 @@ fn add_navmesh_resource(mut commands: Commands, cells: Res<ChunkCells>) {
 
 fn debug_contents(
     mut ray_cast: MeshRayCast,
-    camera: Query<&Transform, (With<FlyCamera>, Without<WorldMesh>)>,
-    world_meshes: Query<&Mesh3d, (With<WorldMesh>, Without<FlyCamera>)>,
+    camera: Query<&Transform, (With<FreeCamera>, Without<WorldMesh>)>,
+    world_meshes: Query<&Mesh3d, (With<WorldMesh>, Without<FreeCamera>)>,
     meshes: Res<Assets<Mesh>>,
     mut text: Query<Entity, With<MeshInfoText>>,
     mut writer: TextUiWriter,

@@ -167,7 +167,7 @@ pub fn geoset_to_meshes(
 
             Some(
                 Mesh::new(
-                    bevy::render::mesh::PrimitiveTopology::TriangleList,
+                    bevy::mesh::PrimitiveTopology::TriangleList,
                     RenderAssetUsages::all(),
                 )
                 .with_inserted_attribute(
@@ -187,7 +187,7 @@ pub fn geoset_to_meshes(
                     vec![ty as u32; pushing_vertices.len()],
                 )
                 .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, pushing_vertices)
-                .with_inserted_indices(bevy::render::mesh::Indices::U32(indices)),
+                .with_inserted_indices(bevy::mesh::Indices::U32(indices)),
             )
         })
         .collect::<Vec<Mesh>>()
@@ -219,7 +219,7 @@ fn brush_to_mesh(
     ];
 
     let transform = Transform::from_translation(brush.origin)
-        .compute_matrix()
+        .to_matrix()
         .inverse()
         .transpose();
     let planes = planes
@@ -273,7 +273,7 @@ fn prop_to_mesh(
             static_prop.angles.z.to_radians(),
         ))
         .with_scale(Vec3::splat(static_prop.scale))
-        .compute_matrix();
+        .to_matrix();
 
     if let Some(model_data) = model_data
         .get(static_prop.model_index as usize)

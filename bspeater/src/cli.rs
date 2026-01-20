@@ -22,6 +22,9 @@ pub struct BspeaterCli {
     #[arg(long, short = 't', default_value_t = false, action = clap::ArgAction::SetTrue)]
     pub show_octtree: bool,
 
+    #[arg(long, short = 'g', default_value_t = false, action = clap::ArgAction::SetTrue)]
+    pub show_grid_octtree: bool,
+
     #[arg(long, short = 'o', default_value = "output")]
     pub output: PathBuf,
 }
