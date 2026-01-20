@@ -6,8 +6,8 @@ use oktree::prelude::*;
 use std::{ops::BitAnd, sync::Arc};
 
 use crate::{
-    ATTRIBUTE_PRIMATIVE_TYPE, ATTRIBUTE_UNIQUE_CONTENTS, CELL_SIZE, ChunkCells, DebugAmount,
-    OFFSET, PrimitiveType, ProcessingStep, WireMe, WorldMesh,
+    ATTRIBUTE_PRIMATIVE_TYPE, ATTRIBUTE_UNIQUE_CONTENTS, CELL_SIZE, ChunkCells, EnabledFeatures,
+    OFFSET, PrimitiveType, ProcessingStep, WorldMesh,
     async_pathfinding::JobMarket,
     behavior::{self, Behavior, init_pathfinding},
 };
@@ -143,14 +143,14 @@ fn update_pos_text(
 }
 
 fn debug_world(
-    camera: Query<&Transform, (With<FreeCamera>, Without<WireMe>)>,
-    debug_amount: Res<DebugAmount>,
+    camera: Query<&Transform, With<FreeCamera>>,
+    features: Res<EnabledFeatures>,
     cells: Res<ChunkCells>,
     mut gizmos: Gizmos,
 ) -> Result<(), BevyError> {
     let origin = camera.single()?.translation;
 
-    if !debug_amount.grid {
+    if !features.grid {
         return Ok(());
     }
 
@@ -169,7 +169,7 @@ fn debug_world(
         );
     }
 
-    if !debug_amount.octree {
+    if !features.octree {
         return Ok(());
     }
 
@@ -197,7 +197,6 @@ fn debug_world(
 }
 
 fn debug_pathfinding(
-    _debug_amount: Res<DebugAmount>,
     points: Res<PathfindingPoints>,
     mut navmesh: ResMut<NavmeshRes>,
     time: Res<Time>,
@@ -212,7 +211,7 @@ fn debug_pathfinding(
 }
 
 fn add_pathfinding_points(
-    camera: Query<&Transform, (With<FreeCamera>, Without<WireMe>)>,
+    camera: Query<&Transform, With<FreeCamera>>,
     mut points: ResMut<PathfindingPoints>,
 ) -> Result<(), BevyError> {
     let origin = camera.single()?.translation.trunc();

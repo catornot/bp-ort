@@ -1,7 +1,6 @@
 {
   lib,
   stdenv,
-  xvfb-run,
   bspeater,
   titanfall2,
   tf2vpk,
@@ -59,7 +58,6 @@ stdenv.mkDerivation {
   nativeBuildInputs = [
     bspeater
     tf2vpk
-    xvfb-run
   ];
 
   buildInputs = [
@@ -70,9 +68,7 @@ stdenv.mkDerivation {
   phases = [ "buildPhase" ];
   buildPhase = (
     lib.concatLines (
-      builtins.map (
-        name: "xvfb-run bspeater -d ${titanfall2}/vpk -n ${name} -o $out --display -v $TMPDIR"
-      ) maps
+      map (name: "bspeater -d ${titanfall2}/vpk -n ${name} -o $out --display -v $TMPDIR -e") maps
     )
   );
 }

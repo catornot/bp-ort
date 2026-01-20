@@ -70,7 +70,7 @@
             octbots = mkPlugin "octbots";
             serialized-io = mkPlugin "serialized_io";
             packaged-mod = native-pkgs.callPackage ./expressions/packaged-mod.nix {
-              mod = self.packages.${system}.mod;
+              inherit (self.packages.${system}) mod;
               inherit version;
             };
             mod = native-pkgs.callPackage ./expressions/mod.nix {
@@ -82,6 +82,7 @@
                   octbots
                   ranim
                   serialized-io
+                  # bspeater-win # to allow users to compile navmeshes locally
                 ];
               };
               inherit version;
@@ -89,6 +90,17 @@
             bspeater = native-pkgs.callPackage ./expressions/bspeater.nix {
               rust-bin = rust-overlay.lib.mkRustBin { } native-pkgs.buildPackages;
               inherit version;
+              graphical = false;
+            };
+            bspeater-graphical = native-pkgs.callPackage ./expressions/bspeater.nix {
+              rust-bin = rust-overlay.lib.mkRustBin { } native-pkgs.buildPackages;
+              inherit version;
+              graphical = true;
+            };
+            bspeater-win = pkgs.callPackage ./expressions/bspeater.nix {
+              rust-bin = rust-overlay.lib.mkRustBin { } native-pkgs.buildPackages;
+              inherit version;
+              graphical = false;
             };
 
             default = self.packages.${system}.bp-ort;

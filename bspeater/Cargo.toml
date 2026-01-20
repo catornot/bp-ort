@@ -6,11 +6,11 @@ license = "Apache-2.0"
 
 [dependencies]
 avian3d = { version = "0.5.*", features = ["simd", "parry-f32", "bevy_picking", "parallel", "f32", "3d", "collider-from-mesh"], default-features = false }
-bevy = { version = "0.18.*", features = ["wayland", "x11", "3d"], default-features = false }
+bevy = { version = "0.18.*", features = ["wayland", "x11", "common_api", "bevy_state"], default-features = false }
 clap = { version = "4.5.39", features = ["derive"] }
 itertools = { workspace = true }
 modular-bitfield = "0.12.0"
-oktree = { version = "0.5.*", features = ["bevy"] }
+oktree = { version = "0.5.*" }
 rayon = "1.*"
 bytemuck = { version = "1.23.1", features = ["derive", "pod_saturating"] }
 anyhow = { version = "1.0.99", features = ["backtrace"] }
@@ -23,5 +23,5 @@ rustc-hash = "2.1.1"
 hexasphere = "16.0.0"
 
 [features]
-default = ["graphics"]
-graphics = ["oktree/bevy", "bevy/wayland", "bevy/wayland", "bevy/free_camera", "avian3d/debug-plugin"]
+# default = ["graphics"]
+graphics = ["oktree/bevy", "bevy/wayland", "bevy/wayland", "bevy/free_camera", "avian3d/debug-plugin", "bevy/3d"]

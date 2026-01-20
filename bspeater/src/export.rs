@@ -8,7 +8,7 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
-use crate::{ProcessingStep, WorldName};
+use crate::{EnabledFeatures, ProcessingStep, WorldName};
 
 // export all meshes in scene
 pub fn export_obj<'a>(
@@ -87,22 +87,25 @@ pub fn export_obj<'a>(
 pub fn save_meshes(
     meshes_assets: Res<Assets<Mesh>>,
     map_name: Res<WorldName>,
+    features: Res<EnabledFeatures>,
     mut next_state: ResMut<NextState<ProcessingStep>>,
 ) {
     bevy::log::info!("trying to save meshes");
 
-    match export_obj(
-        meshes_assets.iter().map(|(_, mesh)| mesh),
-        &map_name
-            .output
-            .join(&map_name.map_name)
-            .with_extension("obj"),
-    ) {
-        Err(err) => {
-            bevy::log::error!("coudln't save meshes {err:?}");
-        }
-        Ok(_) => {
-            bevy::log::info!("saved meshes");
+    if !features.no_export_obj {
+        match export_obj(
+            meshes_assets.iter().map(|(_, mesh)| mesh),
+            &map_name
+                .output
+                .join(&map_name.map_name)
+                .with_extension("obj"),
+        ) {
+            Err(err) => {
+                bevy::log::error!("coudln't save meshes {err:?}");
+            }
+            Ok(_) => {
+                bevy::log::info!("saved meshes");
+            }
         }
     }
 

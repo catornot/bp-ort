@@ -3,12 +3,18 @@
 
 use anyhow::Context;
 use avian3d::prelude::*;
+#[cfg(not(feature = "graphics"))]
+use bevy::mesh::MeshPlugin;
+#[cfg(feature = "graphics")]
+use bevy::pbr::wireframe::WireframeConfig;
 use bevy::{
     asset::RenderAssetUsages,
-    camera_controller::free_camera::{FreeCamera, FreeCameraPlugin},
     mesh::{MeshVertexAttribute, VertexFormat},
-    pbr::wireframe::WireframeConfig,
     prelude::*,
+};
+#[cfg(feature = "graphics")]
+use bevy::{
+    camera_controller::free_camera::{FreeCamera, FreeCameraPlugin},
     render::{RenderPlugin, settings::WgpuSettings},
 };
 use clap::Parser;
@@ -25,14 +31,18 @@ use std::{
 
 pub use bindings::*;
 
+#[cfg(feature = "graphics")]
 mod async_pathfinding;
+#[cfg(feature = "graphics")]
 mod behavior;
 mod bindings;
 mod cli;
+#[cfg(feature = "graphics")]
 mod debug;
 mod export;
 mod geoset_loader;
 mod mdl_loader;
+#[cfg(feature = "graphics")]
 mod pathfinding;
 mod saving;
 
@@ -131,8 +141,10 @@ fn main() -> anyhow::Result<()> {
         map_name,
         show_octtree,
         show_grid_octtree,
+        no_export_obj,
         output,
     } = cli::BspeaterCli::parse();
+    let display = display && cfg!(feature = "graphics");
 
     let name = format!("englishclient_{map_name}.bsp.pak000_dir.vpk");
     let vpk_name_magic = vpk_dir
@@ -292,8 +304,16 @@ fn main() -> anyhow::Result<()> {
     let mut app = App::new();
 
     app.add_plugins((
+        // no graphics
         #[cfg(not(feature = "graphics"))]
         MinimalPlugins,
+        #[cfg(not(feature = "graphics"))]
+        AssetPlugin::default(),
+        #[cfg(not(feature = "graphics"))]
+        MeshPlugin,
+        #[cfg(not(feature = "graphics"))]
+        bevy::state::app::StatesPlugin,
+        // standard
         #[cfg(feature = "graphics")]
         DefaultPlugins.set(RenderPlugin {
             render_creation: if display.not() {
@@ -315,22 +335,30 @@ fn main() -> anyhow::Result<()> {
         #[cfg(feature = "graphics")]
         FreeCameraPlugin,
     ))
-    .init_resource::<WireframeConfig>()
     .init_resource::<ChunkCells>()
-    .add_systems(Startup, setup)
+    .add_systems(
+        Startup,
+        (
+            setup_camera,
+            #[cfg(feature = "graphics")]
+            setup_wireframe,
+        ),
+    )
     .insert_resource(WorldName {
         map_name: map_name.to_owned(),
         output,
     })
     .insert_resource(EarlyExit(!display))
-    .insert_resource(DebugAmount {
+    .insert_resource(EnabledFeatures {
         grid: show_grid_octtree,
         octree: show_octtree,
+        no_export_obj,
     })
     .init_state::<ProcessingStep>();
 
-    const BASE: u8 = 200;
+    #[cfg(feature = "graphics")]
     let materials = {
+        const BASE: u8 = 200;
         let mut mat = app
             .world_mut()
             .get_resource_mut::<Assets<StandardMaterial>>()
@@ -361,6 +389,8 @@ fn main() -> anyhow::Result<()> {
         })
         .enumerate()
         .filter_map(|(i, mesh)| {
+            #[cfg(not(feature = "graphics"))]
+            let _ = i;
             Some((
                 Collider::trimesh_from_mesh(&mesh)?,
                 RigidBody::Static,
@@ -370,6 +400,7 @@ fn main() -> anyhow::Result<()> {
                         .expect("this should exist probably")
                         .add(mesh),
                 ),
+                #[cfg(feature = "graphics")]
                 MeshMaterial3d(materials[i % 3].clone()),
                 WorldMesh,
             ))
@@ -380,6 +411,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     // not debugging needed when we don't even see an output
+    #[cfg(feature = "graphics")]
     if display {
         app.add_plugins(debug::debug_plugin);
     }
@@ -405,9 +437,10 @@ fn main() -> anyhow::Result<()> {
 pub struct WorlExtends(Vec3, Vec3);
 
 #[derive(Resource, Clone, Copy, PartialEq)]
-struct DebugAmount {
+struct EnabledFeatures {
     grid: bool,
     octree: bool,
+    no_export_obj: bool,
 }
 
 #[derive(Resource, Clone, PartialEq)]
@@ -419,9 +452,6 @@ struct WorldName {
 #[derive(Resource, Clone, PartialEq)]
 struct EarlyExit(bool);
 
-#[derive(Component, Clone, Copy, PartialEq)]
-struct WireMe;
-
 #[derive(Debug, States, Hash, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 enum ProcessingStep {
     #[default]
@@ -432,9 +462,10 @@ enum ProcessingStep {
     Exit,
 }
 
-fn setup(mut commands: Commands, mut wireframe_config: ResMut<WireframeConfig>) {
+fn setup_camera(mut commands: Commands) {
     commands.spawn((
         Camera3d::default(),
+        #[cfg(feature = "graphics")]
         FreeCamera {
             walk_speed: 800.,
             run_speed: 400.,
@@ -452,7 +483,14 @@ fn setup(mut commands: Commands, mut wireframe_config: ResMut<WireframeConfig>) 
             ..default()
         },
     ));
-    wireframe_config.global = true;
+}
+
+#[cfg(feature = "graphics")]
+fn setup_wireframe(mut commands: Commands) {
+    commands.insert_resource(WireframeConfig {
+        global: true,
+        ..default()
+    });
 }
 
 fn calc_extents(
@@ -495,11 +533,6 @@ fn raycast_world(
     extends: Res<WorlExtends>,
     mut next_state: ResMut<NextState<ProcessingStep>>,
 ) {
-    let shape_config: ShapeCastConfig = ShapeCastConfig {
-        max_distance: 0.,
-        compute_contact_on_penetration: false,
-        ..default()
-    };
     let extends = *extends;
     let cuboid = Collider::cuboid(CELL_SIZE, CELL_SIZE, CELL_SIZE);
     let mut scale_cuboid = cuboid.clone();
@@ -622,6 +655,7 @@ struct ChunkCell {
     _floor_distance: f32,
 }
 
+#[cfg_attr(not(feature = "graphics"), allow(unused))]
 #[derive(Resource, Default, Debug, Clone)]
 struct ChunkCells {
     tree: Octree<u32, TUVec3u32>,
