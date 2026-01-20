@@ -6,6 +6,8 @@ use std::{
     path::Path,
 };
 
+const NAVMESH_VERSION: u32 = 0;
+
 #[derive(Archive, Deserialize, Serialize, Debug, PartialEq)]
 #[rkyv(
     // This will generate a PartialEq impl between our unarchived
@@ -15,6 +17,7 @@ use std::{
     derive(Debug),
 )]
 pub struct Navmesh {
+    version: u32,
     min: [i32; 3],
     max: [i32; 3],
     cell_size: f32,
@@ -47,6 +50,7 @@ pub fn save_navmesh_to_disk(
     };
 
     match to_bytes::<RancorError>(&Navmesh {
+        version: NAVMESH_VERSION,
         min: extends.0.to_array(),
         max: extends.1.to_array(),
         cell_size,
