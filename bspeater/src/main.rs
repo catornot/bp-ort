@@ -6,7 +6,7 @@ use avian3d::prelude::*;
 #[cfg(not(feature = "graphics"))]
 use bevy::mesh::MeshPlugin;
 #[cfg(feature = "graphics")]
-use bevy::pbr::wireframe::WireframeConfig;
+use bevy::pbr::wireframe::{WireframeConfig, WireframePlugin};
 use bevy::{
     asset::RenderAssetUsages,
     mesh::{MeshVertexAttribute, VertexFormat},
@@ -31,10 +31,6 @@ use std::{
 
 pub use bindings::*;
 
-#[cfg(feature = "graphics")]
-mod async_pathfinding;
-#[cfg(feature = "graphics")]
-mod behavior;
 mod bindings;
 mod cli;
 #[cfg(feature = "graphics")]
@@ -42,8 +38,6 @@ mod debug;
 mod export;
 mod geoset_loader;
 mod mdl_loader;
-#[cfg(feature = "graphics")]
-mod pathfinding;
 mod saving;
 
 pub const UNPACK: &str = "vpk";
@@ -328,10 +322,10 @@ fn main() -> anyhow::Result<()> {
             ..default()
         }),
         PhysicsPlugins::default(),
-        #[cfg(feature = "graphics")]
-        PhysicsDebugPlugin,
         // #[cfg(feature = "graphics")]
-        // WireframePlugin::default(),
+        // PhysicsDebugPlugin,
+        #[cfg(feature = "graphics")]
+        WireframePlugin::default(),
         #[cfg(feature = "graphics")]
         FreeCameraPlugin,
     ))

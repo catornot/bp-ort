@@ -1,26 +1,21 @@
-use bevy::{
-    camera_controller::free_camera::FreeCamera, input::common_conditions::input_just_pressed,
-    prelude::*,
-};
+use bevy::{camera_controller::free_camera::FreeCamera, prelude::*};
 use oktree::prelude::*;
-use std::{ops::BitAnd, sync::Arc};
+use std::ops::BitAnd;
 
 use crate::{
     ATTRIBUTE_PRIMATIVE_TYPE, ATTRIBUTE_UNIQUE_CONTENTS, CELL_SIZE, ChunkCells, EnabledFeatures,
-    OFFSET, PrimitiveType, ProcessingStep, WorldMesh,
-    async_pathfinding::JobMarket,
-    behavior::{self, Behavior, init_pathfinding},
+    OFFSET, PrimitiveType, WorldMesh,
 };
 
+#[allow(unused)]
 pub type Octree32 = Octree<u32, TUVec3u32>;
+#[allow(unused)]
 pub struct Navmesh {
     pub navmesh_tree: Octree32,
     pub cell_size: f32,
 }
 
-#[derive(Resource)]
-pub struct NavmeshRes(Behavior, JobMarket);
-
+#[allow(unused)]
 #[derive(Resource, Default)]
 pub struct PathfindingPoints {
     building: [Option<Vec3>; 2],
@@ -34,21 +29,9 @@ struct PointsText;
 struct MeshInfoText;
 
 pub fn debug_plugin(app: &mut App) {
-    app.add_systems(
-        Update,
-        (
-            debug_world,
-            debug_pathfinding.run_if(resource_exists::<NavmeshRes>),
-            update_pos_text,
-            add_pathfinding_points.run_if(input_just_pressed(KeyCode::Enter)),
-            add_navmesh_resource
-                .run_if(in_state(ProcessingStep::Done))
-                .run_if(|res: Option<Res<NavmeshRes>>| res.is_none()),
-            debug_contents,
-        ),
-    )
-    .add_systems(Startup, setup_debug_ui)
-    .init_resource::<PathfindingPoints>();
+    app.add_systems(Update, (debug_world, update_pos_text, debug_contents))
+        .add_systems(Startup, setup_debug_ui)
+        .init_resource::<PathfindingPoints>();
 }
 
 fn setup_debug_ui(mut commands: Commands) {
@@ -194,52 +177,6 @@ fn debug_world(
     }
 
     Ok(())
-}
-
-fn debug_pathfinding(
-    points: Res<PathfindingPoints>,
-    mut navmesh: ResMut<NavmeshRes>,
-    time: Res<Time>,
-    gizmos: Gizmos,
-) -> Result<(), BevyError> {
-    if let Some(points) = points.current {
-        let NavmeshRes(bt, job_market) = &mut *navmesh;
-        behavior::run_behavior(bt, time.delta_secs_f64(), points, job_market, gizmos);
-    }
-
-    Ok(())
-}
-
-fn add_pathfinding_points(
-    camera: Query<&Transform, With<FreeCamera>>,
-    mut points: ResMut<PathfindingPoints>,
-) -> Result<(), BevyError> {
-    let origin = camera.single()?.translation.trunc();
-
-    if points.building[0].is_none() {
-        _ = points.building[0].replace(origin);
-        _ = points.building[1].take();
-    } else if points.building[1].is_none() {
-        _ = points.building[1].replace(origin);
-    }
-
-    if matches!(points.building, [Some(_), Some(_)]) {
-        points.current = points.building[0].and_then(|point| Some([point, points.building[1]?]));
-        points.building = default();
-    }
-
-    Ok(())
-}
-
-fn add_navmesh_resource(mut commands: Commands, cells: Res<ChunkCells>) {
-    let navmesh = Arc::new(Navmesh {
-        navmesh_tree: cells.tree.clone(),
-        cell_size: CELL_SIZE,
-    });
-    commands.insert_resource(NavmeshRes(
-        init_pathfinding(Arc::clone(&navmesh)),
-        JobMarket::new(navmesh),
-    ));
 }
 
 fn debug_contents(
