@@ -1,6 +1,11 @@
 use std::ops::Not;
 
+use super::{choose_team, get_bot_name, spawn_fake_player};
+use crate::bots::cmds_interface::cstring_to_string;
+use crate::{interfaces::ENGINE_INTERFACES, utils::iterate_c_array_sized};
 use once_cell::sync::OnceCell;
+use rrplug::bindings::class_types::cbaseentity::CBaseEntity;
+use rrplug::mid::utils::to_cstring;
 use rrplug::{
     bindings::{
         class_types::client::{CClient, SignonState},
@@ -9,10 +14,7 @@ use rrplug::{
     prelude::*,
 };
 use shared::bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS};
-
-use crate::{interfaces::ENGINE_INTERFACES, utils::iterate_c_array_sized};
-
-use super::{choose_team, get_bot_name, spawn_fake_player};
+use shared::utils::nudge_type;
 
 static MAX_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
 static MIN_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
@@ -25,6 +27,7 @@ pub struct ManagerData {
     target: u32,
     min: u32,
     pub enabled: bool,
+    active: bool,
     bots_to_spawn: u32,
     bots_to_remove: u32,
 }
@@ -36,6 +39,7 @@ impl Default for ManagerData {
             target: 4,
             min: 2,
             enabled: false,
+            active: false,
             bots_to_spawn: 0,
             bots_to_remove: 0,
         }
@@ -130,6 +134,34 @@ pub fn check_player_amount(plugin: &super::Bots, token: EngineToken) -> Result<(
     if !unsafe { iterate_c_array_sized::<_, 32>(engine_funcs.client_array.into()) }.all(|client| {
         client.m_nSignonState == SignonState::FULL || client.m_nSignonState == SignonState::NONE
     }) {
+        return Ok(());
+    }
+
+    unsafe {
+        let curr_level = cstring_to_string((*engine_funcs.server).m_szMapName.as_ptr());
+        let lobby = String::from("mp_lobby");
+
+
+        if (curr_level == lobby)
+        {
+            // remove bots from lobby
+            let engine_server = ENGINE_INTERFACES.wait().engine_server;
+            engine_server.ServerCommand(to_cstring("kick_all_bots").as_ptr());
+            manager_data.active = false;
+
+            return Ok(());
+        }
+        else if (0..32).filter_map(|i| unsafe { (server_funcs.get_player_by_index)(i + 1).as_mut() }).any(|player| unsafe {
+            (server_funcs.is_alive)(nudge_type::<&CBaseEntity>(player)) != 0
+        })
+        {
+            manager_data.active = true;
+        }
+
+    }
+
+    if !manager_data.active
+    {
         return Ok(());
     }
 
