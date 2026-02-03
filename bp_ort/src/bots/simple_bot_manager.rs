@@ -141,10 +141,10 @@ pub fn check_player_amount(plugin: &super::Bots, token: EngineToken) -> Result<(
         let curr_level = cstring_to_string((*engine_funcs.server).m_szMapName.as_ptr());
         let lobby = String::from("mp_lobby");
 
+        // a bit of a hack to work around weird issues bots can encounter during the limbo where loading is still happening but everything is marked as ready
         if curr_level == lobby
         {
             // remove bots from the lobby
-            // bit of a hack to work around weird issues bots can encounter during the limbo where loading is still happening but everything is marked as ready
             let engine_server = ENGINE_INTERFACES.wait().engine_server;
             engine_server.ServerCommand(to_cstring("kick_all_bots").as_ptr());
             manager_data.active = false;
@@ -155,7 +155,7 @@ pub fn check_player_amount(plugin: &super::Bots, token: EngineToken) -> Result<(
             (server_funcs.is_alive)(nudge_type::<&CBaseEntity>(player)) != 0
         })
         {
-            // no humans have spawned in yet, meaning it might not be safe for bots to spawn either
+            // A real player has spawned, meaning its likely alright for us to start spawning bots
             manager_data.active = true;
         }
     }
