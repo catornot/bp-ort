@@ -10,10 +10,10 @@ use rrplug::{
         class_types::client::{CClient, SignonState},
         cvar::convar::FCVAR_GAMEDLL,
     },
-    mid::utils::to_cstring,
     prelude::*,
 };
 use shared::{
+    bindings::EngineFunctions,
     bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
     utils::nudge_type,
 };
@@ -121,6 +121,31 @@ pub fn register_manager_vars(_: &EngineData, token: EngineToken) {
     );
 }
 
+fn kick_player(engine_funcs: &EngineFunctions) {
+    // remove extra bots
+    let engine_server = ENGINE_INTERFACES.wait().engine_server;
+
+    unsafe { engine_server.LockNetworkStringTables(true) };
+
+    unsafe {
+        let result = iterate_c_array_sized::<_, 32>(engine_funcs.client_array.into())
+            .find(|client| client.m_nSignonState == SignonState::FULL && client.m_bFakePlayer);
+
+        match result {
+            None => {
+                return;
+            }
+            Some(client) => (engine_funcs.cclient_disconnect)(
+                (client as *const CClient).cast_mut(),
+                1,
+                c"enough bots we have".as_ptr().cast(),
+            ),
+        }
+    }
+
+    unsafe { engine_server.LockNetworkStringTables(false) };
+}
+
 pub fn check_player_amount(plugin: &super::Bots, token: EngineToken) -> Result<(), &'static str> {
     let engine_funcs = ENGINE_FUNCTIONS
         .get()
@@ -147,8 +172,7 @@ pub fn check_player_amount(plugin: &super::Bots, token: EngineToken) -> Result<(
         // a bit of a hack to work around weird issues bots can encounter during the limbo where loading is still happening but everything is marked as ready
         if curr_level == LOBBY {
             // remove bots from the lobby
-            let engine_server = ENGINE_INTERFACES.wait().engine_server;
-            engine_server.ServerCommand(to_cstring("kick_all_bots").as_ptr());
+            kick_player(engine_funcs);
             manager_data.active = false;
 
             return Ok(());
@@ -205,27 +229,8 @@ pub fn check_player_amount(plugin: &super::Bots, token: EngineToken) -> Result<(
                 token,
             );
         }
-        (0, r @ 1..) => {
-            // remove extra bots
-            let engine_server = ENGINE_INTERFACES.wait().engine_server;
-
-            unsafe { engine_server.LockNetworkStringTables(true) };
-
-            unsafe {
-                iterate_c_array_sized::<_, 32>(engine_funcs.client_array.into()).filter(|client| {
-                    client.m_nSignonState == SignonState::FULL && client.m_bFakePlayer
-                })
-            }
-            .take(r as usize)
-            .for_each(|client| unsafe {
-                (engine_funcs.cclient_disconnect)(
-                    (client as *const CClient).cast_mut(),
-                    1,
-                    c"enough bots we have".as_ptr().cast(),
-                )
-            });
-
-            unsafe { engine_server.LockNetworkStringTables(false) };
+        (0, _r @ 1..) => {
+            kick_player(engine_funcs);
         }
 
         _ => {}
