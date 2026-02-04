@@ -156,7 +156,7 @@ pub fn check_player_amount(plugin: &super::Bots, token: EngineToken) -> Result<(
 
             return Ok(());
         }
-        else if manager_data.active ||(0..32).filter_map(|i| unsafe { (server_funcs.get_player_by_index)(i + 1).as_mut() }).any(|player| unsafe {
+        else if manager_data.active ||(0..32).filter_map(|i| { (server_funcs.get_player_by_index)(i + 1).as_mut() }).any(|player| {
             (server_funcs.is_alive)(nudge_type::<&CBaseEntity>(player)) != 0
         })
         {
