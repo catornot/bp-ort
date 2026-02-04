@@ -144,10 +144,10 @@ pub fn check_player_amount(plugin: &super::Bots, token: EngineToken) -> Result<(
 
     unsafe {
         let curr_level = cstring_to_string((*engine_funcs.server).m_szMapName.as_ptr());
-        let lobby = String::from("mp_lobby");
+        const LOBBY: &str = "mp_lobby";
 
         // a bit of a hack to work around weird issues bots can encounter during the limbo where loading is still happening but everything is marked as ready
-        if curr_level == lobby
+        if curr_level == LOBBY
         {
             // remove bots from the lobby
             let engine_server = ENGINE_INTERFACES.wait().engine_server;
