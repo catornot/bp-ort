@@ -1,24 +1,23 @@
-use std::ops::Not;
 use super::{choose_team, get_bot_name, spawn_fake_player};
 use crate::{
-    bots::cmds_interface::cstring_to_string,
-    interfaces::ENGINE_INTERFACES,
-    utils::iterate_c_array_sized
+    bots::cmds_interface::cstring_to_string, interfaces::ENGINE_INTERFACES,
+    utils::iterate_c_array_sized,
 };
 use once_cell::sync::OnceCell;
 use rrplug::{
-    mid::utils::to_cstring,
     bindings::class_types::cbaseentity::CBaseEntity,
     bindings::{
         class_types::client::{CClient, SignonState},
         cvar::convar::FCVAR_GAMEDLL,
     },
-    prelude::*
+    mid::utils::to_cstring,
+    prelude::*,
 };
 use shared::{
     bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
-    utils::nudge_type
+    utils::nudge_type,
 };
+use std::ops::Not;
 
 static MAX_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
 static MIN_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
@@ -146,26 +145,24 @@ pub fn check_player_amount(plugin: &super::Bots, token: EngineToken) -> Result<(
         const LOBBY: &str = "mp_lobby";
 
         // a bit of a hack to work around weird issues bots can encounter during the limbo where loading is still happening but everything is marked as ready
-        if curr_level == LOBBY
-        {
+        if curr_level == LOBBY {
             // remove bots from the lobby
             let engine_server = ENGINE_INTERFACES.wait().engine_server;
             engine_server.ServerCommand(to_cstring("kick_all_bots").as_ptr());
             manager_data.active = false;
 
             return Ok(());
-        }
-        else if manager_data.active ||(0..32).filter_map(|i| { (server_funcs.get_player_by_index)(i + 1).as_mut() }).any(|player| {
-            (server_funcs.is_alive)(nudge_type::<&CBaseEntity>(player)) != 0
-        })
+        } else if manager_data.active
+            || (0..32)
+                .filter_map(|i| (server_funcs.get_player_by_index)(i + 1).as_mut())
+                .any(|player| (server_funcs.is_alive)(nudge_type::<&CBaseEntity>(player)) != 0)
         {
             // A real player has spawned, meaning its likely alright for us to start spawning bots
             manager_data.active = true;
         }
     }
 
-    if !manager_data.active
-    {
+    if !manager_data.active {
         return Ok(());
     }
 
