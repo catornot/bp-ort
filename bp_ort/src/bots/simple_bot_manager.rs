@@ -1,20 +1,25 @@
 use std::ops::Not;
 
 use super::{choose_team, get_bot_name, spawn_fake_player};
-use crate::bots::cmds_interface::cstring_to_string;
-use crate::{interfaces::ENGINE_INTERFACES, utils::iterate_c_array_sized};
+use crate::{
+    bots::cmds_interface::cstring_to_string,
+    interfaces::ENGINE_INTERFACES,
+    utils::iterate_c_array_sized
+};
 use once_cell::sync::OnceCell;
-use rrplug::bindings::class_types::cbaseentity::CBaseEntity;
-use rrplug::mid::utils::to_cstring;
 use rrplug::{
+    mid::utils::to_cstring,
+    bindings::class_types::cbaseentity::CBaseEntity,
     bindings::{
         class_types::client::{CClient, SignonState},
         cvar::convar::FCVAR_GAMEDLL,
     },
-    prelude::*,
+    prelude::*
 };
-use shared::bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS};
-use shared::utils::nudge_type;
+use shared::{
+    bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
+    utils::nudge_type
+};
 
 static MAX_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
 static MIN_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
