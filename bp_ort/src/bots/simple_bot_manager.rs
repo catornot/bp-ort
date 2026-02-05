@@ -172,9 +172,8 @@ pub fn check_player_amount(plugin: &super::Bots, token: EngineToken) -> Result<(
         // a bit of a hack to work around weird issues bots can encounter during the limbo where loading is still happening but everything is marked as ready
         if curr_level == LOBBY {
             // remove bots from the lobby
-            kick_player(engine_funcs);
+            //kick_player(engine_funcs);
             manager_data.active = false;
-
             return Ok(());
         } else if manager_data.active
             || (0..32)
