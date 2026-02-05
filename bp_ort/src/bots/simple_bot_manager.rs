@@ -1,18 +1,23 @@
-use std::ops::Not;
-
+use super::{choose_team, get_bot_name, spawn_fake_player};
+use crate::{
+    bots::cmds_interface::cstring_to_string, interfaces::ENGINE_INTERFACES,
+    utils::iterate_c_array_sized,
+};
 use once_cell::sync::OnceCell;
 use rrplug::{
+    bindings::class_types::cbaseentity::CBaseEntity,
     bindings::{
         class_types::client::{CClient, SignonState},
         cvar::convar::FCVAR_GAMEDLL,
     },
     prelude::*,
 };
-use shared::bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS};
-
-use crate::{interfaces::ENGINE_INTERFACES, utils::iterate_c_array_sized};
-
-use super::{choose_team, get_bot_name, spawn_fake_player};
+use shared::{
+    bindings::EngineFunctions,
+    bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
+    utils::nudge_type,
+};
+use std::ops::Not;
 
 static MAX_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
 static MIN_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
@@ -25,6 +30,7 @@ pub struct ManagerData {
     target: u32,
     min: u32,
     pub enabled: bool,
+    active: bool,
     bots_to_spawn: u32,
     bots_to_remove: u32,
 }
@@ -36,6 +42,7 @@ impl Default for ManagerData {
             target: 4,
             min: 2,
             enabled: false,
+            active: false,
             bots_to_spawn: 0,
             bots_to_remove: 0,
         }
@@ -114,6 +121,31 @@ pub fn register_manager_vars(_: &EngineData, token: EngineToken) {
     );
 }
 
+fn kick_player(engine_funcs: &EngineFunctions) {
+    // remove extra bots
+    let engine_server = ENGINE_INTERFACES.wait().engine_server;
+
+    unsafe { engine_server.LockNetworkStringTables(true) };
+
+    unsafe {
+        let result = iterate_c_array_sized::<_, 32>(engine_funcs.client_array.into())
+            .find(|client| client.m_nSignonState == SignonState::FULL && client.m_bFakePlayer);
+
+        match result {
+            None => {
+                return;
+            }
+            Some(client) => (engine_funcs.cclient_disconnect)(
+                (client as *const CClient).cast_mut(),
+                1,
+                c"enough bots we have".as_ptr().cast(),
+            ),
+        }
+    }
+
+    unsafe { engine_server.LockNetworkStringTables(false) };
+}
+
 pub fn check_player_amount(plugin: &super::Bots, token: EngineToken) -> Result<(), &'static str> {
     let engine_funcs = ENGINE_FUNCTIONS
         .get()
@@ -130,6 +162,30 @@ pub fn check_player_amount(plugin: &super::Bots, token: EngineToken) -> Result<(
     if !unsafe { iterate_c_array_sized::<_, 32>(engine_funcs.client_array.into()) }.all(|client| {
         client.m_nSignonState == SignonState::FULL || client.m_nSignonState == SignonState::NONE
     }) {
+        return Ok(());
+    }
+
+    unsafe {
+        let curr_level = cstring_to_string((*engine_funcs.server).m_szMapName.as_ptr());
+        const LOBBY: &str = "mp_lobby";
+
+        // a bit of a hack to work around weird issues bots can encounter during the limbo where loading is still happening but everything is marked as ready
+        if curr_level == LOBBY {
+            // remove bots from the lobby
+            //kick_player(engine_funcs);
+            manager_data.active = false;
+            return Ok(());
+        } else if manager_data.active
+            || (0..32)
+                .filter_map(|i| (server_funcs.get_player_by_index)(i + 1).as_mut())
+                .any(|player| (server_funcs.is_alive)(nudge_type::<&CBaseEntity>(player)) != 0)
+        {
+            // A real player has spawned, meaning its likely alright for us to start spawning bots
+            manager_data.active = true;
+        }
+    }
+
+    if !manager_data.active {
         return Ok(());
     }
 
@@ -172,27 +228,8 @@ pub fn check_player_amount(plugin: &super::Bots, token: EngineToken) -> Result<(
                 token,
             );
         }
-        (0, r @ 1..) => {
-            // remove extra bots
-            let engine_server = ENGINE_INTERFACES.wait().engine_server;
-
-            unsafe { engine_server.LockNetworkStringTables(true) };
-
-            unsafe {
-                iterate_c_array_sized::<_, 32>(engine_funcs.client_array.into()).filter(|client| {
-                    client.m_nSignonState == SignonState::FULL && client.m_bFakePlayer
-                })
-            }
-            .take(r as usize)
-            .for_each(|client| unsafe {
-                (engine_funcs.cclient_disconnect)(
-                    (client as *const CClient).cast_mut(),
-                    1,
-                    c"enough bots we have".as_ptr().cast(),
-                )
-            });
-
-            unsafe { engine_server.LockNetworkStringTables(false) };
+        (0, _r @ 1..) => {
+            kick_player(engine_funcs);
         }
 
         _ => {}
