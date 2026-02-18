@@ -6,7 +6,7 @@ use shared::utils::nudge_type;
 
 use crate::{
     bindings::{Action, CUserCmd},
-    bots::{cmds_helper::CUserCmdHelper, cmds_utils::*, BotData},
+    bots::{BotData, cmds_helper::CUserCmdHelper, cmds_utils::*},
     utils::get_net_var,
 };
 
@@ -30,7 +30,9 @@ pub(crate) fn battery_yoinker(
             is_timedout(local_data.last_shot, helper, 20.)
         );
 
-        if is_timedout(local_data.last_shot, helper, 10.) && local_data.counter / 10 % 4 == 0 {
+        if is_timedout(local_data.last_shot, helper, 10.)
+            && local_data.counter.div_euclid(10).is_multiple_of(4)
+        {
             cmd.buttons |= Action::Jump as u32 | Action::WeaponDiscard as u32;
         }
         return cmd;
@@ -70,7 +72,7 @@ pub(crate) fn battery_yoinker(
         if distance(origin, rodeo_target) > 100. {
             path_to_target(&mut cmd, local_data, origin, rodeo_target, false, helper);
         } else if unsafe { (helper.sv_funcs.is_on_ground)(nudge_type::<&CBaseEntity>(player)) } != 0
-            && local_data.counter / 10 % 4 == 0
+            && local_data.counter.div_euclid(10).is_multiple_of(4)
         {
             cmd.buttons |= Action::Jump as u32;
         }

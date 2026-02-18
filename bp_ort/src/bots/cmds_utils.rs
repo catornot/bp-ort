@@ -12,7 +12,7 @@ use crate::{
     navmesh::RECAST_DETOUR,
 };
 
-use super::{cmds_helper::CUserCmdHelper, BotData};
+use super::{BotData, cmds_helper::CUserCmdHelper};
 
 pub(super) const GROUND_OFFSET: Vector3 = Vector3::new(0., 0., 20.);
 pub(super) const BOT_VISON_RANGE: f32 = 3000.;
@@ -292,7 +292,7 @@ pub fn distance_iterator<'b, 'a: 'b>(
 }
 
 #[allow(unused)]
-pub unsafe fn view_rate(
+pub fn view_rate(
     helper: &CUserCmdHelper,
     v1: Vector3,
     v2: Vector3,
@@ -337,22 +337,26 @@ pub unsafe fn view_rate(
         };
 
         // could use this to get 100% result and trace ray for a aproximation of failure
-        (helper.engine_funcs.trace_ray_filter)(
-            (*helper.sv_funcs.ctraceengine) as *const libc::c_void,
-            &mut ray,
-            TRACE_MASK_SHOT as u32,
-            filter.cast(),
-            result.as_mut_ptr(),
-        );
+        unsafe {
+            (helper.engine_funcs.trace_ray_filter)(
+                (*helper.sv_funcs.ctraceengine) as *const libc::c_void,
+                &mut ray,
+                TRACE_MASK_SHOT as u32,
+                filter.cast(),
+                result.as_mut_ptr(),
+            )
+        };
     } else {
-        (helper.engine_funcs.trace_ray)(
-            (*helper.sv_funcs.ctraceengine) as *const libc::c_void,
-            &mut ray,
-            TRACE_MASK_SHOT as u32,
-            result.as_mut_ptr(),
-        );
+        unsafe {
+            (helper.engine_funcs.trace_ray)(
+                (*helper.sv_funcs.ctraceengine) as *const libc::c_void,
+                &mut ray,
+                TRACE_MASK_SHOT as u32,
+                result.as_mut_ptr(),
+            )
+        };
     }
-    let result = result.assume_init();
+    let result = unsafe { result.assume_init() };
 
     if !result.start_solid && result.fraction_left_solid == 0.0 {
         (result.fraction, result.hit_ent)

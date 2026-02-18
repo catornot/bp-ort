@@ -1,10 +1,4 @@
-#![feature(
-    c_variadic,
-    iter_array_chunks,
-    iter_collect_into,
-    if_let_guard,
-    let_chains
-)]
+#![feature(c_variadic, iter_array_chunks, iter_collect_into, if_let_guard)]
 #![allow(clippy::missing_transmute_annotations)] // too lazy to fix rn
 
 use holoplus::HoloPlus;
@@ -13,15 +7,15 @@ use rrplug::{bindings::plugin_abi::PluginColor, prelude::*};
 use crate::{
     admin_abuse::AdminAbuse,
     bindings::{
-        ClientFunctions, EngineFunctions, MatSysFunctions, ServerFunctions, CLIENT_FUNCTIONS,
-        ENGINE_FUNCTIONS, MATSYS_FUNCTIONS, SERVER_FUNCTIONS,
+        CLIENT_FUNCTIONS, ClientFunctions, ENGINE_FUNCTIONS, EngineFunctions, MATSYS_FUNCTIONS,
+        MatSysFunctions, SERVER_FUNCTIONS, ServerFunctions,
     },
     bots::Bots,
     devtoys::DevToys,
     disguise::Disguise,
     interfaces::Interfaces,
     navmesh::NavigationPlugin,
-    navmesh::{RecastDetour, RECAST_DETOUR},
+    navmesh::{RECAST_DETOUR, RecastDetour},
     screen_detour::hook_materialsystem,
     scripts::Scripts,
 };
@@ -115,10 +109,10 @@ impl Plugin for HooksPlugin {
                     base + 0x15191a,
                     &[0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90],
                 ); // removes 1 max player on sp
-                   // utils::patch(
-                   //     base + 0x5aa01f,
-                   //     &[0x90; 30], // 40 bytes
-                   // ); // removes the world view write in run_null_command
+                // utils::patch(
+                //     base + 0x5aa01f,
+                //     &[0x90; 30], // 40 bytes
+                // ); // removes the world view write in run_null_command
             },
             _ => {}
         }

@@ -1,7 +1,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 use high::squirrel::call_sq_function;
 use mid::squirrel::SQVM_SERVER;
-use rand::{thread_rng, Rng};
+use rand::{Rng, thread_rng};
 use rrplug::{
     bindings::class_types::{cbaseentity::CBaseEntity, cplayer::CPlayer, cweaponx::CWeaponX},
     high::UnsafeHandle,
@@ -12,7 +12,7 @@ use std::{cell::UnsafeCell, sync::atomic::Ordering};
 
 use crate::{
     bindings::{Action, CUserCmd},
-    bots::{cmds_helper::CUserCmdHelper, cmds_utils::*, BotData, AIM_PENALTY_VALUE},
+    bots::{AIM_PENALTY_VALUE, BotData, cmds_helper::CUserCmdHelper, cmds_utils::*},
     utils::{get_ents_by_class_name, get_net_var, get_weaponx_name, lookup_ent},
 };
 
@@ -201,7 +201,7 @@ pub(crate) fn basic_combat(
             } else if distance(our_flag.0, our_base) > 30. {
                 local_data.approach_range = Some(0.);
                 (our_flag.0, None)
-            } else if ((time(helper) as u64) / 30) % 2 == 0 {
+            } else if (time(helper) as u64).div_euclid(30).is_multiple_of(2) {
                 (their_flag.0, None)
             } else {
                 (our_flag.0, None)
@@ -313,7 +313,7 @@ pub(crate) fn basic_combat(
             if let Some(titan) = unsafe { (helper.sv_funcs.get_pet_titan)(player).as_ref() } {
                 let titan_pos = unsafe { *titan.get_origin(v) };
 
-                let (dis, ent) = unsafe { view_rate(helper, titan_pos, origin, player, true) };
+                let (dis, ent) = view_rate(helper, titan_pos, origin, player, true);
                 if dis >= 1.0 || ent == std::ptr::from_ref(titan) {
                     if (origin.x - titan_pos.x).powi(2) * (origin.y - titan_pos.y).powi(2) < 81000.
                         && (helper.globals.frameCount / 2 % 4 != 0)
@@ -394,7 +394,7 @@ pub(crate) fn basic_combat(
             cmd.buttons |= Action::Melee as u32;
         };
 
-        if is_titan && local_data.counter % 4 == 0 {
+        if is_titan && local_data.counter.is_multiple_of(4) {
             cmd.buttons |= Action::Dodge as u32;
         }
 
@@ -637,7 +637,7 @@ fn generate_spread(dir: Vector3, buffer: &mut [Vector3]) {
     dbg!("wow");
     let dir = normalize(dir);
     let spread = (0..50)
-        .map(|i| (i as f32 / 25.))
+        .map(|i| i as f32 / 25.)
         .map(|i| dir * Vector3::new(i, i, 0.))
         .map(|angle| Vector3::new(angle.x.clamp(-4., 4.), angle.y.clamp(-4., 4.), 0.));
 

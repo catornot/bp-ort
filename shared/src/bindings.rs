@@ -417,8 +417,8 @@ offset_functions! {
         cengine_client_client_cmd = unsafe extern "C" fn(*const c_void, *const c_char) -> () where offset(0x4fb50);
         host_state = *mut CHostState where offset(0x7CF180);
 
-        trace_ray_filter = unsafe extern "fastcall-unwind" fn(this: *const c_void, ray: *const Ray, maskf: u32, filter: *const c_void, trace: *mut CGameTrace ) where offset(0x14eeb0);
-        trace_ray = unsafe extern "fastcall-unwind" fn(this: *const c_void, ray: *const Ray, maskf: u32, trace: *mut CGameTrace ) where offset(0x14f7a0);
+        trace_ray_filter = unsafe extern "C" fn(this: *const c_void, ray: *const Ray, maskf: u32, filter: *const c_void, trace: *mut CGameTrace ) where offset(0x14eeb0);
+        trace_ray = unsafe extern "C" fn(this: *const c_void, ray: *const Ray, maskf: u32, trace: *mut CGameTrace ) where offset(0x14f7a0);
     }
 }
 

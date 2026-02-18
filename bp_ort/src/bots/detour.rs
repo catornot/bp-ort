@@ -234,7 +234,7 @@ pub fn cclient_connect_set_uid_hook(this: *mut CClient, unk1: *const c_void) {
     unsafe { CClientConnectSetUid.call(this, unk1) }
 
     if let Some(client) = unsafe { this.as_mut() } {
-        unsafe { set_stuff_on_join(client) }
+        set_stuff_on_join(client)
     }
 }
 

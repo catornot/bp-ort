@@ -4,10 +4,10 @@ use rrplug::{
         squirrelfunctions::SQUIRREL_SERVER_FUNCS,
     },
     mid::utils::try_cstring,
-    prelude::{log, HSquirrelVM, Vector3},
+    prelude::{HSquirrelVM, Vector3, log},
 };
 use std::{
-    ffi::{c_char, c_void, CStr},
+    ffi::{CStr, c_char, c_void},
     marker::PhantomData,
     mem::MaybeUninit,
 };
@@ -17,8 +17,8 @@ use windows_sys::Win32::System::{
 };
 
 use crate::bindings::{
-    CGameTrace, CTraceFilterSimple, Contents, EngineFunctions, Ray, ServerFunctions,
-    TraceCollisionGroup, VectorAligned, ENGINE_FUNCTIONS,
+    CGameTrace, CTraceFilterSimple, Contents, ENGINE_FUNCTIONS, EngineFunctions, Ray,
+    ServerFunctions, TraceCollisionGroup, VectorAligned,
 };
 
 pub struct ClassNameIter<'a> {
@@ -98,22 +98,22 @@ impl<'a, T> From<Pointer<'a, T>> for *mut T {
 
 #[inline]
 pub unsafe fn iterate_c_array_sized<T, const U: usize>(
-    ptr: Pointer<T>,
+    ptr: Pointer<'_, T>,
 ) -> impl Iterator<Item = &T> {
     let ptr: *const T = ptr.into();
-    (0..U).filter_map(move |i| ptr.add(i).as_ref())
+    (0..U).filter_map(move |i| unsafe { ptr.add(i).as_ref() })
 }
 
 #[inline]
 pub unsafe fn iterate_c_array_sized_mut<T, const U: usize>(
-    ptr: Pointer<T>,
+    ptr: Pointer<'_, T>,
 ) -> impl Iterator<Item = &mut T> {
     let ptr: *mut T = ptr.into();
-    (0..U).filter_map(move |i| ptr.add(i).as_mut())
+    (0..U).filter_map(move |i| unsafe { ptr.add(i).as_mut() })
 }
 
 #[inline]
-pub unsafe fn set_c_char_array<const U: usize>(buf: &mut [c_char; U], new: &str) {
+pub fn set_c_char_array<const U: usize>(buf: &mut [c_char; U], new: &str) {
     *buf = [0; U]; // null everything
     buf.iter_mut()
         .zip(new.as_bytes())
@@ -142,19 +142,21 @@ pub fn get_c_char_array<const U: usize>(buf: &[i8; U]) -> Option<&str> {
 
 #[inline]
 pub unsafe fn from_c_string<T: From<String>>(ptr: *const c_char) -> T {
-    CStr::from_ptr(ptr).to_string_lossy().to_string().into()
+    unsafe { CStr::from_ptr(ptr).to_string_lossy().to_string().into() }
 }
 
 #[allow(unused)]
 #[inline]
 pub unsafe fn patch(addr: usize, bytes: &[u8]) {
-    WriteProcessMemory(
-        GetCurrentProcess(),
-        addr as *const c_void,
-        bytes as *const _ as *const c_void,
-        bytes.len(),
-        std::ptr::null_mut(),
-    );
+    unsafe {
+        WriteProcessMemory(
+            GetCurrentProcess(),
+            addr as *const c_void,
+            bytes as *const _ as *const c_void,
+            bytes.len(),
+            std::ptr::null_mut(),
+        )
+    };
 }
 
 pub fn send_client_print(player: &CPlayer, msg: &str) -> Option<()> {

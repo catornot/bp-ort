@@ -1,6 +1,6 @@
 use crate::{
-    utils::{get_c_char_array_lossy, set_c_char_array},
     PLUGIN,
+    utils::{get_c_char_array_lossy, set_c_char_array},
 };
 use rand::Rng;
 use rrplug::{
@@ -15,9 +15,11 @@ const FUNNY_CLAN_TAGS: &[&str] = &[
 
 use super::UWUFY_CONVAR;
 
-pub unsafe fn set_stuff_on_join(client: &mut CClient) {
+pub fn set_stuff_on_join(client: &mut CClient) {
     let name = get_c_char_array_lossy(&client.m_szServerName);
-    let sqvm = SQVM_SERVER.get(EngineToken::new_unchecked()).borrow();
+    let sqvm = SQVM_SERVER
+        .get(unsafe { EngineToken::new_unchecked() })
+        .borrow();
     let mut rng = rand::thread_rng();
     let plugin = PLUGIN.wait();
 
@@ -40,6 +42,7 @@ pub unsafe fn set_stuff_on_join(client: &mut CClient) {
                 .filter(|c| *c != '\0')
                 .collect::<String>()
         );
+
         set_c_char_array(&mut client.m_szServerName, name);
         set_c_char_array(&mut client.m_szClanTag, tag);
         return;

@@ -9,7 +9,7 @@ use crate::{
     navmesh::Hull,
 };
 
-use super::{cmds_helper::CUserCmdHelper, cmds_utils::*, BotData, BotShared};
+use super::{BotData, BotShared, cmds_helper::CUserCmdHelper, cmds_utils::*};
 
 mod basic_combat;
 mod battery_yoinker;
@@ -85,7 +85,7 @@ pub(super) fn get_cmd(
         1 | 12 => {
             local_data.counter += 1;
             if unsafe { (helper.sv_funcs.is_on_ground)(nudge_type::<&CBaseEntity>(player)) } != 0
-                && local_data.counter / 10 % 4 == 0
+                && local_data.counter.div_euclid(10).is_multiple_of(4)
             {
                 CUserCmd::new_basic_move(Vector3::new(0., 0., 1.), Action::Jump as u32, &helper)
             } else {
@@ -168,7 +168,7 @@ pub(super) fn get_cmd(
                         *counter = 0;
                     }
 
-                    let can_jump = *counter % 5 == 0;
+                    let can_jump = (*counter).is_multiple_of(5);
 
                     if (helper.sv_funcs.is_on_ground)(nudge_type::<&CBaseEntity>(player)) != 0
                         && can_jump

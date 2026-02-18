@@ -1,4 +1,4 @@
-#![feature(let_chains, mpmc_channel, stmt_expr_attributes, if_let_guard)]
+#![feature(mpmc_channel, stmt_expr_attributes, if_let_guard)]
 
 use nav_points::vector3_to_tuvec;
 use once_cell::sync::OnceCell;
@@ -9,11 +9,11 @@ use rrplug::{
 };
 use shared::{
     bindings::{
-        ClientFunctions, EngineFunctions, HostState, MatSysFunctions, ServerFunctions,
-        CLIENT_FUNCTIONS, ENGINE_FUNCTIONS, MATSYS_FUNCTIONS, SERVER_FUNCTIONS,
+        CLIENT_FUNCTIONS, ClientFunctions, ENGINE_FUNCTIONS, EngineFunctions, HostState,
+        MATSYS_FUNCTIONS, MatSysFunctions, SERVER_FUNCTIONS, ServerFunctions,
     },
     interfaces::{IVDebugOverlay, IVEngineServer},
-    plugin_interfaces::{rust_version_hash, ExternalSimulations},
+    plugin_interfaces::{ExternalSimulations, rust_version_hash},
 };
 use std::{ffi::CStr, sync::Arc};
 // use tracing_chrome::FlushGuard;

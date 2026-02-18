@@ -36,16 +36,17 @@ impl Plugin for Scripts {
 }
 
 unsafe extern "C" fn script_run_server(command: *const CCommand) {
-    let command = command
-        .as_ref()
-        .expect("CCommand should be valid in concommands");
+    unsafe {
+        let command = command
+            .as_ref()
+            .expect("CCommand should be valid in concommands");
+        let script = String::from_utf8_lossy(
+            std::mem::transmute::<_, [u8; 512]>(command.m_pArgSBuffer).as_slice(),
+        )
+        .to_string();
 
-    let script = String::from_utf8_lossy(
-        std::mem::transmute::<_, [u8; 512]>(command.m_pArgSBuffer).as_slice(),
-    )
-    .to_string();
-
-    log::info!("todo wow: {script}")
+        log::info!("todo wow: {script}")
+    };
 }
 
 // #[rrplug::sqfunction(VM = "Server | Client | Ui", ExportName = "printstruct")]

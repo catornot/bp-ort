@@ -138,84 +138,92 @@
               in
               native-pkgs.callPackage ./expressions/navmeshes.nix { inherit bspeater titanfall2 tf2vpk; };
 
-            win-shell = devShell.default;
-            native-shell = devShell.native;
           };
 
-        devShell.default = pkgs.mkShell rec {
-          nativeBuildInputs = with pkgs; [
-            native-pkgs.bacon
-            toolchain-win
-            pkg-config
-          ];
+        devShells = {
+          win-shell = pkgs.mkShell rec {
+            nativeBuildInputs = with pkgs; [
+              native-pkgs.bacon
+              toolchain-win
+              pkg-config
+            ];
 
-          buildInputs = with pkgs; [
-            windows.mingw_w64_headers
-            # windows.mcfgthreads
-            windows.pthreads
-          ];
+            buildInputs = with pkgs; [
+              windows.mingw_w64_headers
+              # windows.mcfgthreads
+              windows.pthreads
+            ];
 
-          LD_LIBRARY_PATH = nixpkgs.lib.makeLibraryPath buildInputs;
-          PATH = nixpkgs.lib.makeLibraryPath buildInputs;
-          WINEPATH = nixpkgs.lib.makeLibraryPath buildInputs;
-        };
+            LD_LIBRARY_PATH = nixpkgs.lib.makeLibraryPath buildInputs;
+            PATH = nixpkgs.lib.makeLibraryPath buildInputs;
+            WINEPATH = nixpkgs.lib.makeLibraryPath buildInputs;
+          };
 
-        devShell.native = pkgs.mkShell rec {
-          nativeBuildInputs = with native-pkgs; [
-            cargo-deny
-            cargo-audit
-            bacon
-            toolchain-linux
-            clang
-            cmake
-            cmakeCurses
-            pkg-config
-          ];
+          native-shell = pkgs.mkShell rec {
+            nativeBuildInputs = with native-pkgs; [
+              cargo-deny
+              cargo-audit
+              bacon
+              toolchain-linux
+              clang
+              cmake
+              cmakeCurses
+              pkg-config
+            ];
 
-          buildInputs = with native-pkgs; [
-            stdenv.cc
-            zstd
-            libxkbcommon
-            vulkan-loader
-            xorg.libX11
-            xorg.libXcursor
-            xorg.libXi
-            xorg.libXrandr
-            alsa-lib-with-plugins
-            wayland
-            glfw
-            udev
-            pkg-config
-          ];
+            buildInputs = with native-pkgs; [
+              stdenv.cc
+              zstd
+              libxkbcommon
+              vulkan-loader
+              xorg.libX11
+              xorg.libXcursor
+              xorg.libXi
+              xorg.libXrandr
+              alsa-lib-with-plugins
+              wayland
+              glfw
+              udev
+              pkg-config
+            ];
 
-          runtimeDependencies = with native-pkgs; [
-            libgcc
-            stdenv.cc
-            zstd
-            libxkbcommon
-            vulkan-loader
-            xorg.libX11
-            xorg.libXcursor
-            xorg.libXi
-            xorg.libXrandr
-            alsa-lib-with-plugins
-            wayland
-            glfw
-            udev
-          ];
+            runtimeDependencies = with native-pkgs; [
+              libgcc
+              stdenv.cc
+              zstd
+              libxkbcommon
+              vulkan-loader
+              xorg.libX11
+              xorg.libXcursor
+              xorg.libXi
+              xorg.libXrandr
+              alsa-lib-with-plugins
+              wayland
+              glfw
+              udev
+            ];
 
-          LD_LIBRARY_PATH = nixpkgs.lib.makeLibraryPath runtimeDependencies;
-          PATH = nixpkgs.lib.makeLibraryPath runtimeDependencies;
+            LD_LIBRARY_PATH = nixpkgs.lib.makeLibraryPath runtimeDependencies;
+            PATH = nixpkgs.lib.makeLibraryPath runtimeDependencies;
 
-          # adding the export worked!
-          shellHook = ''
-            export CC=clang
-            export CXX=clang++
-            export CMAKE=${native-pkgs.cmake}/bin/cmake
-            export WGPU_ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER=1
-            export WGPU_BACKEND=vulkan
-            export RUST_BACKTRACE=1
-          '';
+            # adding the export worked!
+            shellHook = ''
+              export CC=clang
+              export CXX=clang++
+              export CMAKE=${native-pkgs.cmake}/bin/cmake
+              export WGPU_ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER=1
+              export WGPU_BACKEND=vulkan
+              export RUST_BACKTRACE=1
+            '';
+          };
+
+          default = pkgs.mkShell rec {
+            shellHook = ''
+              echo "this flake provdies multiple shells choose one"
+              echo "nix develop .#win-shell # provides tooling to build the plugins"
+              echo "nix develop .#native-shell # provides tooling to build native tooling"
+            '';
+          };
         };
 
         nix.settings = {
