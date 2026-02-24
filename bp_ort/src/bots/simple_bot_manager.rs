@@ -88,7 +88,7 @@ pub fn register_manager_vars(_: &EngineData, token: EngineToken) {
         .expect("couldn't register bot_manager_max"),
     );
 
-    _ = TARGET_CONVAR.set(
+    _ = MIN_CONVAR.set(
         ConVarStruct::try_new(
             &ConVarRegister {
                 callback: Some(bot_manager_min),
