@@ -217,7 +217,7 @@ pub struct CGameTrace {
     pub unk1: f32,
     pub end_pos: Vector3,
     pub gap_0x1c: [c_char; 4],
-    pub surfce_normal: Vector3,
+    pub surface_normal: Vector3,
     pub gap_0x2c: [c_char; 4],
     pub fraction: f32,
     pub contents: i32,
@@ -430,7 +430,7 @@ offset_functions! {
         client_fully_connected = ClientFullyConnected where offset(0x153B70);
         run_null_command = RunNullCommand where offset(0x5A9FD0);
         simulate_player = unsafe extern "C" fn(*const CPlayer) where offset(0x0492580);
-        proccess_user_cmds = ProcessUsercmds where offset(0x159e50);
+        process_user_cmds = ProcessUsercmds where offset(0x159e50);
         player_process_usercmds = unsafe extern "C" fn(this: *const CPlayer, cmds: *const CUserCmd, numcmds: u32, unk: usize, totalcmds: u32, paused: c_char) where offset(0x5a81c0);
         create_null_user_cmd = unsafe extern "C" fn(*mut CUserCmd) -> *mut CUserCmd where offset(0x25f790);
         player_run_command = unsafe extern "C" fn(*mut CPlayer, *mut CUserCmd,*const CMoveHelperServer) -> () where offset(0x5a7d80);
@@ -446,10 +446,10 @@ offset_functions! {
         get_center_pos = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x00407d30); // found these by pocking around in a vtable :)
         get_angles_01 = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x00442ce0);
         get_angles = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x0043c030);
-        get_origin_varient = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x00443e80);
+        get_origin_variant = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x00443e80);
         get_origin = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x004198d0);
-        eye_angles = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *const Vector3 where offset(0x4455f0); // this acceses the vtable
-        view_angles = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *const Vector3 where offset(0x5d3960); // this acceses the vtable
+        eye_angles = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *const Vector3 where offset(0x4455f0); // this accesses the vtable
+        view_angles = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *const Vector3 where offset(0x5d3960); // this accesses the vtable
         calc_absolute_velocity = unsafe extern "C" fn(*const CPlayer, *const *const CPlayer, usize, usize) -> () where offset(0x40a1e0);
         get_smoothed_velocity = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x58dfc0);
         calc_origin = unsafe extern "C" fn(*const CPlayer, *const *const CPlayer, usize, usize) -> () where offset(0x409ae0);
@@ -485,7 +485,7 @@ offset_functions! {
         simple_filter_vtable = *const fn() where offset(0x8ebbf8);
         create_trace_hull = unsafe extern "C" fn(this: *mut Ray, start: *const Vector3, end: *const Vector3, min: *const Vector3, max: *const Vector3) where offset(0x0ba0d0);
 
-        draw_debug_line = unsafe extern "C" fn(point1: *const Vector3, point2: *const Vector3, r: i32, g: i32, b: i32, throught_walls: bool, time: f32) where offset(0x001ccf40);
+        draw_debug_line = unsafe extern "C" fn(point1: *const Vector3, point2: *const Vector3, r: i32, g: i32, b: i32, through_walls: bool, time: f32) where offset(0x001ccf40);
 
         ent_fire = unsafe extern "C" fn(entity_instance: *mut CBaseEntity,input_namee: *const c_char, args: *const c_void, delay: f32, other_entity: *mut CBaseEntity, unk_or_null: *const c_void, unk:c_char ) where offset(0x29ea70);
 
@@ -519,7 +519,7 @@ offset_functions! {
         get_some_net_var_csqvm = unsafe extern "C" fn() -> *mut CSquirrelVM where offset(0x2a0bb0);
     }
 }
-// very intersting call at server.dll + 0x151782
+// very interesting call at server.dll + 0x151782
 // call that possibly sets 1 max player for sp? : 0x15191a server.dll
 
 offset_functions! {

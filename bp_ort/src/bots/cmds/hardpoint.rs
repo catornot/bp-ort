@@ -5,7 +5,7 @@ use std::{cell::UnsafeCell, collections::HashMap};
 
 use crate::{
     bindings::CUserCmd,
-    bots::{cmds_helper::CUserCmdHelper, cmds_utils::*, BotData},
+    bots::{BotData, cmds_helper::CUserCmdHelper, cmds_utils::*},
     utils::get_ents_by_class_name,
 };
 
@@ -53,7 +53,7 @@ pub fn basic_cap_holding(
     let team = player.m_iTeamNum;
     let predicate = |other: &CPlayer| other.m_iTeamNum == team && !std::ptr::eq(other, player);
     let allied_player_count = player_iterator(&predicate, helper).count();
-    let prefered_hardpoint = get_claimed_hardpoint(player).or_else(|| {
+    let preferred_hardpoint = get_claimed_hardpoint(player).or_else(|| {
         get_hardpoints(helper)
             .map(|hardpoint| {
                 (
@@ -80,7 +80,7 @@ pub fn basic_cap_holding(
             .map(|(_, _, pos)| pos)
     });
 
-    let (new_target_pos, should_recaculate) = if let Some(hardpoint) = prefered_hardpoint {
+    let (new_target_pos, should_recaculate) = if let Some(hardpoint) = preferred_hardpoint {
         if distance3(hardpoint, origin) <= APROCHE_DISTANCE {
             claim_hardpoint(hardpoint, player);
 
@@ -129,13 +129,13 @@ pub fn basic_cap_holding(
         origin,
         new_target_pos,
         should_recaculate.unwrap_or_else(|| local_data.target_pos != new_target_pos)
-            || local_data.should_recaculate_path,
+            || local_data.should_recalculate_path,
         helper,
     );
 
     // not the actual use but it's okay
     local_data.target_pos = new_target_pos;
-    local_data.should_recaculate_path = false;
+    local_data.should_recalculate_path = false;
     local_data.approach_range = None;
 }
 

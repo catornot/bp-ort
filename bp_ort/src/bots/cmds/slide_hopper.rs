@@ -30,7 +30,7 @@ pub(crate) fn slide_hopper(
 
         if length <= 50. && local_data.has_started_to_slide_hop {
             local_data.has_started_to_slide_hop = false;
-            local_data.should_recaculate_path = true;
+            local_data.should_recalculate_path = true;
         } else if !local_data.has_started_to_slide_hop && length <= 50. && touching_ground {
             path_to_target(&mut cmd, local_data, origin, target, false, helper);
             cmd.buttons |= Action::Jump as u32 | Action::Duck as u32;

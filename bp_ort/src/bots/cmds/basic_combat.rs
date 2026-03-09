@@ -91,7 +91,7 @@ pub(crate) fn basic_combat(
                     local_data,
                     origin,
                     unsafe { *pet_titan.get_origin(v) },
-                    local_data.should_recaculate_path,
+                    local_data.should_recalculate_path,
                     helper,
                 );
             } else if let Some(((target_pos, target), _)) = target
@@ -101,28 +101,28 @@ pub(crate) fn basic_combat(
                     origin,
                     *target_pos,
                     local_data.last_target_index != get_player_index(target)
-                        || local_data.should_recaculate_path,
+                        || local_data.should_recalculate_path,
                     helper,
                 )
             {
                 local_data.last_target_index = get_player_index(target)
             }
 
-            local_data.should_recaculate_path = false;
+            local_data.should_recalculate_path = false;
         }
         (7, vision) if vision.is_none() || matches!(vision, Some((_, false))) => {
             // this may be a big issue here
-            // this sometimes does need to recaculate the path
+            // this sometimes does need to recalculate the path
             _ = path_to_target(
                 &mut cmd,
                 local_data,
                 origin,
                 local_data.target_pos,
-                local_data.should_recaculate_path,
+                local_data.should_recalculate_path,
                 helper,
             );
 
-            local_data.should_recaculate_path = false;
+            local_data.should_recalculate_path = false;
         }
         (8, target) if target.is_none() || matches!(target, Some((_, false))) => {
             let (new_target_pos, should_recaculate) =
@@ -155,13 +155,13 @@ pub(crate) fn basic_combat(
                 origin,
                 new_target_pos,
                 should_recaculate.unwrap_or_else(|| local_data.target_pos != new_target_pos)
-                    || local_data.should_recaculate_path,
+                    || local_data.should_recalculate_path,
                 helper,
             );
 
             // not the actual use but it's okay
             local_data.target_pos = new_target_pos;
-            local_data.should_recaculate_path = false;
+            local_data.should_recalculate_path = false;
             local_data.approach_range = None;
         }
         (9, target) if target.is_none() || matches!(target, Some((_, false))) => {
@@ -213,13 +213,13 @@ pub(crate) fn basic_combat(
                 origin,
                 new_target_pos,
                 should_recaculate.unwrap_or_else(|| local_data.target_pos != new_target_pos)
-                    || local_data.should_recaculate_path,
+                    || local_data.should_recalculate_path,
                 helper,
             );
 
             // not the actual use but it's okay
             local_data.target_pos = new_target_pos;
-            local_data.should_recaculate_path = false;
+            local_data.should_recalculate_path = false;
             local_data.approach_range = None;
         }
         (10, target) if target.is_none() || matches!(target, Some((_, false))) => {
@@ -231,7 +231,7 @@ pub(crate) fn basic_combat(
             cmd.move_ = Vector3::new(1., 0., 0.);
             cmd.buttons |= Action::Forward as u32 | Action::Walk as u32;
 
-            local_data.should_recaculate_path = true;
+            local_data.should_recalculate_path = true;
         }
         _ => {}
     }
@@ -251,7 +251,7 @@ pub(crate) fn basic_combat(
                 _ => 0,
             }
             .saturating_mul((time(helper) as u32 % 25 < 10) as u32)
-                // pilot nades TODO: check for cooldown
+                // pilot grenades TODO: check for cooldown
                 | match lookup_ent(player.m_inventory.offhandWeapons[0], helper.sv_funcs)
                     .and_then(|ent| get_weaponx_name(ent, helper.sv_funcs))
                     .unwrap_or_default()
@@ -273,7 +273,7 @@ pub(crate) fn basic_combat(
             .reserved_targets
             .get_mut(get_player_index(target_player))
         {
-            // a last shot target system would be a lot better imo or even prefered target
+            // a last shot target system would be a lot better imo or even preferred target
             *target = (time(helper), get_player_index(player) as u32);
         }
 

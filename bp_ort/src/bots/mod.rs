@@ -29,16 +29,16 @@ use std::{
 };
 
 use crate::{
-    bindings::{EngineFunctions, ServerFunctions, ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
+    PLUGIN,
+    bindings::{ENGINE_FUNCTIONS, EngineFunctions, SERVER_FUNCTIONS, ServerFunctions},
     bots::{
         convars::register_required_convars,
         debug_commands::register_debug_concommands,
         detour::{hook_engine, hook_server},
     },
     interfaces::ENGINE_INTERFACES,
-    navmesh::{navigation::Navigation, Hull},
+    navmesh::{Hull, navigation::Navigation},
     utils::{get_c_char_array, iterate_c_array_sized},
-    PLUGIN,
 };
 
 mod cmds;
@@ -97,7 +97,7 @@ pub(super) struct BotData {
     last_target_index: usize,
     target_pos: Vector3,
     last_shot: f32,
-    should_recaculate_path: bool,
+    should_recalculate_path: bool,
     next_check: f32,
     has_started_to_slide_hop: bool,
     approach_range: Option<f32>,
@@ -177,7 +177,6 @@ impl Plugin for Bots {
             "4b",
             "BlueBot",
             "Bobby_McBotFace",
-            "sb0tdge",
             "JustANormalBot",
             "Bot0358",
             "Bot9182",
@@ -351,7 +350,7 @@ impl Plugin for Bots {
                     "bot_uwufy",
                     "0",
                     FCVAR_GAMEDLL as i32,
-                    "decides weather connecting player should haev their name uwufyied",
+                    "decides weather connecting player should have their name uwufyied",
                 ),
                 token,
             )
@@ -592,11 +591,7 @@ fn choose_team_normal() -> i32 {
             .count();
     let team_3_count = total_players - team_2_count;
 
-    if team_3_count < team_2_count {
-        3
-    } else {
-        2
-    }
+    if team_3_count < team_2_count { 3 } else { 2 }
 }
 
 fn choose_team_ffa(max_teams: u32) -> i32 {
@@ -620,7 +615,7 @@ fn choose_team_ffa(max_teams: u32) -> i32 {
         .enumerate()
         .map(|(team, amount)| (team as u32 + TEAM_OFFSET + 1, amount))
         .filter(|(team, _)| *team >= 2)
-        .reduce(|left, rigth| if left.1 < rigth.1 { left } else { rigth })
+        .reduce(|left, right| if left.1 < right.1 { left } else { right })
         .map(|(team, _)| team as i32)
         .unwrap_or(2)
 }

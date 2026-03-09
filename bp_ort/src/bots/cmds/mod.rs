@@ -276,7 +276,7 @@ pub(super) fn get_cmd(
                     local_data,
                     origin,
                     titan_pos,
-                    local_data.should_recaculate_path,
+                    local_data.should_recalculate_path,
                     &helper,
                 );
 
@@ -304,11 +304,11 @@ pub(super) fn get_cmd(
                 local_data,
                 origin,
                 local_data.target_pos,
-                local_data.should_recaculate_path,
+                local_data.should_recalculate_path,
                 &helper,
             );
 
-            local_data.should_recaculate_path = false;
+            local_data.should_recalculate_path = false;
 
             cmd
         }

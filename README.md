@@ -11,7 +11,7 @@ Other features that this plugin offers
 - "other testing functionality"
 - admin abuse
 
-pls refrain from downloading this mod if you don't know how, it's under active development and I don't have lot's of time to waste.
+please refrain from downloading this mod if you don't know how, it's under active development and I don't have lot's of time to waste.
 
 you can contact me tho at:
 - [northstar discord](https://northstar.tf/discord) (as @cat_or_not)
@@ -22,7 +22,7 @@ you can contact me tho at:
 
 # Ongoing Rewrite
 this is like actual rewrite but it kind of is
-old systems are left intack but are instead kind of put of EOL which in this could mean they can get removed at any point.
+old systems are left intact but are instead kind of put of EOL which in this could mean they can get removed at any point.
 this "EOL" tag doesn't include any squirrel apis and admin abuse
 
 most importantly it will bring better navigation and combat capabilities for bots (like wallrunning)
@@ -43,7 +43,7 @@ kanban
     Navmesh[Navmesh Generation]
 ```
 
-due to unforseen obstables the rewrite is not coming by the end of 2025, currently looking to getting it done by march 2026
+due to unforeseen obstacles the rewrite is not coming by the end of 2025, currently looking to getting it done by march 2026
 
 ## current sq api
 
@@ -51,7 +51,7 @@ due to unforseen obstables the rewrite is not coming by the end of 2025, current
 
 - `void function BotSetTitan(entity bot, string titan)` sets the titan type for the bot
 - `void function BotSetTargetPos(entity bot, vector target)` sets a goal for goal follower ai to follow
-- `void function BotSetSimulationType(entity bot, int sim_type)` sets the bot index for a bot (doesn't work when called rigth after a bot is spawned)
+- `void function BotSetSimulationType(entity bot, int sim_type)` sets the bot index for a bot (doesn't work when called right after a bot is spawned)
 - `entity ornull function BotSpawn(string bot_name)` spawns a bot with a name or if it is passed with "" the name is chosen randomly
 - `void function AddBotName(string bot_name)` adds a bot name to the random name list
 - `void function ClearBotNames()` removes all bot names from the random name list (scary!)
@@ -63,12 +63,12 @@ due to unforseen obstables the rewrite is not coming by the end of 2025, current
 - `array<vector> function NavigationGetAllPoints(var nav)`
 - `vector ornull function NavigationNextPoint(var nav)`
 
-**Code Callback** - the plugin attemps to call the following functions when the player connects which are not defined anywhere (aka you can define them)
+**Code Callback** - the plugin attempts to call the following functions when the player connects which are not defined anywhere (aka you can define them)
 
 - `string function CodeCallBack_CanChangeName(string uid, string name)`
 - `string function CodeCallBack_CanChangeClangTag(string uid, string clan_tag)`
 
-### name overides
+### name overrides
 
 - `void function RememberNameOverride(entity player, string name, string clan_tag )`
 
@@ -99,7 +99,7 @@ controls which behavior is the default for the bots
 - `bot_clang_tag <tag:string>`
 the clan tag the bots get on spawn (default is BOT) 
 
-### most imporant command
+### most important command
 
 - `bot_spawn <name:int> <team:int> <ai:int>`
 spawns a bot with a given name team or [ai index](https://github.com/catornot/bp-ort?tab=readme-ov-file#all-the-ai-indices)
@@ -117,7 +117,7 @@ other ones are found under `bot_` namespace (they are not so important)
 - 7 => goal follower assigned from scripts
 - 8 => headhunter ai
 - 9 => ctf ai
-- 10 => amped hardpoint ai (reqires navmesh)
+- 10 => amped hardpoint ai (requires navmesh)
 - 11 => reserved
 - 12 => slow crouching 
 - 13 => follows farthest player 
@@ -138,7 +138,7 @@ other ones are found under `bot_` namespace (they are not so important)
 - 34 => use offhand ability 4
 - 100 => experimental wallrunning ai
 
-6, 7, 8, 9, 10, 11, 13, 14, 19, and 21 require navmesh to be present on the map otherwise the game will crash (all of the standart mp maps have navmeshes)
+6, 7, 8, 9, 10, 11, 13, 14, 19, and 21 require navmesh to be present on the map otherwise the game will crash (all of the standard mp maps have navmeshes)
 
 ### comments on "combat ai" and it's derivatives
 it's a general purpose routine for the bots to follow.
@@ -153,6 +153,6 @@ like the one before it but it now accepts a uid so that it can be set before any
 btw the cvar `bot_uwufy` controls if connecting players will get their name uwufied (it's disabled by default now)
 
 # BotExtras
-this a optinal but recommend to have script mod for this plugin. it adds extra features on top of the plugin that are simply easier to implement in scripts.
+this a optional but recommend to have script mod for this plugin. it adds extra features on top of the plugin that are simply easier to implement in scripts.
 
 it's most critical feature is notifying the plugin of the current selected titan for the bot and swapping loadout for bots. it also adds mod settings integration for bp_ort.

@@ -174,8 +174,8 @@ pub fn interfaces_test_player() -> Option<()> {
         let same_v = (server_functions.get_angles)(player, &mut v).as_mut()?;
         log::info!("get_angles = {same_v:?}");
 
-        let same_v = (server_functions.get_origin_varient)(player, &mut v).as_mut()?;
-        log::info!("get_origin_varient = {same_v:?}");
+        let same_v = (server_functions.get_origin_variant)(player, &mut v).as_mut()?;
+        log::info!("get_origin_variant = {same_v:?}");
 
         let same_v = (server_functions.get_origin)(player, &mut v).as_mut()?;
         log::info!("get_origin = {same_v:?}");
