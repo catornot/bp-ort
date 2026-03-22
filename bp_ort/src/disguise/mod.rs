@@ -13,7 +13,7 @@ impl Plugin for Disguise {
         PluginContext::DEDICATED,
     );
     fn new(_: bool) -> Self {
-        sqapi::digsuise_sqapi();
+        sqapi::disguise_sqapi();
         Self {}
     }
 }

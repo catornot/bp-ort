@@ -155,6 +155,7 @@ fn disguise(
 
             unsafe {
                 // HACK: setting player name to nothing tricks the game into running setname
+                set_c_char_array(&mut player.m_szNetname, &name);
                 set_c_char_array(&mut client.m_szServerName, "");
                 (ENGINE_FUNCTIONS.wait().cclient_setname)(
                     client,

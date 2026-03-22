@@ -10,7 +10,7 @@ use shared::{
 };
 
 use crate::{
-    bindings::{EngineFunctions, ServerFunctions, ENGINE_FUNCTIONS},
+    bindings::{ENGINE_FUNCTIONS, EngineFunctions, ServerFunctions},
     utils::{from_c_string, get_c_char_array_lossy, iterate_c_array_sized, send_client_print},
 };
 
