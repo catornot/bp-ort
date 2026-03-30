@@ -44,7 +44,7 @@ pub fn geoset_to_meshes(
         tricoll_headers,
         tricoll_triangles,
         geo_sets,
-        col_primatives,
+        col_primitives,
         unique_contents,
         brushes,
         brush_side_plane_offsets,
@@ -69,7 +69,7 @@ pub fn geoset_to_meshes(
     geo_sets
         .into_iter()
         .flat_map(|geoset| {
-            col_primatives
+            col_primitives
                 .get(((geoset.prim_start >> 8) & 0x1FFFFF) as usize..)
                 .unwrap_or(&[])
                 .iter()

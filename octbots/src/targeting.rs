@@ -267,7 +267,7 @@ pub fn run_targeting(
                 if helper.globals.curTime > brain.t.reacts_at {
                     let mut v = Vector3::ZERO;
 
-                    let mut weapon_state = WeaponState::Nothing;
+                    let mut weapon_state = WeaponState::Idle;
                     if let Some(weapon) = lookup_ent(bot.m_inventory.activeWeapon, helper.sv_funcs)
                         .and_then::<&CWeaponX, _>(|ent| ent.dynamic_cast())
                     {
@@ -279,7 +279,7 @@ pub fn run_targeting(
                             weapon.m_modVars[0x31c..0x31c + 4][i]
                         })) != 0.;
                         let semi_auto_allowed_fire = !weapon.m_playerData.m_semiAutoTriggerDown
-                            || (weapon.m_weapState == WeaponState::Nothing
+                            || (weapon.m_weapState == WeaponState::Idle
                                 && weapon.m_weapState == brain.t.last_weapon_state);
                         let is_fully_zoomed_in = weapon.m_playerData.m_targetZoomFOV
                                 <= weapon.m_playerData.m_curZoomFOV
@@ -324,7 +324,7 @@ pub fn run_targeting(
 
                     let mut v = Vector3::ZERO;
                     if let Some(point) = brain.path.get(1)
-                        && weapon_state != WeaponState::Reload // run when reloading
+                        && weapon_state != WeaponState::Reloading // run when reloading
                         && trace_ray(
                             unsafe { *ent.get_origin(&mut v) },
                             point.as_vec(),

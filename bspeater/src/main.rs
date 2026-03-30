@@ -256,7 +256,7 @@ fn main() -> anyhow::Result<()> {
         read_lump_data::<TricollTri>(&mut bsp, &header, LumpIds::TRICOLL_TRIANGLES)?;
     // let texture_data = read_lump_data::<Dtexdata>(&mut bsp, &header, LumpIds::TEXTURE_DATA)?;
     let geo_sets = read_lump_data::<GeoSet>(&mut bsp, &header, LumpIds::CM_GEO_SETS)?;
-    let col_primatives =
+    let col_primitives =
         read_lump_data::<CollPrimitive>(&mut bsp, &header, LumpIds::CM_PRIMITIVES)?;
     let unique_contents = read_lump_data::<i32>(&mut bsp, &header, LumpIds::CM_UNIQUE_CONTENTS)?;
 
@@ -283,7 +283,7 @@ fn main() -> anyhow::Result<()> {
             tricoll_headers,
             tricoll_triangles,
             geo_sets,
-            col_primatives,
+            col_primitives,
             unique_contents,
             brushes,
             brush_side_plane_offsets,

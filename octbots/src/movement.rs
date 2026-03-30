@@ -1,4 +1,5 @@
-use bevy_math::{bounding::RayCast3d, prelude::*};
+use bevy_math::bounding::RayCast3d;
+use bevy_math::prelude::*;
 use bonsai_bt::Status;
 use oktree::prelude::*;
 use parry3d::shape::Capsule;
@@ -18,7 +19,7 @@ use crate::targeting::natural_aim;
 use crate::{
     behavior::BotAction,
     loader::{Navmesh, NavmeshStatus},
-    nav_points::{tuvec_to_vector3, vector3_to_tuvec, NavPoint},
+    nav_points::{NavPoint, tuvec_to_vector3, vector3_to_tuvec},
     pathfinding::get_neighbors_h,
 };
 
@@ -493,8 +494,8 @@ pub fn run_movement(
                     .reduce(|l, r| {
                         // if the amount of walls is the same check for distance
                         if l.1 == r.1 {
-                            if distance2d(l.0 .0, brain.abs_origin, cell_size)
-                                < distance2d(r.0 .0, brain.abs_origin, cell_size)
+                            if distance2d(l.0.0, brain.abs_origin, cell_size)
+                                < distance2d(r.0.0, brain.abs_origin, cell_size)
                             {
                                 l
                             } else {

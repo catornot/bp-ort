@@ -840,7 +840,7 @@ pub struct BSPData {
     pub tricoll_headers: Vec<TricollHeader>,
     pub tricoll_triangles: Vec<TricollTri>,
     pub geo_sets: Vec<GeoSet>,
-    pub col_primatives: Vec<CollPrimitive>,
+    pub col_primitives: Vec<CollPrimitive>,
     pub unique_contents: Vec<i32>,
     pub brushes: Vec<Brush>,
     pub brush_side_plane_offsets: Vec<u16>,

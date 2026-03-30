@@ -9,24 +9,28 @@ pub fn disguise_sqapi() {
 }
 
 #[rrplug::sqfunction(VM = "SERVER", ExportName = "DisguiseName")]
-pub fn disguise_name(player: Option<&mut CPlayer>, name: String) -> Result<(), String> {
+pub fn disguise_name(player: Option<&mut CPlayer>, name: String) -> i32 {
     let Some(player) = player else {
-        return Err("I am sorry but this is not a player")?; // real
+        // not a player error
+        return 3;
     };
 
-    let client = unsafe {
+    let Some(client) = (unsafe {
         ENGINE_FUNCTIONS
             .wait()
             .client_array
             .add(get_player_index(player))
             .as_mut()
-            .ok_or("cannot find the corresponding client for the player")?
+    }) else {
+        // no client found for this player
+        return 2;
     };
 
     if name.len() >= client.m_szServerName.len()
         || name.is_char_boundary(client.m_szServerName.len() - 1)
     {
-        Err("too long")?;
+        // too long
+        return 1;
     }
 
     unsafe {
@@ -39,28 +43,32 @@ pub fn disguise_name(player: Option<&mut CPlayer>, name: String) -> Result<(), S
         );
     }
 
-    Ok(())
+    0
 }
 
 #[rrplug::sqfunction(VM = "SERVER", ExportName = "DisguiseTag")]
-pub fn disguise_tag(player: Option<&mut CPlayer>, tag: String) -> Result<(), String> {
+pub fn disguise_tag(player: Option<&mut CPlayer>, tag: String) -> i32 {
     let Some(player) = player else {
-        return Err("I am sorry but this is not a player")?; // real
+        // not a player error
+        return 3;
     };
 
-    let client = unsafe {
+    let Some(client) = (unsafe {
         ENGINE_FUNCTIONS
             .wait()
             .client_array
             .add(get_player_index(player))
             .as_mut()
-            .ok_or("cannot find the corresponding client for the player")?
+    }) else {
+        // no client found for this player
+        return 2;
     };
 
     if tag.len() >= client.m_szServerName.len()
         || tag.is_char_boundary(client.m_szServerName.len() - 1)
     {
-        Err("too long")?;
+        // too long
+        return 1;
     }
 
     let name = get_c_char_array(&client.m_szServerName)
@@ -74,5 +82,5 @@ pub fn disguise_tag(player: Option<&mut CPlayer>, tag: String) -> Result<(), Str
         (ENGINE_FUNCTIONS.wait().cclient_setname)(client, (name + "\0").as_ptr().cast());
     }
 
-    Ok(())
+    0
 }
