@@ -54,7 +54,7 @@ impl Plugin for HoloPlus {
                             "holoplus_enabled",
                             "0",
                             FCVAR_GAMEDLL as i32,
-                            "toggles holoplugs",
+                            "toggles holoplus",
                         ),
                         _token,
                     )
@@ -88,7 +88,7 @@ impl Plugin for HoloPlus {
     }
 }
 
-pub fn runholoframe() {
+pub fn run_holo_frame() {
     if let Some((globals, _engine, server)) = ENGINE_FUNCTIONS.get().and_then(|engine| {
         Some((
             unsafe { engine.globals.as_ref()? },
