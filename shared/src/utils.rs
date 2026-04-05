@@ -1,6 +1,7 @@
 use rrplug::{
     bindings::{
         class_types::{cbaseentity::CBaseEntity, client::SignonState, cplayer::CPlayer},
+        squirreldatatypes::SQString,
         squirrelfunctions::SQUIRREL_SERVER_FUNCS,
     },
     mid::utils::try_cstring,
@@ -138,6 +139,14 @@ pub fn get_c_char_array<const U: usize>(buf: &[i8; U]) -> Option<&str> {
         .unwrap_or(buf.len());
     // SAFETY: an i8 is a valid u8
     str::from_utf8(&(unsafe { std::mem::transmute::<&[i8; U], &[u8; U]>(buf) })[0..index]).ok()
+}
+
+#[inline]
+pub fn get_from_sq_string(buf: &SQString) -> Option<&str> {
+    str::from_utf8(unsafe {
+        std::slice::from_raw_parts(buf._val.as_ptr().cast(), buf.length as usize)
+    })
+    .ok()
 }
 
 #[inline]

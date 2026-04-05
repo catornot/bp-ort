@@ -5051,7 +5051,7 @@ checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
 [[package]]
 name = "rrplug"
 version = "4.2.1"
-source = "git+https://github.com/catornot/rrplug.git#d460592afd4f0dc9d90b44c3f40e5cc3c5f544b4"
+source = "git+https://github.com/catornot/rrplug.git#2149608e01c019faf4c050da156ee1a68ec9230d"
 dependencies = [
  "bitflags 2.10.0",
  "log",
@@ -5065,7 +5065,7 @@ dependencies = [
 [[package]]
 name = "rrplug_proc"
 version = "4.2.1"
-source = "git+https://github.com/catornot/rrplug.git#d460592afd4f0dc9d90b44c3f40e5cc3c5f544b4"
+source = "git+https://github.com/catornot/rrplug.git#2149608e01c019faf4c050da156ee1a68ec9230d"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5150,12 +5150,6 @@ checksum = "3640bec8aad418d7d03c72ea2de10d5c646a598f9883c7babc160d91e3c1b26c"
 dependencies = [
  "twox-hash",
 ]
-
-[[package]]
-name = "ryu"
-version = "1.0.20"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28d3b2b1366ec20994f1fd18c3c594f05c5dd4bc44d8bb0c1c632c8d6829481f"
 
 [[package]]
 name = "safe_arch"
@@ -5250,14 +5244,16 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.143"
+version = "1.0.149"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d401abef1d108fbd9cbaebc3e46611f4b1021f714a0597a71f41ee463f5f4a5a"
+checksum = "83fc039473c5595ace860d8c4fafa220ff474b3fc6bfdb4293327f1a37e94d86"
 dependencies = [
+ "indexmap",
  "itoa",
  "memchr",
- "ryu",
  "serde",
+ "serde_core",
+ "zmij",
 ]
 
 [[package]]
@@ -5268,6 +5264,7 @@ dependencies = [
  "retour",
  "ron",
  "rrplug",
+ "serde_json",
  "shared",
  "sqparse",
 ]
@@ -7002,3 +6999,9 @@ dependencies = [
  "quote",
  "syn",
 ]
+
+[[package]]
+name = "zmij"
+version = "1.0.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"

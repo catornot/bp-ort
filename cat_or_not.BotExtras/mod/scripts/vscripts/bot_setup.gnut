@@ -262,8 +262,7 @@ bool function TestScriptNavs(entity player, array<string> args) {
 
 		vector prevPoint = player.GetOrigin();
 		// I messed up return types for arrays in rrplug somehow
-		foreach( var pointVar in expect array(NavigationGetAllPoints(navs))) {
-			vector point = expect vector(pointVar)
+		foreach( vector point in NavigationGetAllPoints(navs)) {
 			DebugDrawLine(prevPoint, point, 0, 255, 0, true, 1000)
 			prevPoint = point
 		}
