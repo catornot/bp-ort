@@ -287,9 +287,11 @@ bool function TestScriptOct(entity player, array<string> args) {
 
 void function TestScriptOct_Threaded(vector start, vector end) {
 	array<vector> points = []
+	array< array<vector> > out_points = []
 
 	try {
-		points = OcttreeFindPath(start + <0,0,50>, end + <0,0,50>)
+		OcttreeFindPath(start + <0,0,50>, end + <0,0,50>, out_points)
+		points = out_points[0]
 	} catch (error) {
 		print("didn't work")
 	}
