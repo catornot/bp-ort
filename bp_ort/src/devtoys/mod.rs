@@ -102,6 +102,9 @@ impl Plugin for DevToys {
             WhichDll::Other("materialsystem_dx11.dll") => {
                 random_detour::hook_materialsystem(dll_ptr.get_dll_ptr());
             }
+            WhichDll::Other("OriginSDK.dll") => {
+                detour::hook_origin_sdk(dll_ptr.get_dll_ptr());
+            }
 
             _ => {}
         }
