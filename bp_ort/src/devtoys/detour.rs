@@ -1,10 +1,6 @@
 use retour::static_detour;
 use rrplug::{bindings::cvar::command::CCommand, prelude::EngineToken};
-use std::{
-    ffi::c_void,
-    mem,
-    sync::atomic::{AtomicBool, Ordering},
-};
+use std::{ffi::c_void, mem};
 
 use super::{DRAWWORLD_CONVAR, PAUSABLE_CONVAR};
 
@@ -71,14 +67,8 @@ pub fn hook_engine(addr: *const c_void) {
     }
 }
 
-static IS_INSTALLED: AtomicBool = AtomicBool::new(true);
-
 fn check_if_origin_is_installed_hook() -> bool {
-    IS_INSTALLED.store(
-        unsafe { CheckIfOriginIsInstalled.call() },
-        Ordering::Relaxed,
-    );
-    if !IS_INSTALLED.load(Ordering::Relaxed) {
+    if unsafe { CheckIfOriginIsInstalled.call() } {
         log::warn!(
             "Origin is NOT installed according to OriginSDK's check (HKLM\\SOFTWARE\\Wow6432Node\\Origin\\ClientPath is missing/empty)."
         );
@@ -92,7 +82,7 @@ fn check_if_origin_is_installed_hook() -> bool {
 fn try_to_start_origin_hook(a1: *mut ()) -> u64 {
     // Calling the original still has it try to start up Origin/EA App if it's down
     // We just want to ignore a failure in case we're on Linux and LSX is started in a different prefix...
-    if !IS_INSTALLED.load(Ordering::Relaxed) || unsafe { TryToStartOrigin.call(a1) } != 0 {
+    if unsafe { TryToStartOrigin.call(a1) } != 0 {
         log::warn!(
             "Origin process has failed to start. We are ignoring this and let it fail on LSX connection attempt, because LSX might still be up regardless, even if this failed."
         );
