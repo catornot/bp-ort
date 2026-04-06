@@ -159,7 +159,7 @@
             WINEPATH = nixpkgs.lib.makeLibraryPath buildInputs;
           };
 
-          native-shell = pkgs.mkShell rec {
+          native-shell = native-pkgs.mkShell rec {
             nativeBuildInputs = with native-pkgs; [
               cargo-deny
               cargo-audit
@@ -217,11 +217,18 @@
             '';
           };
 
-          default = pkgs.mkShell rec {
+          wiki-shell = native-pkgs.mkShell {
+            nativeBuildInputs = with native-pkgs; [
+              mdbook
+            ];
+          };
+
+          default = native-pkgs.mkShell {
             shellHook = ''
               echo "this flake provdies multiple shells choose one"
               echo "nix develop .#win-shell # provides tooling to build the plugins"
               echo "nix develop .#native-shell # provides tooling to build native tooling"
+              echo "nix develop .#wiju-shell # provides to build the wiki"
             '';
           };
         };

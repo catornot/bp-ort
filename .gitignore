@@ -4,3 +4,6 @@
 /output
 justfile
 bacon.toml
+
+# wiki
+book
