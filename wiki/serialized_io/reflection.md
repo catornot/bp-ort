@@ -62,6 +62,7 @@ where `TypeName` is the registered type but in PascalCase
 
 ### `BPSerialize<TypeName>`
 `string functionref( TypeName obj )`
+
 Serializes the type to json.
 
 #### Errors
@@ -69,6 +70,7 @@ Will throw a script error if the serialization wasn't successful.
 
 ### `BPDeserialize<TypeName>`
 `TypeName functionref( string json )`
+
 Deserializes the type from json.
 
 #### Errors
