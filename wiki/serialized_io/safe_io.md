@@ -71,13 +71,17 @@ errors are returned as string, null indicates no errors occurred
 
 Will delete the provided file from disc
 
-## `BPDoesFileExist` 
-`string ornull functionref(string file_name)`
-
-Will check if the provided file name exists in the file system.
-
 ### Errors
 errors are returned as string, null indicates no errors occurred 
+
+## `BPDoesFileExist` 
+`bool functionref(string file_name)`
+
+Will check if the provided file name exists in the file system.
+Returns true if it exists or false if it doesn't.
+
+![true](https://media1.tenor.com/m/41k8AmetlCUAAAAd/true-get-this-man-a-true.gif)
+
 
 
 ## Note
