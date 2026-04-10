@@ -45,18 +45,18 @@ impl<T: PushToSquirrelVm> SQOutParam<T> {
         mut sqvm: std::ptr::NonNull<HSquirrelVM>,
         sqfunctions: &'static SquirrelFunctions,
     ) -> bool {
+        let mut null_object = SQObject {
+            _Type: SQObjectType::OT_NULL,
+            structNumber: 0,
+            _VAL: SQObjectValue {
+                asString: std::ptr::null_mut(),
+            },
+        };
         if let SQOutParam(Some(mut array), _) = self {
             let array = array.get_mut();
             if array._allocated < 1 {
-                let object = SQObject {
-                    _Type: SQObjectType::OT_NULL,
-                    structNumber: 0,
-                    _VAL: SQObjectValue {
-                        asString: std::ptr::null_mut(),
-                    },
-                };
                 unsafe {
-                    (sqfunctions.sq_object_vector_resize)(array, 1, &object);
+                    (sqfunctions.sq_object_vector_resize)(array, 1, &null_object);
                 }
             }
 
@@ -69,12 +69,16 @@ impl<T: PushToSquirrelVm> SQOutParam<T> {
                     .add(sqvm._top as usize - 1)
                     .as_mut()
                     .unwrap_unchecked();
+
+                sqvm._top -= 1; // manually pop the stack
+                
+                // put pushed object into the array
                 std::mem::swap(top, array._values.as_mut().unwrap_unchecked());
+
+                // make sure the pushed slot is null
+                std::mem::swap(top, &mut null_object);
             };
             array._usedSlots = array._usedSlots.max(1);
-
-            // pop the null object
-            unsafe { (sqfunctions.sq_poptop)(sqvm.as_ptr()) };
 
             true
         } else {
