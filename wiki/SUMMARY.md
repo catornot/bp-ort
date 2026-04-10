@@ -6,3 +6,4 @@
 - [serialized_io](./serialized_io.md)
   - [reflection](./serialized_io/reflection.md)
   - [safe io](./serialized_io/safe_io.md)
+- [ranim](./ranim.md)
