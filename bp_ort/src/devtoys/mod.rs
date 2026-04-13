@@ -102,10 +102,6 @@ impl Plugin for DevToys {
             WhichDll::Other("materialsystem_dx11.dll") => {
                 random_detour::hook_materialsystem(dll_ptr.get_dll_ptr());
             }
-            WhichDll::Other("OriginSDK.dll") => {
-                detour::hook_origin_sdk(dll_ptr.get_dll_ptr());
-            }
-
             _ => {}
         }
 
@@ -128,7 +124,7 @@ impl Plugin for DevToys {
             .register_concommand(
                 "remove_max_min",
                 remove_max,
-                "removes the limits on interger convars",
+                "removes the limits on integer convars",
                 0,
                 token,
             )
