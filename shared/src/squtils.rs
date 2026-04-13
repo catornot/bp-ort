@@ -10,7 +10,7 @@ use rrplug::{
     },
     prelude::*,
 };
-use std::{marker::PhantomData, mem::MaybeUninit, ptr::NonNull, sync::atomic::Ordering};
+use std::{marker::PhantomData, ptr::NonNull, sync::atomic::Ordering};
 
 pub struct SQOutParam<T>(Option<SQHandle<'static, SQArray>>, PhantomData<T>);
 
@@ -71,7 +71,7 @@ impl<T: PushToSquirrelVm> SQOutParam<T> {
                     .unwrap_unchecked();
 
                 sqvm._top -= 1; // manually pop the stack
-                
+
                 // put pushed object into the array
                 std::mem::swap(top, array._values.as_mut().unwrap_unchecked());
 

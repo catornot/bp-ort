@@ -4828,6 +4828,7 @@ checksum = "f93e7e49bb0bf967717f7bd674458b3d6b0c5f48ec7e3038166026a69fc22223"
 name = "ranim"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "bincode",
  "bytemuck",
  "rrplug",
@@ -5262,7 +5263,6 @@ version = "0.1.0"
 dependencies = [
  "parking_lot",
  "retour",
- "ron",
  "rrplug",
  "serde_json",
  "shared",
