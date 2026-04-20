@@ -1984,6 +1984,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "catalectic_cl"
+version = "0.1.0"
+dependencies = [
+ "retour",
+ "rrplug",
+ "shared",
+]
+
+[[package]]
 name = "cc"
 version = "1.2.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5061,7 +5070,7 @@ checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
 [[package]]
 name = "rrplug"
 version = "4.2.1"
-source = "git+https://github.com/catornot/rrplug.git#ce806fa6d76a5025d10b55d67e4a9cc9e5713ce1"
+source = "git+https://github.com/catornot/rrplug.git#28ab4286702662f727bf0caa5b0c41af45b14ae2"
 dependencies = [
  "bitflags 2.10.0",
  "log",
@@ -5075,7 +5084,7 @@ dependencies = [
 [[package]]
 name = "rrplug_proc"
 version = "4.2.1"
-source = "git+https://github.com/catornot/rrplug.git#ce806fa6d76a5025d10b55d67e4a9cc9e5713ce1"
+source = "git+https://github.com/catornot/rrplug.git#28ab4286702662f727bf0caa5b0c41af45b14ae2"
 dependencies = [
  "proc-macro2",
  "quote",
