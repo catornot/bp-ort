@@ -77,7 +77,9 @@ pub fn set_stuff_on_join(client: &mut CClient) {
                 .unwrap_or_default(),
         );
         set_c_char_array(&mut client.m_szServerName, &new_name);
-    } else if let Some(new_name) = sqvm.as_ref().and_then(|sqvm| {
+    }
+
+    if let Some(new_name) = sqvm.as_ref().and_then(|sqvm| {
         call_sq_function::<String, _>(
             *sqvm,
             SQFUNCTIONS.server.wait(),

@@ -14,10 +14,10 @@ use crate::{
     devtoys::DevToys,
     disguise::Disguise,
     interfaces::Interfaces,
-    navmesh::NavigationPlugin,
-    navmesh::{RECAST_DETOUR, RecastDetour},
+    navmesh::{NavigationPlugin, RECAST_DETOUR, RecastDetour},
     screen_detour::hook_materialsystem,
     scripts::Scripts,
+    tickplus::TickPlus,
 };
 
 mod admin_abuse;
@@ -30,6 +30,7 @@ mod interfaces;
 mod navmesh;
 mod screen_detour;
 mod scripts;
+mod tickplus;
 mod utils;
 
 pub struct HooksPlugin {
@@ -41,6 +42,7 @@ pub struct HooksPlugin {
     pub scripts: Scripts,
     pub navigation: NavigationPlugin,
     pub holoplus: HoloPlus,
+    pub tickplus: TickPlus,
     is_dedicated_server: bool,
 }
 
@@ -72,6 +74,7 @@ impl Plugin for HooksPlugin {
             scripts: Scripts::new(reloaded),
             navigation: NavigationPlugin::new(reloaded),
             holoplus: HoloPlus::new(reloaded),
+            tickplus: TickPlus::new(reloaded),
             is_dedicated_server: std::env::args().any(|cmd| cmd.starts_with("-dedicated")),
         }
     }
@@ -123,6 +126,7 @@ impl Plugin for HooksPlugin {
         self.admin_abuse.on_dll_load(engine, dll_ptr, token);
         self.devtoys.on_dll_load(engine, dll_ptr, token);
         self.holoplus.on_dll_load(engine, dll_ptr, token);
+        self.tickplus.on_dll_load(engine, dll_ptr, token);
     }
 
     fn on_sqvm_created(&self, sqvm_handle: &CSquirrelVMHandle, token: EngineToken) {
@@ -130,11 +134,13 @@ impl Plugin for HooksPlugin {
         self.interfaces.on_sqvm_created(sqvm_handle, token);
         self.admin_abuse.on_sqvm_created(sqvm_handle, token);
         self.holoplus.on_sqvm_created(sqvm_handle, token);
+        self.tickplus.on_sqvm_created(sqvm_handle, token);
     }
 
     fn on_sqvm_destroyed(&self, sqvm_handle: &CSquirrelVMHandle, token: EngineToken) {
         self.bots.on_sqvm_destroyed(sqvm_handle, token);
         self.holoplus.on_sqvm_destroyed(sqvm_handle, token);
+        self.tickplus.on_sqvm_destroyed(sqvm_handle, token);
     }
 
     fn runframe(&self, token: EngineToken) {
@@ -142,6 +148,7 @@ impl Plugin for HooksPlugin {
         self.devtoys.runframe(token);
         self.bots.runframe(token);
         self.holoplus.runframe(token);
+        self.tickplus.runframe(token);
     }
 }
 

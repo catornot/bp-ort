@@ -1,9 +1,10 @@
 use bevy_math::prelude::*;
 use bonsai_bt::Status;
 use rrplug::{
-    bindings::class_types::{
+    bindings::server::{
+        EHandle,
         cbaseentity::CBaseEntity,
-        cplayer::{CPlayer, EHandle},
+        cplayer::CPlayer,
         cweaponx::{CWeaponX, WeaponState},
     },
     prelude::*,

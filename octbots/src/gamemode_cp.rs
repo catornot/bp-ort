@@ -2,10 +2,7 @@ use std::{collections::HashMap, ptr};
 
 use bonsai_bt::Status;
 use rrplug::{
-    bindings::class_types::{
-        cbaseentity::CBaseEntity,
-        cplayer::{CPlayer, EHandle},
-    },
+    bindings::server::{EHandle, cbaseentity::CBaseEntity, cplayer::CPlayer},
     prelude::*,
 };
 use shared::{
@@ -210,11 +207,7 @@ fn capture_point_get_capture_progress(hardpoint: &CBaseEntity, helper: &CUserCmd
 }
 
 fn get_other_team(team: i32) -> i32 {
-    if team == 3 {
-        2
-    } else {
-        3
-    }
+    if team == 3 { 2 } else { 3 }
 }
 
 pub fn distance3(pos: Vector3, target: Vector3) -> f32 {

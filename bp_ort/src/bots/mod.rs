@@ -45,7 +45,7 @@ mod cmds;
 mod cmds_exec;
 mod cmds_helper;
 mod cmds_interface;
-mod cmds_utils;
+pub mod cmds_utils;
 mod convars;
 mod debug_commands;
 mod detour;

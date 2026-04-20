@@ -9,6 +9,7 @@ use rrplug::{
             command::{CCommand, ConCommand, FnCommandCallback_t},
             convar::Color,
         },
+        server::cai_base_npc::CAI_BaseNPC,
         squirrelclasstypes::SQRESULT,
         squirreldatatypes::{CSquirrelVM, HSquirrelVM, SQObject, SQTable},
     },
@@ -517,6 +518,8 @@ offset_functions! {
         net_var_index_global = *mut u64 where offset(0xc69590);
         net_var_global_ent = *const *mut CBaseEntity where offset(0x00c6b7a8);
         get_some_net_var_csqvm = unsafe extern "C" fn() -> *mut CSquirrelVM where offset(0x2a0bb0);
+
+        set_enemy = unsafe extern "C" fn(*mut CAI_BaseNPC, *const CBaseEntity) where offset (0x308700);
     }
 }
 // very interesting call at server.dll + 0x151782
