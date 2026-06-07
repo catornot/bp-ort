@@ -5,8 +5,8 @@ use std::mem::MaybeUninit;
 use thiserror::Error;
 
 use super::{
+    Hull, JumpTypes, RECAST_DETOUR, RecastDetour,
     bindings::{dtNavMeshQuery, dtPolyRef, dtQueryFilter},
-    Hull, JumpTypes, RecastDetour, RECAST_DETOUR,
 };
 
 const HUMAN_EXTENTS: Vector3 = Vector3::new(100.0, 100.0, 136.0);

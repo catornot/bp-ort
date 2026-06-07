@@ -59,6 +59,7 @@ pub enum MovementAction {
     IsFenceHop,
     TryMountFence,
     IsCrawling,
+    IsCrawlingTitan,
     Crawl,
     IsWallRun,
     IsGoingDown,
@@ -373,6 +374,10 @@ pub fn run_movement(
             }
             _ => (Status::Failure, 0.),
         },
+        MovementAction::IsCrawlingTitan => {
+            // TODO
+            (Status::Failure, 0.)
+        }
         MovementAction::Crawl => {
             brain.next_cmd.buttons |= MoveAction::Duck as u32;
 
@@ -548,8 +553,9 @@ pub fn run_movement(
                     .next_wall_point
                     .and_then(|_| brain.navmesh.try_read())
                     .map(|navmesh| navmesh.cell_size * 2.)
-                    .unwrap_or_default(), // add more leway when wallrunning
-                25.,
+                    .unwrap_or_default()
+                    + if brain.is_titan { 200. } else { 0. }, // add more leway when wallrunning
+                25. + if brain.is_titan { 50. } else { 0. },
             )
             .transform_by(&[brain.origin.x, brain.origin.y, brain.origin.z].into());
             let is_in_hitbox = |target: &Vector3| {
@@ -583,7 +589,8 @@ pub fn run_movement(
 
             brain.m.next_wall_point = None;
             brain.m.next_point_override = None;
-            brain.needs_new_path = brain.path.len() < 3;
+            brain.needs_new_path = ((brain.path.len() < 3) && !brain.is_titan)
+                || brain.path.is_empty() && brain.is_titan;
 
             (Status::Success, 0.)
         }

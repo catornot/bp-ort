@@ -57,6 +57,14 @@ impl NavPoint {
         }
     }
 
+    pub fn from_vec(point: Vector3, cell_size: f32) -> Self {
+        Self {
+            nav: vector3_to_tuvec(cell_size, point),
+            world: point,
+            ground_distance: 0,
+        }
+    }
+
     pub fn as_vec(&self) -> Vector3 {
         self.world
     }

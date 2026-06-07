@@ -1,6 +1,6 @@
 /target
 /result
-/result-1
+/result-*
 /output
 justfile
 bacon.toml

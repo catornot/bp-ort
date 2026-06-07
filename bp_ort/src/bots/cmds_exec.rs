@@ -5,12 +5,13 @@ use crate::{
     utils::iterate_c_array_sized,
 };
 use rrplug::{
-    bindings::class_types::client::SignonState,
-    high::{vector::Vector3, UnsafeHandle},
+    bindings::{class_types::client::SignonState, server::cbaseentity::CBaseEntity},
+    high::{UnsafeHandle, vector::Vector3},
     prelude::EngineToken,
 };
+use shared::utils::nudge_type;
 
-use super::{cmds_helper::CUserCmdHelper, BOT_DATA_MAP, SHARED_BOT_DATA, SIMULATE_TYPE_CONVAR};
+use super::{BOT_DATA_MAP, SHARED_BOT_DATA, SIMULATE_TYPE_CONVAR, cmds_helper::CUserCmdHelper};
 
 static LAST_CMD: UnsafeHandle<UnsafeCell<Option<CUserCmd>>> =
     unsafe { UnsafeHandle::new(UnsafeCell::new(None)) };
@@ -19,7 +20,7 @@ pub fn replace_cmd() -> Option<&'static CUserCmd> {
     unsafe { LAST_CMD.get().get().as_ref()?.as_ref() }
 }
 
-pub fn run_bots_cmds(_paused: bool) {
+pub fn run_bots_cmds(paused: bool) {
     let sim_type = SIMULATE_TYPE_CONVAR.wait().get_value_i32();
     let server_functions = SERVER_FUNCTIONS.wait();
     let engine_functions = ENGINE_FUNCTIONS.wait();
@@ -36,6 +37,16 @@ pub fn run_bots_cmds(_paused: bool) {
     let mut bot_local_data = BOT_DATA_MAP.get(token).borrow_mut();
     let mut bot_shared_data = SHARED_BOT_DATA.get(token).borrow_mut();
 
+    crate::PLUGIN
+        .wait()
+        .bots
+        .external_simulations
+        .simulations
+        .read()
+        .iter()
+        .filter_map(|(_, sim)| sim.pre_simulate)
+        .for_each(|pre_simulate| pre_simulate(paused));
+
     for (player, edict) in unsafe {
         iterate_c_array_sized::<_, 32>(engine_functions.client_array.into())
             .enumerate()
@@ -45,7 +56,12 @@ pub fn run_bots_cmds(_paused: bool) {
                 let bot_player = player_by_index((i + 1) as i32).as_mut()?;
                 let handle = client.m_nHandle as usize - 1; // eh
 
-                (server_functions.calc_origin)(bot_player, &std::ptr::from_ref(bot_player), 0, 0);
+                (server_functions.calc_origin)(
+                    nudge_type::<&CBaseEntity>(bot_player),
+                    &std::ptr::from_ref(bot_player),
+                    0,
+                    0,
+                );
 
                 Some((bot_player, handle))
             })
@@ -134,7 +150,12 @@ pub fn run_bots_cmds(_paused: bool) {
             // this is still a bit jitary :(
             if globals.frameCount % 10 == 0 {
                 // HACK: so setting origin forces the game to check touching so kind of fixes that but doesn't work for exiting triggers maybe?
-                (server_functions.calc_origin)(player, &std::ptr::from_ref(player), 0, 0);
+                (server_functions.calc_origin)(
+                    nudge_type::<&CBaseEntity>(player),
+                    &std::ptr::from_ref(player),
+                    0,
+                    0,
+                );
                 (server_functions.set_origin_hack_do_not_use)(player, &player.m_vecAbsOrigin);
             }
 

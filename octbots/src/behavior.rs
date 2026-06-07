@@ -1,10 +1,10 @@
 use bevy_math::UVec3;
 use bonsai_bt::{
-    Action,
-    Behavior::{AlwaysSucceed, If, Select, WhenAny},
-    Event, Sequence,
+    Action, BT,
+    Behavior::{AlwaysSucceed, If, Invert, Select, WhenAny},
+    Event, RUNNING, Sequence,
     Status::{self},
-    UpdateArgs, BT, RUNNING,
+    UpdateArgs,
 };
 use itertools::Itertools;
 use oktree::prelude::*;
@@ -14,9 +14,10 @@ use rrplug::{
     prelude::*,
 };
 use shared::{
-    bindings::{CUserCmd, Contents, TraceCollisionGroup, SERVER_FUNCTIONS},
+    bindings::{CUserCmd, Contents, SERVER_FUNCTIONS, TraceCollisionGroup},
     cmds_helper::CUserCmdHelper,
-    utils::{get_player_index, is_alive, nudge_type, trace_ray},
+    plugin_interfaces::{ExternalSimulations, Hull},
+    utils::{DebugIgnore, get_player_index, is_alive, nudge_type, trace_ray},
 };
 use std::{
     collections::{BTreeSet, HashMap, VecDeque},
@@ -25,13 +26,13 @@ use std::{
 
 use crate::{
     async_pathfinding::{GoalFloat, PathReceiver},
-    gamemode_cp::{run_cp, GamemodeCPAction, SharedGamemodeCP},
-    gamemode_ctf::{run_ctf, GamemodeCTFAction, SharedGamemodeCTF},
+    gamemode_cp::{GamemodeCPAction, SharedGamemodeCP, run_cp},
+    gamemode_ctf::{GamemodeCTFAction, SharedGamemodeCTF, run_ctf},
     loader::{Navmesh, NavmeshStatus, Octree32},
-    movement::{run_movement, Movement, MovementAction},
-    nav_points::{tuvec_to_vector3, vector3_to_tuvec, NavPoint},
-    pathfinding::{find_path, Goal},
-    targeting::{run_targeting, Targeting, TargetingAction},
+    movement::{Movement, MovementAction, run_movement},
+    nav_points::{NavPoint, tuvec_to_vector3, vector3_to_tuvec},
+    pathfinding::{Goal, find_path},
+    targeting::{self, Targeting, TargetingAction, run_targeting},
 };
 
 static BEHAVIOR: LazyLock<RwLock<HashMap<u16, BT<BotAction, BotBrain>>>> =
@@ -45,7 +46,7 @@ pub struct SharedBotBrain {
     pub ctf: SharedGamemodeCTF,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct BotBrain {
     pub navmesh: Arc<RwLock<Navmesh>>,
     pub path_receiver: Option<PathReceiver>,
@@ -54,12 +55,15 @@ pub struct BotBrain {
     pub origin: Vector3,
     pub angles: Vector3,
     pub abs_origin: Vector3,
+    pub team: i32,
+    pub is_titan: bool,
     pub next_cmd: CUserCmd,
     pub last_alive_state: bool,
     pub looked_at_death_record: bool,
     pub needs_new_path: bool,
     gamemode: String,
     pub shared: Arc<Mutex<SharedBotBrain>>,
+    cmd_interface: DebugIgnore<&'static ExternalSimulations>,
 
     /// movement
     pub m: Movement,
@@ -78,6 +82,7 @@ pub enum BotAction {
     GamemodeCP(GamemodeCPAction),
     GamemodeCTF(GamemodeCTFAction),
     IsGamemode(&'static str),
+    IsTitan(Option<&'static str>),
 }
 
 pub fn drop_behaviors() {
@@ -89,28 +94,39 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
     let target_moving = Sequence(vec![
         Select(vec![
             // because we can't stop moving if we are wallrunning
-            Action(MovementAction::IsWallRun.into()),
+            Sequence(vec![
+                // will only trigger if the bot isn't in a titan
+                Invert(Box::new(Action(BotAction::IsTitan(None)))),
+                Action(MovementAction::IsWallRun.into()),
+            ]),
             Action(MovementAction::CanMove.into()),
         ]),
         Action(MovementAction::CheckReachability.into()),
-        AlwaysSucceed(Box::new(Select(vec![
-            Sequence(vec![
-                Action(MovementAction::IsJump.into()),
-                Action(MovementAction::Jump.into()),
-            ]),
-            Sequence(vec![
-                Action(MovementAction::IsCrawling.into()),
+        AlwaysSucceed(Box::new(If(
+            Box::new(Action(BotAction::IsTitan(None))),
+            Box::new(Select(vec![Sequence(vec![
+                Action(MovementAction::IsCrawlingTitan.into()),
                 Action(MovementAction::Crawl.into()),
-            ]),
-            Sequence(vec![
-                Action(MovementAction::IsFenceHop.into()),
-                Action(MovementAction::TryMountFence.into()),
-            ]),
-            Sequence(vec![
-                Action(MovementAction::IsGoingDown.into()),
-                Action(MovementAction::GoDownBetter.into()),
-            ]),
-        ]))),
+            ])])),
+            Box::new(Select(vec![
+                Sequence(vec![
+                    Action(MovementAction::IsJump.into()),
+                    Action(MovementAction::Jump.into()),
+                ]),
+                Sequence(vec![
+                    Action(MovementAction::IsCrawling.into()),
+                    Action(MovementAction::Crawl.into()),
+                ]),
+                Sequence(vec![
+                    Action(MovementAction::IsFenceHop.into()),
+                    Action(MovementAction::TryMountFence.into()),
+                ]),
+                Sequence(vec![
+                    Action(MovementAction::IsGoingDown.into()),
+                    Action(MovementAction::GoDownBetter.into()),
+                ]),
+            ])),
+        ))),
         AlwaysSucceed(Box::new(Action(MovementAction::Move.into()))),
         Action(MovementAction::FinishMove.into()),
     ]);
@@ -121,7 +137,7 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
             Action(TargetingAction::Shoot.into()),
         ]))),
         Action(TargetingAction::TargetSwitching.into()),
-        Action(TargetingAction::UpdateLastWeaponState.into()),
+        Action(TargetingAction::UpdatePostTargetting.into()),
     ]);
 
     let gamemode_cp = AlwaysSucceed(Box::new(Sequence(vec![
@@ -189,6 +205,8 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
             origin: Vector3::ZERO,
             angles: Vector3::ZERO,
             abs_origin: Vector3::ZERO,
+            team: 0,
+            is_titan: false,
             needs_new_path: true,
             gamemode: String::new(),
 
@@ -197,8 +215,19 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
             m: Movement::default(),
 
             shared: Arc::clone(&*SHARED),
+            cmd_interface: DebugIgnore(crate::PLUGIN.wait().simulations.wait()),
         },
     ));
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn pre_simulate(_paused: bool) {
+    let shared = SHARED.lock();
+    let mut behaviors = BEHAVIOR.write();
+    targeting::classify_threats(
+        &shared,
+        behaviors.iter_mut().map(|(_, b)| b.blackboard_mut()),
+    )
 }
 
 pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer) -> CUserCmd {
@@ -216,8 +245,8 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
             0,
         );
         (helper.sv_funcs.calc_origin)(
-            nudge_type::<&CPlayer>(bot),
-            &nudge_type::<*const CPlayer>(bot),
+            nudge_type::<&CBaseEntity>(bot),
+            &std::ptr::from_ref(bot),
             0,
             0,
         );
@@ -226,10 +255,12 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
     bt.blackboard_mut().origin = unsafe { *bot.get_origin(&mut v) };
     bt.blackboard_mut().angles = unsafe { *bot.eye_angles(&mut v) };
     bt.blackboard_mut().abs_origin = bot.m_vecAbsOrigin;
+    bt.blackboard_mut().team = bot.m_iTeamNum;
     bt.blackboard_mut().gamemode =
         ConVarStruct::find_convar_by_name("mp_gamemode", unsafe { EngineToken::new_unchecked() })
             .map(|convar| convar.get_value_string())
             .unwrap_or_default();
+    bt.blackboard_mut().is_titan = unsafe { bot.is_titan() };
 
     if is_alive(bot) != bt.blackboard().last_alive_state {
         bt.reset_bt();
@@ -246,7 +277,7 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
                 (Status::Failure, 0.)
             }
         }
-        BotAction::FindPath => 'path: {
+        BotAction::FindPath if !brain.is_titan => 'path: {
             let navmesh = brain.navmesh.read();
             let Some(end) = brain.t.current_target.to_goal(helper) else {
                 break 'path (Status::Failure, 0.);
@@ -365,6 +396,53 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
                 status
             }
         }
+        BotAction::FindPath => {
+            if (!brain.needs_new_path && brain.path_next_request < helper.globals.curTime)
+                || brain.path_next_request >= helper.globals.curTime
+            {
+                RUNNING
+            } else if let Some(cell_size) =
+                brain.navmesh.try_read().map(|navmesh| navmesh.cell_size)
+            {
+                brain.path_next_request = helper.globals.curTime + 0.1;
+
+                let end_point =
+                    brain
+                        .t
+                        .current_target
+                        .to_position(helper)
+                        .unwrap_or_else(|| unsafe {
+                            brain.cmd_interface.0.find_random_point(
+                                Hull::Titan,
+                                brain.abs_origin,
+                                500.,
+                                Some(50.),
+                            )
+                        });
+
+                let path = unsafe {
+                    brain
+                        .cmd_interface
+                        .0
+                        .find_path(Hull::Titan, brain.abs_origin, end_point)
+                };
+
+                if !path.as_slice().is_empty() {
+                    brain.path = path
+                        .as_slice()
+                        .iter()
+                        .rev()
+                        .map(|v| NavPoint::from_vec(*v + Vector3::new(0., 0., 25.), cell_size))
+                        .collect();
+                    brain.needs_new_path = false;
+                    (Status::Success, 0.)
+                } else {
+                    (Status::Failure, 0.)
+                }
+            } else {
+                (Status::Failure, 0.)
+            }
+        }
         BotAction::RenderPath => {
             let debug = crate::ENGINE_INTERFACES.wait().debug_overlay;
             brain
@@ -403,6 +481,13 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
                 (Status::Failure, 0.)
             }
         }
+        BotAction::IsTitan(_titan) => {
+            if brain.is_titan {
+                (Status::Success, 0.)
+            } else {
+                (Status::Failure, 0.)
+            }
+        }
         BotAction::GamemodeCP(gamemode_cp) => run_cp(gamemode_cp, brain, bot, helper),
         BotAction::GamemodeCTF(gamemode_ctf) => run_ctf(gamemode_ctf, brain, bot, helper),
     });
@@ -429,8 +514,8 @@ pub extern "C" fn test_closest_navpoint(helper: &CUserCmdHelper, bot: &mut CPlay
             0,
         );
         (helper.sv_funcs.calc_origin)(
-            nudge_type::<&CPlayer>(bot),
-            &nudge_type::<*const CPlayer>(bot),
+            nudge_type::<&CBaseEntity>(bot),
+            &std::ptr::from_ref(bot),
             0,
             0,
         );

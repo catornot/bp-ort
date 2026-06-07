@@ -1,11 +1,14 @@
-#![feature(mpmc_channel, stmt_expr_attributes, if_let_guard)]
+#![feature(mpmc_channel, stmt_expr_attributes, if_let_guard, iter_collect_into)]
 
 use nav_points::vector3_to_tuvec;
 use once_cell::sync::OnceCell;
 use parking_lot::{Mutex, RwLock};
 use rrplug::{
-    bindings::plugin_abi::PluginColor, exports::windows::Win32::Foundation::HMODULE,
-    mid::northstar::NORTHSTAR_DATA, prelude::*,
+    bindings::plugin_abi::PluginColor,
+    exports::windows::Win32::Foundation::HMODULE,
+    high::squirrel::compile_string,
+    mid::{northstar::NORTHSTAR_DATA, squirrel::SQVM_SERVER},
+    prelude::*,
 };
 use shared::{
     bindings::{
@@ -13,7 +16,7 @@ use shared::{
         MATSYS_FUNCTIONS, MatSysFunctions, SERVER_FUNCTIONS, ServerFunctions,
     },
     interfaces::{IVDebugOverlay, IVEngineServer},
-    plugin_interfaces::{ExternalSimulations, rust_version_hash},
+    plugin_interfaces::{CURERENT_INTERFACE_VERSION, ExternalSimulations, rust_version_hash},
 };
 use std::{ffi::CStr, sync::Arc};
 // use tracing_chrome::FlushGuard;
@@ -105,10 +108,19 @@ impl Plugin for OctBots {
             unsafe { ExternalSimulations::from_dll_name("bp_ort.dll", "ExternalSimulation001") }
                 .iter()
                 .find(|interface| unsafe { interface.rust_version_hash() == rust_version_hash() })
+                .filter(|interface| unsafe {
+                    interface.interface_version() == CURERENT_INTERFACE_VERSION
+                })
         {
+            _ = self.simulations.set(interface);
+
             unsafe {
                 if !interface.set_bot_init(PLUGIN_DLL_NAME, behavior::init_bot) {
                     log::error!("failed to register init_bot function");
+                }
+
+                if !interface.register_pre_simulate(PLUGIN_DLL_NAME, behavior::pre_simulate) {
+                    log::error!("failed to register pre_simulate function");
                 }
 
                 if !interface.register_simulation(
@@ -133,11 +145,10 @@ impl Plugin for OctBots {
                 unsafe { interface.rust_version_hash() },
                 rust_version_hash()
             );
-            _ = self.simulations.set(interface);
         } else {
             log::error!("failed to load interfaces from bp_ort; unloading!");
             log::error!(
-                "possibly because the plugin doesn't exist or was compiled on a different version of rustc"
+                "possibly because the plugin doesn't exist or was compiled on a different version of rustc or the interface version doesn't match"
             );
             let northstar_data = NORTHSTAR_DATA
                 .get()
@@ -194,7 +205,7 @@ impl Plugin for OctBots {
         unsafe { reloading::ReloadResponse::allow_reload() }
     }
 
-    fn runframe(&self, _engine_token: EngineToken) {
+    fn runframe(&self, engine_token: EngineToken) {
         // let mut frame = self.frame.lock();
         // *frame = unsafe { UnsafeHandle::new(span!(Level::TRACE, "frame").entered()) };
 
@@ -228,7 +239,7 @@ impl Plugin for OctBots {
                                 .as_str(),
                             )
                         {
-                            log::info!("loading extra hardpoits into navmesh");
+                            log::info!("loading extra hardpoints into navmesh");
                             let neighboor = (-3..=3).flat_map(|x| {
                                 (-3..=3).flat_map(move |y| (-2..=3).map(move |z| [x, y, z]))
                             });
@@ -251,6 +262,24 @@ impl Plugin for OctBots {
                             {
                                 _ = octtree.insert(point);
                             }
+                        } else if matches!(navmesh.navmesh, loader::NavmeshStatus::Unloaded)
+                            && let Ok(sqvm) = SQVM_SERVER.get(engine_token).try_borrow()
+                            && let Some(sqvm) = sqvm.as_ref().copied()
+                        {
+                            _ = compile_string(
+                                sqvm,
+                                SQFUNCTIONS.from_sqvm(sqvm),
+                                false,
+                                r#"
+                                thread void function() {
+                                   	while ( GetGameState() != eGameState.Playing )
+                                  		WaitFrame()
+
+                                    foreach ( entity player in GetPlayerArray() )    
+                                        SendHudMessage( player, "WARNING: couldn't load the bp_ort navmeshes for this map" , -1, 0.2, 255, 0, 0, 0, 0, 5, 0 )
+                                }()
+                                "#,
+                            );
                         }
                     }
                     loader::NavmeshStatus::Loaded(_) => {}

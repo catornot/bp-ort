@@ -32,7 +32,7 @@ impl Plugin for NavigationPlugin {
 
 #[repr(i32)]
 #[allow(unused)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, GetFromSquirrelVm, SQVMName)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, GetFromSquirrelVm, SQVMName)]
 pub enum Hull {
     Human,
     Medium,

@@ -123,7 +123,12 @@ pub fn run_holo_frame() {
 
             unsafe {
                 (server.calc_absolute_velocity)(player, &std::ptr::from_ref(player), 0, 0);
-                (server.calc_origin)(player, &std::ptr::from_ref(player), 0, 0);
+                (server.calc_origin)(
+                    nudge_type::<&CBaseEntity>(player),
+                    &std::ptr::from_ref(player),
+                    0,
+                    0,
+                );
             };
 
             let vel = player.m_vecAbsVelocity;

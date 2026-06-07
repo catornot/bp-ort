@@ -1,4 +1,4 @@
-#![feature(new_zeroed_alloc, if_let_guard)]
+#![feature(new_zeroed_alloc, if_let_guard, iter_collect_into)]
 #![allow(clippy::missing_safety_doc)]
 pub mod bindings;
 pub mod cmds_helper;

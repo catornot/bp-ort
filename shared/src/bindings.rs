@@ -453,7 +453,7 @@ offset_functions! {
         view_angles = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *const Vector3 where offset(0x5d3960); // this accesses the vtable
         calc_absolute_velocity = unsafe extern "C" fn(*const CPlayer, *const *const CPlayer, usize, usize) -> () where offset(0x40a1e0);
         get_smoothed_velocity = unsafe extern "C" fn(*const CPlayer, *mut Vector3) -> *mut Vector3 where offset(0x58dfc0);
-        calc_origin = unsafe extern "C" fn(*const CPlayer, *const *const CPlayer, usize, usize) -> () where offset(0x409ae0);
+        calc_origin = unsafe extern "C" fn(*const CBaseEntity, *const *const CBaseEntity, usize, usize) -> () where offset(0x409ae0);
 
         set_origin = unsafe extern "C" fn(*const CPlayer, *const Vector3) where offset(0x433a80);
         set_origin_hack_do_not_use = unsafe extern "C" fn(*const CPlayer, *const Vector3) where offset(0x42dd30);
@@ -472,6 +472,9 @@ offset_functions! {
         ent_list = *const CEntInfo where offset(0x112d770);
         get_ent_by_script_name = unsafe extern "C" fn(*const c_void, *const c_char, *mut i32) -> *mut CBaseEntity where offset(0x455030);
         get_parent = unsafe extern "C" fn(*const CBaseEntity) -> *mut CBaseEntity where offset(0x445d50);
+        get_npc_buffer = unsafe extern "C" fn(*const c_void) -> *const *mut CBaseEntity where offset(0x3b63a0);
+        get_npc_buffer_size = unsafe extern "C" fn(*const c_void) -> u32 where offset(0x3b7680);
+        npcbuffer = *const c_void where offset(0x1064650);
 
         get_offhand_weapon = unsafe extern "C" fn(*const CPlayer,u32 ) -> bool where offset(0xe1ec0); // not done
         set_weapon_by_slot = unsafe extern "C" fn(*const c_void, *const c_char) where offset(0xe4ba0);

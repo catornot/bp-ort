@@ -1,6 +1,9 @@
 #![allow(unused)]
 
+use std::ops::Deref;
+
 use rrplug::bindings::class_types::cplayer::CPlayer;
+use rrplug::bindings::server::cbaseentity::CBaseEntity;
 use rrplug::prelude::*;
 use rrplug::{
     bindings::{
@@ -101,7 +104,12 @@ fn teleport_server_command(command: CCommandResult) -> Option<()> {
         })
         .find_map(|(player, name)| {
             unsafe {
-                (funcs.calc_origin)(player, &nudge_type::<*const CPlayer>(player), 0, 0);
+                (funcs.calc_origin)(
+                    nudge_type::<&CBaseEntity>(player),
+                    &(nudge_type::<&CBaseEntity>(player.deref()) as *const CBaseEntity),
+                    0,
+                    0,
+                );
             }
             name_target
                 .starts_with(name.as_str())

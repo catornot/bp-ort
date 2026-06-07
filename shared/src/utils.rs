@@ -1,6 +1,8 @@
+use core::slice;
 use rrplug::{
     bindings::{
         class_types::{cbaseentity::CBaseEntity, client::SignonState, cplayer::CPlayer},
+        server::cbasecombatcharacter::CBaseCombatCharacter,
         squirreldatatypes::SQString,
         squirrelfunctions::SQUIRREL_SERVER_FUNCS,
     },
@@ -11,6 +13,7 @@ use std::{
     ffi::{CStr, c_char, c_void},
     marker::PhantomData,
     mem::MaybeUninit,
+    ops::{Deref, DerefMut},
 };
 
 use windows_sys::Win32::System::{
@@ -21,6 +24,40 @@ use crate::bindings::{
     CGameTrace, CTraceFilterSimple, Contents, ENGINE_FUNCTIONS, EngineFunctions, Ray,
     ServerFunctions, TraceCollisionGroup, VectorAligned,
 };
+
+pub struct DebugIgnore<T>(pub T);
+
+impl<T> std::fmt::Debug for DebugIgnore<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("DebugIgnore").finish_non_exhaustive()
+    }
+}
+
+impl<T> Deref for DebugIgnore<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> DerefMut for DebugIgnore<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<T: Clone> Clone for DebugIgnore<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<T: Default> Default for DebugIgnore<T> {
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
 
 pub struct ClassNameIter<'a> {
     // class_name: &'a CStr,
@@ -59,6 +96,41 @@ impl Iterator for ClassNameIter<'_> {
             .inspect(|ent| self.ent = std::ptr::from_ref(*ent).cast_mut())
             .map(std::ptr::from_mut)
         }
+    }
+}
+
+/// # SAFETY
+/// use this iterator quickly since it if it persists it may end up holding a dangling reference to an entity
+pub struct NPCIter<'a> {
+    ent: *const *mut CBaseEntity,
+    size: std::ops::Range<u32>,
+    phantom: PhantomData<&'a mut *mut CBaseEntity>,
+}
+
+impl<'a> NPCIter<'a> {
+    pub fn new(server_funcs: &'a ServerFunctions) -> Self {
+        Self {
+            ent: unsafe { (server_funcs.get_npc_buffer)(server_funcs.npcbuffer) },
+            size: 0..unsafe { (server_funcs.get_npc_buffer_size)(server_funcs.npcbuffer) },
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl Iterator for NPCIter<'_> {
+    type Item = *mut CBaseEntity;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let next = (unsafe { self.ent.as_ref() })?;
+
+        self.ent = unsafe {
+            self.ent
+                .add(1)
+                .as_ref()
+                .filter(|_| self.size.next().is_some())?
+        };
+
+        Some(unsafe { next.as_mut() }?)
     }
 }
 
@@ -440,4 +512,27 @@ pub fn get_global_net_float(global: impl AsRef<str>, server_funcs: &ServerFuncti
     //     ) as f32
     // }
     0.
+}
+
+pub unsafe fn get_npc_buffer(server_funcs: &ServerFunctions) -> &[*mut CBaseEntity] {
+    unsafe {
+        let first = (server_funcs.get_npc_buffer)(server_funcs.npcbuffer);
+
+        if first.is_null() {
+            return &[];
+        }
+
+        slice::from_raw_parts(
+            first,
+            (server_funcs.get_npc_buffer_size)(server_funcs.npcbuffer) as usize,
+        )
+    }
+}
+
+pub fn get_eye_position(ent: &CBaseCombatCharacter) -> Vector3 {
+    Vector3 {
+        x: ent.m_vecViewOffset.x + ent.m_vecPrevAbsOrigin.x,
+        y: ent.m_vecViewOffset.y + ent.m_vecPrevAbsOrigin.y,
+        z: ent.m_vecViewOffset.z + ent.m_vecPrevAbsOrigin.z,
+    }
 }
