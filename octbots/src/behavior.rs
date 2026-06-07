@@ -192,7 +192,7 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
         "init bot {} with {edict}",
         shared::utils::get_c_char_array_lossy(&client.m_szServerName)
     );
-    BEHAVIOR.write().entry(edict).insert_entry(BT::new(
+    let bt = BT::new(
         routine,
         BotBrain {
             navmesh: Arc::clone(&crate::PLUGIN.wait().navmesh),
@@ -217,7 +217,21 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
             shared: Arc::clone(&*SHARED),
             cmd_interface: DebugIgnore(crate::PLUGIN.wait().simulations.wait()),
         },
-    ));
+    );
+
+    #[cfg(feature = "extra-debug")]
+    let bt = if std::net::TcpListener::bind("127.0.0.1:32016")
+        .map(drop)
+        .is_ok()
+    {
+        log::info!("created a bot({edict}) with some telemetry :)");
+        bt.with_telemetry(32016)
+            .expect("failed to register telemetry")
+    } else {
+        bt
+    };
+
+    BEHAVIOR.write().entry(edict).insert_entry(bt);
 }
 
 #[unsafe(no_mangle)]

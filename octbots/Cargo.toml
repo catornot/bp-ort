@@ -12,7 +12,7 @@ parking_lot = "*"
 once_cell = "*"
 libc = "0.2.*"
 oktree = { version = "0.5.0", default-features = false, features = ["std"] }
-bonsai-bt = { version = "0.10.0", features = [] }
+bonsai-bt = { version = "0.12.0", features = [] }
 indexmap = "2.*"
 rustc-hash = "2.*"
 itertools = { workspace = true }
@@ -23,3 +23,6 @@ parry3d = { version = "0.25.*", features = ["simd-stable"] }
 
 [lib]
 crate-type = ["cdylib"]
+
+[features]
+extra-debug = ["bonsai-bt/visualize"]

@@ -22,7 +22,7 @@ use std::{ffi::CStr, sync::Arc};
 // use tracing_chrome::FlushGuard;
 // use tracing_subscriber::layer::SubscriberExt;
 
-use crate::async_pathfinding::JobMarket;
+use crate::{async_pathfinding::JobMarket, behavior::drop_behaviors};
 
 mod async_pathfinding;
 mod behavior;
@@ -200,6 +200,9 @@ impl Plugin for OctBots {
         unsafe { self.simulations.wait().drop_simulation(PLUGIN_DLL_NAME) };
         self.job_market.stop();
         // self.trace_guard.lock().flush();
+
+        // force the visualizer to stop and run other drop functions :skull: (didn't used to do that)
+        behavior::drop_behaviors();
 
         // has to be reloadable
         unsafe { reloading::ReloadResponse::allow_reload() }
