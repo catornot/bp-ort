@@ -1135,9 +1135,9 @@ dependencies = [
 
 [[package]]
 name = "bevy_math"
-version = "0.18.0"
+version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a815c514b8a6f7b11508cdc8b3a4bf0761e96a14227af40aa93cb1160989ce0"
+checksum = "e931fa969f89c83498b22c97432383afe90e90fd1a5e04fa07be8da4d3bcac84"
 dependencies = [
  "approx",
  "arrayvec",
@@ -1904,6 +1904,7 @@ dependencies = [
  "indexmap",
  "itertools 0.14.0",
  "modular-bitfield",
+ "octree",
  "oktree",
  "parking_lot",
  "rayon",
@@ -4538,6 +4539,14 @@ dependencies = [
  "rrplug",
  "rustc-hash 2.1.1",
  "shared",
+]
+
+[[package]]
+name = "octree"
+version = "0.1.0"
+dependencies = [
+ "bevy_math",
+ "rkyv",
 ]
 
 [[package]]

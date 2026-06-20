@@ -20,7 +20,7 @@ writeText "cratePatche.patch" ''
    resolver = "2"
    
    members = [
-  -    "bp_ort", "bspeater", "octbots", "r2mole", "ranim", "shared", "serialized_io", "catalectic_cl",
+  -    "bp_ort", "bspeater", "octbots", "r2mole", "ranim", "shared", "serialized_io", "catalectic_cl", "octree",
   +    ${crates}
    ]
    
