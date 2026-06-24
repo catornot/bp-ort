@@ -1,11 +1,12 @@
 use bevy::{camera_controller::free_camera::FreeCamera, prelude::*};
+use lib::{
+    ATTRIBUTE_PRIMATIVE_TYPE, ATTRIBUTE_UNIQUE_CONTENTS, CELL_SIZE, ChunkCells, EnabledFeatures,
+    OFFSET, bindings::PrimitiveType,
+};
 use oktree::prelude::*;
 use std::ops::BitAnd;
 
-use crate::{
-    ATTRIBUTE_PRIMATIVE_TYPE, ATTRIBUTE_UNIQUE_CONTENTS, CELL_SIZE, ChunkCells, EnabledFeatures,
-    OFFSET, PrimitiveType, WorldMesh,
-};
+use crate::WorldMesh;
 
 #[allow(unused)]
 pub type Octree32 = Octree<u32, TUVec3u32>;
@@ -140,8 +141,9 @@ fn debug_world(
     for pos in cells
         .collied_vec
         .iter()
+        .cloned()
         .map(|inter| {
-            (UVec3::from_array(inter.cord).as_ivec3() - IVec3::splat(OFFSET)).as_vec3()
+            (UVec3::from_array(inter).as_ivec3() - IVec3::splat(OFFSET)).as_vec3()
                 * Vec3::splat(CELL_SIZE)
         })
         .filter(|pos| pos.distance(origin) < 500.)

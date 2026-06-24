@@ -1904,12 +1904,10 @@ dependencies = [
  "indexmap",
  "itertools 0.14.0",
  "modular-bitfield",
- "octree",
  "oktree",
  "parking_lot",
  "rayon",
  "rkyv",
- "rustc-hash 2.1.1",
 ]
 
 [[package]]
@@ -4570,12 +4568,11 @@ dependencies = [
 
 [[package]]
 name = "oktree"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5e04f14a2e7e663914995cd4ecf75a77f8c704277efda4af08c9b3045ece997"
+version = "0.5.1"
+source = "git+https://github.com/catornot/oktree.git#05a7a71f313581b8972b329e36d4f72797c168b6"
 dependencies = [
- "bevy",
- "heapless 0.8.0",
+ "bevy_math",
+ "heapless 0.9.2",
  "num",
  "smallvec",
 ]

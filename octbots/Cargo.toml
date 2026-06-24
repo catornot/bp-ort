@@ -11,7 +11,7 @@ shared = { workspace = true }
 parking_lot = "*"
 once_cell = "*"
 libc = "0.2.*"
-oktree = { version = "0.5.0", default-features = false, features = ["std"] }
+oktree = { git = "https://github.com/catornot/oktree.git", default-features = false, features = ["bevy"] }
 bonsai-bt = { version = "0.12.0", features = [] }
 indexmap = "2.*"
 rustc-hash = "2.*"

@@ -4,7 +4,7 @@ use bytemuck::offset_of;
 use itertools::Itertools;
 use std::{mem::size_of, path::PathBuf};
 
-use crate::{Compacttriangle, PhyHeader, PhySection, PhyVertex, StaticProp, Studiohdr};
+use crate::bindings::{Compacttriangle, PhyHeader, PhySection, PhyVertex, StaticProp, Studiohdr};
 
 pub fn extract_game_lump_models(
     game_lump: Vec<u8>,
