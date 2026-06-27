@@ -18,7 +18,7 @@ use shared::{
     interfaces::{IVDebugOverlay, IVEngineServer},
     plugin_interfaces::{CURERENT_INTERFACE_VERSION, ExternalSimulations, rust_version_hash},
 };
-use std::{ffi::CStr, sync::Arc};
+use std::{env, ffi::CStr, sync::Arc};
 // use tracing_chrome::FlushGuard;
 // use tracing_subscriber::layer::SubscriberExt;
 
@@ -71,7 +71,17 @@ impl Plugin for OctBots {
     );
 
     fn new(_reloaded: bool) -> Self {
-        let navmesh = Arc::new(RwLock::new(loader::Navmesh::default()));
+        let mut navmesh = loader::Navmesh::default();
+
+        let is_dedicated = env::args().any(|arg| arg == "-dedicated");
+
+        if (env::args().all(|arg| arg != "-disable-building") && !is_dedicated)
+            || (env::args().any(|arg| arg == "-allow-building") && is_dedicated)
+        {
+            navmesh.allow_building();
+        }
+
+        let navmesh = Arc::new(RwLock::new(navmesh));
 
         // let file = PathBuf::from(format!(
         //     "trace/trace_{}.json",
@@ -228,6 +238,9 @@ impl Plugin for OctBots {
                 *load_nav = current_name.to_string();
             } else if let Some(mut navmesh) = self.navmesh.try_write() {
                 match &navmesh.navmesh {
+                    loader::NavmeshStatus::Unloaded if navmesh.is_building() => {
+                        navmesh.try_build_status()
+                    }
                     loader::NavmeshStatus::Unloaded => {}
                     loader::NavmeshStatus::Loading => {
                         if let Some(true) = navmesh.try_loaded()
@@ -279,7 +292,7 @@ impl Plugin for OctBots {
                                   		WaitFrame()
 
                                     foreach ( entity player in GetPlayerArray() )    
-                                        SendHudMessage( player, "WARNING: couldn't load the bp_ort navmeshes for this map" , -1, 0.2, 255, 0, 0, 0, 0, 5, 0 )
+                                        SendHudMessage( player, "WARNING: couldn't load the bp_ort navmeshes for this map; building navmeshes for this map" , -1, 0.2, 255, 0, 0, 0, 0, 5, 0 )
                                 }()
                                 "#,
                             );

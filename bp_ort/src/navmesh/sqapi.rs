@@ -4,8 +4,8 @@ use rrplug::{
 };
 
 use crate::navmesh::{
-    navigation::{Navigation, NavigationError},
     Hull, RECAST_DETOUR,
+    navigation::{Navigation, NavigationError},
 };
 
 pub fn navigation_register_sq_functions() {

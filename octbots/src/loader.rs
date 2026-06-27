@@ -1,37 +1,25 @@
+use bspeater_lib::saving::{NAVMESH_VERSION, Navmesh as NavmeshBin};
 use oktree::prelude::*;
-use rkyv::{Archive, Deserialize, Serialize, api::low::from_bytes};
+use rkyv::api::low::from_bytes;
+use rrplug::high::filesystem;
 use std::{
-    io::Read,
+    fs,
+    io::{self, Read},
+    path::{Path, PathBuf},
     sync::atomic::{AtomicI32, Ordering},
     thread::{Builder, JoinHandle},
 };
 
 pub type Octree32 = Octree<u32, TUVec3u32>;
 
-// TODO: keep in sync with saving.rs
-const NAVMESH_VERSION: u32 = 0;
-
-#[derive(Archive, Deserialize, Serialize, Debug, PartialEq)]
-#[rkyv(
-    // This will generate a PartialEq impl between our unarchived
-    // and archived types
-    compare(PartialEq),
-    // Derives can be passed through to the generated type:
-    derive(Debug),
-)]
-pub struct NavmeshBin {
-    version: u32,
-    min: [i32; 3],
-    max: [i32; 3],
-    cell_size: f32,
-    filled_pos: Vec<[i32; 3]>,
-}
-
 #[derive(Default, Debug)]
 pub struct Navmesh {
     pub navmesh: NavmeshStatus,
     loading_thread: Option<JoinHandle<Option<(Octree32, f32)>>>,
+    building_thread: Option<JoinHandle<Option<()>>>,
     id: String,
+    did_build: bool,
+    can_build: bool,
     pub cell_size: f32,
 }
 
@@ -50,6 +38,20 @@ pub enum LoadingStatus<'a> {
     Loaded(&'a str),
 }
 
+struct VPKFileReader;
+
+impl bspeater_lib::VPKReader for VPKFileReader {
+    fn read_vpk_file(&self, path: &Path) -> Result<Vec<u8>, io::Error> {
+        log::info!("reading {path:?}");
+        let file = filesystem::open(path).map_err(|err| io::Error::other(format!("{err:?}")))?;
+        let mut buf = Vec::new();
+
+        file.reader().read_to_end(&mut buf)?;
+
+        Ok(buf)
+    }
+}
+
 impl NavmeshStatus {
     pub fn get(&self) -> Option<&Octree32> {
         match self {
@@ -63,6 +65,7 @@ impl Navmesh {
     pub fn load_navmesh(&mut self, id: &str) -> LoadingStatus<'_> {
         match &mut self.navmesh {
             NavmeshStatus::Unloaded => {
+                self.did_build = false;
                 self.id = id.to_owned();
                 self.spawn_load_worker();
                 LoadingStatus::Loading(&self.id)
@@ -101,6 +104,8 @@ impl Navmesh {
             } else {
                 self.navmesh = NavmeshStatus::Unloaded;
                 log::warn!("no octtree found when trying to load from async worker");
+
+                self.spawn_builder_worker();
                 None
             }
         } else {
@@ -108,10 +113,37 @@ impl Navmesh {
         }
     }
 
+    pub fn try_build_status(&mut self) {
+        if let Some(result) = self
+            .building_thread
+            .as_ref()
+            .filter(|thread| thread.is_finished())
+            .map(|_| {})
+            .map(|_| self.building_thread.take().unwrap().join())
+        {
+            match result {
+                Ok(Some(_)) => _ = self.spawn_load_worker(),
+                Ok(None) | Err(_) => {
+                    _ = self.building_thread.take();
+                    log::warn!("failed building navmesh : {}.navmesh", self.id);
+                }
+            }
+        }
+    }
+
     pub fn drop_navmesh(&mut self) {
         log::info!("dropping {}", self.id);
         _ = self.loading_thread.take();
+        _ = self.building_thread.take();
         self.navmesh = NavmeshStatus::Unloaded;
+    }
+
+    pub fn allow_building(&mut self) {
+        self.can_build = true;
+    }
+
+    pub fn is_building(&self) -> bool {
+        self.building_thread.is_some()
     }
 
     fn spawn_load_worker(&mut self) -> Option<()> {
@@ -122,6 +154,21 @@ impl Navmesh {
                 .ok()?,
         );
         self.navmesh = NavmeshStatus::Loading;
+        None
+    }
+
+    fn spawn_builder_worker(&mut self) -> Option<()> {
+        if self.did_build || !self.can_build {
+            return None;
+        }
+
+        self.building_thread.replace(
+            Builder::new()
+                .name(format!("building {}", self.id))
+                .spawn(async_build_worker_builder(self.id.clone()))
+                .ok()?,
+        );
+        self.did_build = true;
         None
     }
 }
@@ -219,6 +266,57 @@ fn async_load_worker_builder(id: String) -> impl FnOnce() -> Option<(Octree32, f
         log::info!("post oct fill {} {err}", octree.iter_elements().count());
 
         Some((octree, navmesh.cell_size))
+    }
+}
+
+fn async_build_worker_builder(id: String) -> impl FnOnce() -> Option<()> {
+    move || {
+        let profile = std::env::args()
+            .find(|arg| arg.starts_with("-profile"))
+            .and_then(|profile| {
+                profile
+                    .split_once('=')
+                    .map(|(_, profile)| profile.to_string())
+            })
+            .unwrap_or_else(|| "R2Northstar".to_string());
+
+        let navmesh_output_path = PathBuf::from(format!("{profile}/octnavs"));
+        if let Err(err) = fs::create_dir_all(&navmesh_output_path) {
+            log::warn!("failed to create octnavs dir; can't build navmeshes; {err}");
+            return None;
+        }
+
+        let file = fs::File::create_new(navmesh_output_path.join(&id).with_extension("navmesh"))
+            .inspect_err(|err| {
+                log::warn!("failed to open navmesh file while building {id}: {err}; bots possibly would be unable to move")
+            })
+            .ok()?;
+
+        _ = file;
+
+        let Ok(bsp) = filesystem::open(&PathBuf::from("maps").join(&id).with_extension("bsp"))
+            .inspect_err(|err| err.log())
+        else {
+            return None;
+        };
+
+        let mut buf = Vec::new();
+        if let Err(err) = bsp.reader().read_to_end(&mut buf) {
+            log::warn!("{err:?}");
+            return None;
+        }
+
+        if let Err(err) = bspeater_lib::create_navmesh(
+            &id,
+            io::Cursor::new(buf),
+            VPKFileReader,
+            navmesh_output_path,
+        ) {
+            log::warn!("failed to build navmesh {err:?}");
+            return None;
+        }
+
+        Some(())
     }
 }
 

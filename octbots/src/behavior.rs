@@ -224,7 +224,7 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
         .map(drop)
         .is_ok()
     {
-        log::info!("created a bot({edict}) with some telemetry :)");
+        log::info!("created a bot({edict}) with some telemetry 127.0.0.1:32016 :)");
         bt.with_telemetry(32016)
             .expect("failed to register telemetry")
     } else {

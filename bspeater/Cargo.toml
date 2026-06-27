@@ -22,11 +22,11 @@ indexmap = "2.11.4"
 hexasphere = "16.0.0"
 
 [features]
-default = ["graphics"]
+# default = ["graphics"]
 graphics = ["oktree/bevy", "bevy/common_api", "bevy/wayland", "bevy/x11", "bevy/free_camera", "avian3d/debug-plugin", "bevy/3d", "dep:flume", "avian3d/bevy_picking"]
 
 [lib]
-name = "lib"
+name = "bspeater_lib"
 path = "src/lib.rs"
 
 [[bin]]

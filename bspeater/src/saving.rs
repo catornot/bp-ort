@@ -6,7 +6,7 @@ use std::{
     path::Path,
 };
 
-const NAVMESH_VERSION: u32 = 0;
+pub const NAVMESH_VERSION: u32 = 0;
 
 #[derive(Archive, Deserialize, Serialize, Debug, PartialEq)]
 #[rkyv(
@@ -17,11 +17,11 @@ const NAVMESH_VERSION: u32 = 0;
     derive(Debug),
 )]
 pub struct Navmesh {
-    version: u32,
-    min: [i32; 3],
-    max: [i32; 3],
-    cell_size: f32,
-    filled_pos: Vec<[i32; 3]>,
+    pub version: u32,
+    pub min: [i32; 3],
+    pub max: [i32; 3],
+    pub cell_size: f32,
+    pub filled_pos: Vec<[i32; 3]>,
 }
 
 pub fn save_navmesh_to_disk(
@@ -40,8 +40,7 @@ pub fn save_navmesh_to_disk(
     }
 
     let path = output.join(map_name).with_extension("navmesh");
-    _ = fs::remove_file(&path);
-    let mut file = match File::create_new(&path) {
+    let mut file = match File::create(&path) {
         Err(err) => {
             bevy::log::error!("failed to save navmesh: {err:?}");
             return;

@@ -6,7 +6,7 @@ use shared::utils::nudge_type;
 
 use crate::{
     bindings::{Action, CUserCmd},
-    bots::{cmds_helper::CUserCmdHelper, cmds_utils::*, BotData},
+    bots::{BotData, cmds_helper::CUserCmdHelper, cmds_utils::*},
 };
 
 pub(crate) fn slide_hopper(

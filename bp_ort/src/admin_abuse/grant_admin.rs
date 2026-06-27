@@ -13,7 +13,7 @@ use crate::{
         admin_check, completion_append_player_names, execute_for_matches, forward_to_server,
         parse_admins,
     },
-    bindings::{EngineFunctions, ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
+    bindings::{ENGINE_FUNCTIONS, EngineFunctions, SERVER_FUNCTIONS},
 };
 
 pub fn register_grant_admin_command(engine_data: &EngineData, token: EngineToken) {

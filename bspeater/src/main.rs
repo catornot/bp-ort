@@ -13,14 +13,16 @@ use bevy::{
     camera_controller::free_camera::{FreeCamera, FreeCameraPlugin},
     render::{RenderPlugin, settings::WgpuSettings},
 };
+use bspeater_lib::{
+    ChunkCells, EnabledFeatures, ProcessingStep, VPKReader, WorldName, navmesh_generation_plugin,
+};
 use clap::Parser;
-use lib::{ChunkCells, EnabledFeatures, ProcessingStep, WorldName, navmesh_generation_plugin};
 #[cfg(feature = "graphics")]
 use std::ops::Not;
 use std::{
     fs::File,
     io::{self, Write},
-    path::Path,
+    path::{Path, PathBuf},
     process::Command,
 };
 
@@ -32,11 +34,16 @@ pub const UNPACK: &str = "vpk";
 pub const UNPACK_MERGED: &str = "vpk_merged";
 pub const UNPACK_COMMON: &str = "common_vpk";
 
-#[derive(Component)]
-struct WorldMesh;
-
 #[derive(Resource, Clone, PartialEq)]
 pub struct EarlyExit(bool);
+
+pub struct VPKDirReader(PathBuf);
+
+impl VPKReader for VPKDirReader {
+    fn read_vpk_file(&self, path: &Path) -> Result<Vec<u8>, std::io::Error> {
+        std::fs::read(self.0.join(path))
+    }
+}
 
 fn main() -> anyhow::Result<()> {
     let cli::BspeaterCli {
@@ -146,8 +153,11 @@ fn main() -> anyhow::Result<()> {
 
     assert!(std::mem::size_of::<Vec3>() == std::mem::size_of::<f32>() * 3);
 
-    let meshes =
-        lib::generate_meshes_from_bsp(bsp, vpk_dir.join(UNPACK_MERGED).to_path_buf(), &map_name)?;
+    let meshes = bspeater_lib::generate_meshes_from_bsp(
+        bsp,
+        VPKDirReader(vpk_dir.join(UNPACK_MERGED)),
+        &map_name,
+    )?;
 
     let mut app = App::new();
 
@@ -224,39 +234,7 @@ fn main() -> anyhow::Result<()> {
         ]
     };
 
-    for mesh in meshes
-        .into_iter()
-        .filter(|mesh| {
-            mesh.get_vertex_size() > 1
-                && mesh
-                    .indices()
-                    .into_iter()
-                    .flat_map(|indices| indices.iter())
-                    .count()
-                    > 1
-        })
-        .enumerate()
-        .filter_map(|(i, mesh)| {
-            #[cfg(not(feature = "graphics"))]
-            let _ = i;
-            Some((
-                Collider::trimesh_from_mesh(&mesh)?,
-                RigidBody::Static,
-                Mesh3d(
-                    app.world_mut()
-                        .get_resource_mut::<Assets<Mesh>>()
-                        .expect("this should exist probably")
-                        .add(mesh),
-                ),
-                #[cfg(feature = "graphics")]
-                MeshMaterial3d(materials[i % 3].clone()),
-                WorldMesh,
-            ))
-        })
-        .collect::<Vec<_>>()
-    {
-        app.world_mut().spawn(mesh);
-    }
+    bspeater_lib::add_meshes_to_world(meshes, &mut app);
 
     // not debugging needed when we don't even see an output
     #[cfg(feature = "graphics")]
@@ -267,7 +245,7 @@ fn main() -> anyhow::Result<()> {
     app.add_plugins(navmesh_generation_plugin)
         .add_systems(
             Update,
-            exit_app_system
+            bspeater_lib::exit_app_system
                 .run_if(in_state(ProcessingStep::Exit))
                 .run_if(|exit: Res<EarlyExit>| exit.0),
         )
@@ -306,10 +284,6 @@ fn setup_wireframe(mut commands: Commands) {
         global: true,
         ..default()
     });
-}
-
-fn exit_app_system(mut writer: MessageWriter<AppExit>) {
-    writer.write(AppExit::Success);
 }
 
 fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> {

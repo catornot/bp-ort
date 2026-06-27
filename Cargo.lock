@@ -4524,6 +4524,7 @@ version = "0.1.0"
 dependencies = [
  "bevy_math",
  "bonsai-bt 0.12.0",
+ "bspeater",
  "flume",
  "indexmap",
  "itertools 0.14.0",
@@ -5294,8 +5295,8 @@ checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
 
 [[package]]
 name = "rrplug"
-version = "4.2.1"
-source = "git+https://github.com/catornot/rrplug.git#271d2ababbec75b2922811fe3d5a622420bff223"
+version = "4.3.0"
+source = "git+https://github.com/catornot/rrplug.git#892403a510f46d6eba58377fab6152ffc927231b"
 dependencies = [
  "bitflags 2.10.0",
  "log",
@@ -5308,8 +5309,8 @@ dependencies = [
 
 [[package]]
 name = "rrplug_proc"
-version = "4.2.1"
-source = "git+https://github.com/catornot/rrplug.git#271d2ababbec75b2922811fe3d5a622420bff223"
+version = "4.3.0"
+source = "git+https://github.com/catornot/rrplug.git#892403a510f46d6eba58377fab6152ffc927231b"
 dependencies = [
  "proc-macro2",
  "quote",

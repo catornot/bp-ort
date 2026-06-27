@@ -8,6 +8,7 @@ license = "Apache-2.0"
 log = "*"
 rrplug = { workspace = true, features = ["async_engine"] }
 shared = { workspace = true }
+bspeater = { workspace = true, default-feautures = false }
 parking_lot = "*"
 once_cell = "*"
 libc = "0.2.*"

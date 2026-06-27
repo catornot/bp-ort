@@ -8,7 +8,7 @@ use crate::{
     admin_abuse::{
         admin_check, completion_append_player_names, execute_for_matches, forward_to_server,
     },
-    bindings::{ServerFunctions, ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
+    bindings::{ENGINE_FUNCTIONS, SERVER_FUNCTIONS, ServerFunctions},
 };
 
 pub fn register_slay_command(engine_data: &EngineData, token: EngineToken) {

@@ -6,8 +6,8 @@ use retour::static_detour;
 use rrplug::{
     bindings::squirreldatatypes::HSquirrelVM,
     high::{
-        engine::{EngineGlobal, EngineToken},
         UnsafeHandle,
+        engine::{EngineGlobal, EngineToken},
     },
     mid::{squirrel::SQVM_SERVER, utils::str_from_char_ptr},
 };

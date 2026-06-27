@@ -2,14 +2,14 @@ use parking_lot::RwLock;
 use rrplug::prelude::*;
 use std::{
     sync::Arc,
-    thread::{self, available_parallelism, JoinHandle},
+    thread::{self, JoinHandle, available_parallelism},
     time::Duration,
 };
 
 use crate::{
     loader::{Navmesh, NavmeshStatus},
-    nav_points::{vector3_to_tuvec, NavPoint},
-    pathfinding::{find_path, AreaCost, Goal, DEFAULT_MAX_ITERATIONS},
+    nav_points::{NavPoint, vector3_to_tuvec},
+    pathfinding::{AreaCost, DEFAULT_MAX_ITERATIONS, Goal, find_path},
 };
 
 pub type PathReceiver = flume::Receiver<Option<Vec<NavPoint>>>;

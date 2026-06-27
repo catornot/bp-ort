@@ -4,12 +4,18 @@ use bytemuck::offset_of;
 use itertools::Itertools;
 use std::{mem::size_of, path::PathBuf};
 
-use crate::bindings::{Compacttriangle, PhyHeader, PhySection, PhyVertex, StaticProp, Studiohdr};
+use crate::{
+    VPKReader,
+    bindings::{Compacttriangle, PhyHeader, PhySection, PhyVertex, StaticProp, Studiohdr},
+};
 
-pub fn extract_game_lump_models(
+pub fn extract_game_lump_models<R>(
     game_lump: Vec<u8>,
-    merged_dir: PathBuf,
-) -> (Vec<StaticProp>, Vec<Option<(Vec<Vec3>, Vec<u32>)>>) {
+    reader: R,
+) -> (Vec<StaticProp>, Vec<Option<(Vec<Vec3>, Vec<u32>)>>)
+where
+    R: VPKReader,
+{
     let mut game_lump = game_lump.into_iter().skip(20);
 
     let model_name_count =
@@ -34,7 +40,7 @@ pub fn extract_game_lump_models(
                 .unwrap_or(name)
                 .to_lowercase()
         })
-        .map(|name| (std::fs::read(merged_dir.join(&name)), name))
+        .map(|name| (reader.read_vpk_file(&PathBuf::new().join(&name)), name))
         .map(|(err, name)| {
             if err.is_err() {
                 eprintln!("failed to load: {name} because of {err:?}");
