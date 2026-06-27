@@ -1,12 +1,10 @@
 use bevy::{camera_controller::free_camera::FreeCamera, prelude::*};
-use lib::{
+use bspeater_lib::{
     ATTRIBUTE_PRIMATIVE_TYPE, ATTRIBUTE_UNIQUE_CONTENTS, CELL_SIZE, ChunkCells, EnabledFeatures,
     OFFSET, bindings::PrimitiveType,
 };
 use oktree::prelude::*;
 use std::ops::BitAnd;
-
-use crate::WorldMesh;
 
 #[allow(unused)]
 pub type Octree32 = Octree<u32, TUVec3u32>;
@@ -183,8 +181,8 @@ fn debug_world(
 
 fn debug_contents(
     mut ray_cast: MeshRayCast,
-    camera: Query<&Transform, (With<FreeCamera>, Without<WorldMesh>)>,
-    world_meshes: Query<&Mesh3d, (With<WorldMesh>, Without<FreeCamera>)>,
+    camera: Query<&Transform, (With<FreeCamera>, Without<Mesh3d>)>,
+    world_meshes: Query<&Mesh3d, Without<FreeCamera>>,
     meshes: Res<Assets<Mesh>>,
     mut text: Query<Entity, With<MeshInfoText>>,
     mut writer: TextUiWriter,

@@ -2,19 +2,17 @@
 #![feature(seek_stream_len, iter_array_chunks)]
 
 use avian3d::prelude::*;
-#[cfg(not(feature = "graphics"))]
-use bevy::mesh::MeshPlugin;
 use bevy::{
-    mesh::{MeshVertexAttribute, VertexFormat},
+    mesh::{MeshPlugin, MeshVertexAttribute, VertexFormat},
     prelude::*,
     state::app::StatesPlugin,
 };
 use oktree::{prelude::*, tree::Octree};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use std::path::{Path, PathBuf};
 use std::{
     io::{self, Read, Seek, SeekFrom},
     ops::Div,
+    path::{Path, PathBuf},
 };
 
 use crate::bindings::{BSPHeader, LumpHeader, LumpIds};
@@ -246,6 +244,26 @@ where
 }
 
 pub fn add_meshes_to_world(meshes: Vec<Mesh>, app: &mut App) {
+    #[cfg(feature = "graphics")]
+    let materials = {
+        const BASE: u8 = 200;
+        let mut mat = app
+            .world_mut()
+            .get_resource_mut::<Assets<StandardMaterial>>()
+            .expect("this should exist probably");
+        [
+            mat.add(StandardMaterial::from_color(Color::srgba_u8(
+                BASE, 0, 0, 255,
+            ))),
+            mat.add(StandardMaterial::from_color(Color::srgba_u8(
+                0, BASE, 0, 255,
+            ))),
+            mat.add(StandardMaterial::from_color(Color::srgba_u8(
+                0, 0, BASE, 255,
+            ))),
+        ]
+    };
+
     for mesh in meshes
         .into_iter()
         .filter(|mesh| {
@@ -364,7 +382,8 @@ fn raycast_world(
             .expect("bruh how"),
     );
 
-    let octtree = Octree::<u32, TUVec3u32>::from_aabb(Aabb::from_min_max(
+    #[allow(unused_mut)]
+    let mut octtree = Octree::<u32, TUVec3u32>::from_aabb(Aabb::from_min_max(
         TUVec3 {
             x: round_down_to_power_of_2(min),
             y: round_down_to_power_of_2(min),

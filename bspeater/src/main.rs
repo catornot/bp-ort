@@ -214,26 +214,6 @@ fn main() -> anyhow::Result<()> {
     })
     .init_state::<ProcessingStep>();
 
-    #[cfg(feature = "graphics")]
-    let materials = {
-        const BASE: u8 = 200;
-        let mut mat = app
-            .world_mut()
-            .get_resource_mut::<Assets<StandardMaterial>>()
-            .expect("this should exist probably");
-        [
-            mat.add(StandardMaterial::from_color(Color::srgba_u8(
-                BASE, 0, 0, 255,
-            ))),
-            mat.add(StandardMaterial::from_color(Color::srgba_u8(
-                0, BASE, 0, 255,
-            ))),
-            mat.add(StandardMaterial::from_color(Color::srgba_u8(
-                0, 0, BASE, 255,
-            ))),
-        ]
-    };
-
     bspeater_lib::add_meshes_to_world(meshes, &mut app);
 
     // not debugging needed when we don't even see an output
