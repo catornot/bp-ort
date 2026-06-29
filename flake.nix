@@ -82,7 +82,6 @@
                   octbots
                   ranim
                   serialized-io
-                  # bspeater-win # to allow users to compile navmeshes locally
                 ];
               };
               inherit version;
@@ -103,7 +102,7 @@
               graphical = false;
             };
 
-            default = self.packages.${system}.bp-ort;
+            default = self.packages.${system}.mod;
 
             tracy = native-pkgs.writeShellApplication {
               name = "tracy";

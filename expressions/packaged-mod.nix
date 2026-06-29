@@ -22,6 +22,7 @@ pkgs.stdenv.mkDerivation rec {
     mkdir -p $out
 
     cp -r $src/* $TMP/mod
+    chmod -R +rw $TMP/mod
     cd $TMP/mod && zip -r $out/${pname}.zip *
   '';
 

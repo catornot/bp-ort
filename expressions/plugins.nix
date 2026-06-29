@@ -14,6 +14,8 @@ rustPlatform.buildRustPackage {
   name = plugin;
   inherit version;
 
+  src = ../.;
+
   inherit buildType;
   rustToolchain = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ../rust-toolchain.toml;
   buildInputs = [
@@ -24,7 +26,10 @@ rustPlatform.buildRustPackage {
     pkgs.pkg-config
   ];
 
-  src = ../.;
+  cargoBuildFlags = [
+    "--package"
+    plugin
+  ];
 
   meta = {
     description = "A collection of plugins for northstar related to bots";
