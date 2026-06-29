@@ -186,6 +186,7 @@ impl Plugin for Bots {
             "UniBot",
             "Bolf109909",
             "ASillyBot",
+            "peaceofthebots",
         ]
         .into_iter()
         .map(str::to_string)
