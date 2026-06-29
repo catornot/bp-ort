@@ -2,6 +2,7 @@ use std::ops::Not;
 
 use crate::bindings::*;
 use crate::*;
+use avian3d::parry::na::{SMatrix, Vector3};
 use bevy::asset::RenderAssetUsages;
 use bevy::math::DVec3;
 use itertools::Itertools;
@@ -340,27 +341,19 @@ fn contains_point(planes: &[Vec4], point: DVec3) -> bool {
         .iter()
         .map(|v| v.as_dvec4())
         // .all(|plane| plane.dot(point.extend(1.)) < 0.001f64)
-        .all(|plane| plane.xyz().dot(point) - plane.w < 0.001f64)
+        .all(|plane| plane.xyz().dot(point) - plane.w < 0.01f64)
 }
 
 fn calculate_intersection_point(planes: [&Vec4; 3]) -> Option<DVec3> {
-    let [p1, p2, p3] = planes.map(|p| p.as_dvec4());
-    let m1 = DVec3::new(p1.x, p2.x, p3.x);
-    let m2 = DVec3::new(p1.y, p2.y, p3.y);
-    let m3 = DVec3::new(p1.z, p2.z, p3.z);
-    let d = -DVec3::new(p1.w, p2.w, p3.w);
+    let a = SMatrix::<_, 3, 3>::from_columns(&[
+        Vector3::new(planes[0].x, planes[0].y, planes[0].z),
+        Vector3::new(planes[1].x, planes[1].y, planes[1].z),
+        Vector3::new(planes[2].x, planes[2].y, planes[2].z),
+    ])
+    .transpose();
+    let b = Vector3::new(planes[0].w, planes[1].w, planes[2].w);
 
-    let u = m2.cross(m3);
-    let v = m1.cross(d);
-
-    let denom = m1.dot(u);
-
-    // Check for parallel planes or if planes do not intersect
-    if denom.abs() < f64::EPSILON {
-        return None;
-    }
-
-    Some(DVec3::new(d.dot(u), m3.dot(v), -m2.dot(v)) / denom)
+    Some(Vec3::from_slice((a.try_inverse()? * b).as_slice()).as_dvec3())
 }
 
 // pub fn ico(sphere: Sphere, subdivisions: u32) -> (Vec<Vec3>, Vec<u32>) {

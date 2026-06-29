@@ -16,6 +16,10 @@ pub fn extract_game_lump_models<R>(
 where
     R: VPKReader,
 {
+    if game_lump.len() <= 20 {
+        return (Vec::new(), Vec::new());
+    }
+
     let mut game_lump = game_lump.into_iter().skip(20);
 
     let model_name_count =
