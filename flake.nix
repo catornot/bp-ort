@@ -3,7 +3,6 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    nixpkgs-win.url = "github:nixos/nixpkgs/24.11";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -21,7 +20,6 @@
     {
       self,
       nixpkgs,
-      nixpkgs-win,
       flake-utils,
       rust-overlay,
       catornot-flakes,
@@ -30,27 +28,17 @@
     flake-utils.lib.eachDefaultSystem (
       system:
       let
-        native-pkgs = import nixpkgs {
+        pkgs = import nixpkgs {
           inherit system;
           overlays = [ (import rust-overlay) ];
         };
-        pkgs = import nixpkgs-win {
-          inherit system;
-          overlays = [ (import rust-overlay) ];
-          crossSystem = {
-            config = "x86_64-w64-mingw32";
-            libc = "msvcrt";
-          };
-          config.microsoftVisualStudioLicenseAccepted = true;
-        };
-        toolchain-win = (pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml);
-        toolchain-linux = (
-          native-pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml
-        );
-        # toolchain-linux = native-pkgs.pkgsBuildBuild.rust-bin.stable.latest.default;
+        pkgs-cross = pkgs.pkgsCross.mingwW64;
+
+        toolchain = (pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml);
       in
-      rec {
-        formatter = native-pkgs.nixfmt-tree;
+      {
+        formatter = pkgs.nixfmt-tree;
+
         packages =
           let
             version = "0.1.7";
@@ -58,9 +46,13 @@
           let
             mkPluginBuildType =
               plugin: buildType:
-              pkgs.callPackage ./nix/plugins.nix {
-                rust-bin = rust-overlay.lib.mkRustBin { } pkgs.buildPackages;
-                inherit plugin version buildType;
+              pkgs-cross.callPackage ./nix/plugins.nix {
+                inherit
+                  plugin
+                  version
+                  buildType
+                  toolchain
+                  ;
               };
             mkPlugin = plugin: mkPluginBuildType plugin "release";
           in
@@ -69,12 +61,12 @@
             ranim = mkPlugin "ranim";
             octbots = mkPlugin "octbots";
             serialized-io = mkPlugin "serialized_io";
-            packaged-mod = native-pkgs.callPackage ./nix/packaged-mod.nix {
+            packaged-mod = pkgs.callPackage ./nix/packaged-mod.nix {
               inherit (self.packages.${system}) mod;
               inherit version;
             };
-            mod = native-pkgs.callPackage ./nix/mod.nix {
-              plugins = native-pkgs.symlinkJoin {
+            mod = pkgs.callPackage ./nix/mod.nix {
+              plugins = pkgs.symlinkJoin {
                 name = "plugins";
                 # must have at least one plugin
                 paths = with self.packages.${system}; [
@@ -86,29 +78,26 @@
               };
               inherit version;
             };
-            bspeater = native-pkgs.callPackage ./nix/bspeater.nix {
-              rust-bin = rust-overlay.lib.mkRustBin { } native-pkgs.buildPackages;
-              inherit version;
+            bspeater = pkgs.callPackage ./nix/bspeater.nix {
+              inherit version toolchain;
               graphical = false;
             };
-            bspeater-graphical = native-pkgs.callPackage ./nix/bspeater.nix {
-              rust-bin = rust-overlay.lib.mkRustBin { } native-pkgs.buildPackages;
-              inherit version;
+            bspeater-graphical = pkgs.callPackage ./nix/bspeater.nix {
+              inherit version toolchain;
               graphical = true;
             };
-            bspeater-win = pkgs.callPackage ./nix/bspeater.nix {
-              rust-bin = rust-overlay.lib.mkRustBin { } native-pkgs.buildPackages;
-              inherit version;
+            bspeater-win = pkgs-cross.callPackage ./nix/bspeater.nix {
+              inherit version toolchain;
               graphical = false;
             };
 
             default = self.packages.${system}.mod;
 
-            tracy = native-pkgs.writeShellApplication {
+            tracy = pkgs.writeShellApplication {
               name = "tracy";
 
               runtimeInputs = [
-                native-pkgs.tracy
+                pkgs.tracy
               ];
 
               text = ''
@@ -116,11 +105,11 @@
               '';
             };
 
-            tracy-open = native-pkgs.writeShellApplication {
+            tracy-open = pkgs.writeShellApplication {
               name = "tracy-open";
 
               runtimeInputs = [
-                native-pkgs.tracy
+                pkgs.tracy
               ];
 
               text = ''
@@ -135,99 +124,76 @@
                 titanfall2 = catornot-flakes.packages.${system}.titanfall2;
                 tf2vpk = catornot-flakes.packages.${system}.tf2vpk;
               in
-              native-pkgs.callPackage ./nix/navmeshes.nix { inherit bspeater titanfall2 tf2vpk; };
+              pkgs.callPackage ./nix/navmeshes.nix { inherit bspeater titanfall2 tf2vpk; };
 
           };
 
         devShells = {
-          win-shell = pkgs.mkShell rec {
+          win-shell = pkgs-cross.mkShell {
             nativeBuildInputs = with pkgs; [
-              native-pkgs.bacon
-              toolchain-win
+              toolchain
               pkg-config
             ];
 
-            buildInputs = with pkgs; [
+            buildInputs = with pkgs-cross; [
               windows.mingw_w64_headers
-              # windows.mcfgthreads
+              windows.mcfgthreads
               windows.pthreads
             ];
-
-            LD_LIBRARY_PATH = nixpkgs.lib.makeLibraryPath buildInputs;
-            PATH = nixpkgs.lib.makeLibraryPath buildInputs;
-            WINEPATH = nixpkgs.lib.makeLibraryPath buildInputs;
           };
 
-          native-shell = native-pkgs.mkShell rec {
-            nativeBuildInputs = with native-pkgs; [
+          native-shell = pkgs.mkShell rec {
+            nativeBuildInputs = with pkgs; [
               cargo-deny
               cargo-audit
               bacon
-              toolchain-linux
+              toolchain
               clang
               cmake
               cmakeCurses
               pkg-config
             ];
 
-            buildInputs = with native-pkgs; [
+            buildInputs = with pkgs; [
               stdenv.cc
               zstd
               libxkbcommon
               vulkan-loader
-              xorg.libX11
-              xorg.libXcursor
-              xorg.libXi
-              xorg.libXrandr
-              alsa-lib-with-plugins
-              wayland
-              glfw
-              udev
-              pkg-config
-            ];
-
-            runtimeDependencies = with native-pkgs; [
-              libgcc
-              stdenv.cc
-              zstd
-              libxkbcommon
-              vulkan-loader
-              xorg.libX11
-              xorg.libXcursor
-              xorg.libXi
-              xorg.libXrandr
+              libx11
+              libxcursor
+              libxi
+              libxrandr
               alsa-lib-with-plugins
               wayland
               glfw
               udev
             ];
 
-            LD_LIBRARY_PATH = nixpkgs.lib.makeLibraryPath runtimeDependencies;
-            PATH = nixpkgs.lib.makeLibraryPath runtimeDependencies;
+            LD_LIBRARY_PATH = nixpkgs.lib.makeLibraryPath buildInputs;
 
             # adding the export worked!
             shellHook = ''
               export CC=clang
               export CXX=clang++
-              export CMAKE=${native-pkgs.cmake}/bin/cmake
+              export CMAKE=${pkgs.cmake}/bin/cmake
               export WGPU_ALLOW_UNDERLYING_NONCOMPLIANT_ADAPTER=1
               export WGPU_BACKEND=vulkan
               export RUST_BACKTRACE=1
             '';
           };
 
-          wiki-shell = native-pkgs.mkShell {
-            nativeBuildInputs = with native-pkgs; [
+          wiki-shell = pkgs.mkShell {
+            nativeBuildInputs = with pkgs; [
               mdbook
             ];
           };
 
-          default = native-pkgs.mkShell {
+          default = pkgs.mkShell {
             shellHook = ''
               echo "this flake provdies multiple shells choose one"
               echo "nix develop .#win-shell # provides tooling to build the plugins"
               echo "nix develop .#native-shell # provides tooling to build native tooling"
-              echo "nix develop .#wiju-shell # provides to build the wiki"
+              echo "nix develop .#wiki-shell # provides to build the wiki"
             '';
           };
         };

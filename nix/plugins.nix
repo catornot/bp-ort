@@ -2,46 +2,49 @@
   plugin,
   version,
   buildType ? "release",
+  toolchain,
   lib,
-  rustPlatform,
-  pkgs,
-  rust-bin,
+  makeRustPlatform,
+  callPackage,
 }:
 let
   cargoLock = (import ./cargo_lock.nix { });
 in
-rustPlatform.buildRustPackage {
-  name = plugin;
-  inherit version;
+(makeRustPlatform {
+  cargo = toolchain;
+  rustc = toolchain;
+}).buildRustPackage
+  {
+    name = plugin;
+    inherit version;
 
-  src = ../.;
+    src = ../.;
 
-  inherit buildType;
-  rustToolchain = pkgs.pkgsBuildHost.rust-bin.fromRustupToolchainFile ../rust-toolchain.toml;
-  buildInputs = [
-  ];
+    inherit buildType;
+    rustToolchain = toolchain;
+    buildInputs = [
+    ];
 
-  nativeBuildInputs = [
-    (rust-bin.fromRustupToolchainFile ../rust-toolchain.toml)
-    pkgs.pkg-config
-  ];
+    nativeBuildInputs = [
+      toolchain
+    ];
 
-  cargoBuildFlags = [
-    "--package"
-    plugin
-  ];
+    cargoBuildFlags = [
+      "--package"
+      plugin
+    ];
 
-  meta = {
-    description = "A collection of plugins for northstar related to bots";
-    homepage = "https://github.com/catornot/bp-ort";
-    license = lib.licenses.asl20;
-    maintainers = [ "cat_or_not" ];
-  };
+    meta = {
+      description = "A collection of plugins for northstar related to bots";
+      homepage = "https://github.com/catornot/bp-ort";
+      license = lib.licenses.asl20;
+      maintainers = [ "cat_or_not" ];
+    };
 
-  # we need this since bspeater cannot be compiled for windows
-  patches = [
-    (pkgs.callPackage ./crate_patch.nix { allowedCrate = plugin; })
-  ];
+    # we need this since bspeater cannot be compiled for windows
+    patches = [
+      (callPackage ./crate_patch.nix { allowedCrate = plugin; })
+    ];
 
-  inherit cargoLock;
-}
+    inherit cargoLock;
+  }
