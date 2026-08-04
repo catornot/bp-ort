@@ -58,7 +58,7 @@
           let
             mkPluginBuildType =
               plugin: buildType:
-              pkgs.callPackage ./expressions/plugins.nix {
+              pkgs.callPackage ./nix/plugins.nix {
                 rust-bin = rust-overlay.lib.mkRustBin { } pkgs.buildPackages;
                 inherit plugin version buildType;
               };
@@ -69,11 +69,11 @@
             ranim = mkPlugin "ranim";
             octbots = mkPlugin "octbots";
             serialized-io = mkPlugin "serialized_io";
-            packaged-mod = native-pkgs.callPackage ./expressions/packaged-mod.nix {
+            packaged-mod = native-pkgs.callPackage ./nix/packaged-mod.nix {
               inherit (self.packages.${system}) mod;
               inherit version;
             };
-            mod = native-pkgs.callPackage ./expressions/mod.nix {
+            mod = native-pkgs.callPackage ./nix/mod.nix {
               plugins = native-pkgs.symlinkJoin {
                 name = "plugins";
                 # must have at least one plugin
@@ -86,17 +86,17 @@
               };
               inherit version;
             };
-            bspeater = native-pkgs.callPackage ./expressions/bspeater.nix {
+            bspeater = native-pkgs.callPackage ./nix/bspeater.nix {
               rust-bin = rust-overlay.lib.mkRustBin { } native-pkgs.buildPackages;
               inherit version;
               graphical = false;
             };
-            bspeater-graphical = native-pkgs.callPackage ./expressions/bspeater.nix {
+            bspeater-graphical = native-pkgs.callPackage ./nix/bspeater.nix {
               rust-bin = rust-overlay.lib.mkRustBin { } native-pkgs.buildPackages;
               inherit version;
               graphical = true;
             };
-            bspeater-win = pkgs.callPackage ./expressions/bspeater.nix {
+            bspeater-win = pkgs.callPackage ./nix/bspeater.nix {
               rust-bin = rust-overlay.lib.mkRustBin { } native-pkgs.buildPackages;
               inherit version;
               graphical = false;
@@ -135,7 +135,7 @@
                 titanfall2 = catornot-flakes.packages.${system}.titanfall2;
                 tf2vpk = catornot-flakes.packages.${system}.tf2vpk;
               in
-              native-pkgs.callPackage ./expressions/navmeshes.nix { inherit bspeater titanfall2 tf2vpk; };
+              native-pkgs.callPackage ./nix/navmeshes.nix { inherit bspeater titanfall2 tf2vpk; };
 
           };
 
