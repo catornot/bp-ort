@@ -25,7 +25,10 @@
       catornot-flakes,
       ...
     }:
-    flake-utils.lib.eachDefaultSystem (
+    flake-utils.lib.eachSystem [
+  "x86_64-linux"
+  "aarch64-linux"
+](
       system:
       let
         pkgs = import nixpkgs {
@@ -42,8 +45,6 @@
         packages =
           let
             version = "0.1.7";
-          in
-          let
             mkPluginBuildType =
               plugin: buildType:
               pkgs-cross.callPackage ./nix/plugins.nix {
@@ -86,46 +87,6 @@
               inherit version toolchain;
               graphical = true;
             };
-            bspeater-win = pkgs-cross.callPackage ./nix/bspeater.nix {
-              inherit version toolchain;
-              graphical = false;
-            };
-
-            default = self.packages.${system}.mod;
-
-            tracy = pkgs.writeShellApplication {
-              name = "tracy";
-
-              runtimeInputs = [
-                pkgs.tracy
-              ];
-
-              text = ''
-                capture -o target/trace.tracy
-              '';
-            };
-
-            tracy-open = pkgs.writeShellApplication {
-              name = "tracy-open";
-
-              runtimeInputs = [
-                pkgs.tracy
-              ];
-
-              text = ''
-                DISPLAY=:0 :w
-                tracy target/trace.tracy
-              '';
-            };
-
-            navmeshes =
-              let
-                bspeater = self.packages.${system}.bspeater;
-                titanfall2 = catornot-flakes.packages.${system}.titanfall2;
-                tf2vpk = catornot-flakes.packages.${system}.tf2vpk;
-              in
-              pkgs.callPackage ./nix/navmeshes.nix { inherit bspeater titanfall2 tf2vpk; };
-
           };
 
         devShells = {
