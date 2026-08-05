@@ -5,4 +5,4 @@ edition = "2024"
 
 [dependencies]
 bevy_math = { version = "0.18.1", default-features = false }
-rkyv = "=0.8.10"
+rkyv = "=0.8.17"

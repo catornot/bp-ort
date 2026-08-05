@@ -14,7 +14,7 @@ oktree = { git = "https://github.com/catornot/oktree.git" }
 rayon = "1.*"
 bytemuck = { version = "1.23.1", features = ["derive", "pod_saturating"] }
 anyhow = { version = "1.0.99", features = ["backtrace"] }
-rkyv = "=0.8.10"
+rkyv = "=0.8.17"
 parking_lot = "0.12.4"
 flume = { version = "0.11.1", default-features = false, optional = true }
 bonsai-bt = "0.10.0"
