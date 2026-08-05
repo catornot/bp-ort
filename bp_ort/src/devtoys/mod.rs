@@ -73,7 +73,7 @@ impl Plugin for DevToys {
                 // }
                 let convar = ConVarStruct::find_convar_by_name("enable_debug_overlays", token)
                     .expect("enable_debug_overlays should exist");
-                convar.set_value_i32(cfg!(debug_assertions) as i32, token);
+                convar.set_value_i32(crate::PLUGIN.wait().is_dev as i32, token);
 
                 let cmd = find_concommand("script").expect("script should exist");
                 cmd._base.m_nFlags &= !(FCVAR_GAMEDLL_FOR_REMOTE_CLIENTS as i32)

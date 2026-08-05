@@ -44,6 +44,7 @@ pub struct HooksPlugin {
     pub holoplus: HoloPlus,
     pub tickplus: TickPlus,
     is_dedicated_server: bool,
+    is_dev: bool,
 }
 
 impl Plugin for HooksPlugin {
@@ -76,6 +77,7 @@ impl Plugin for HooksPlugin {
             holoplus: HoloPlus::new(reloaded),
             tickplus: TickPlus::new(reloaded),
             is_dedicated_server: std::env::args().any(|cmd| cmd.starts_with("-dedicated")),
+            is_dev: std::env::args().any(|cmd| cmd.starts_with("-bp-ort-dev")),
         }
     }
 
