@@ -50,6 +50,7 @@ mod convars;
 mod debug_commands;
 mod detour;
 mod netvars;
+mod persistence;
 mod set_on_join;
 mod simple_bot_manager;
 
@@ -132,6 +133,8 @@ pub struct Bots {
     pub player_names: Mutex<HashMap<[i8; 32], (String, String)>>,
     pub manager_data: Mutex<simple_bot_manager::ManagerData>,
     pub external_simulations: &'static cmds_interface::ExternalSimulations,
+    pub bot_loadouts: persistence::BotLoadouts,
+    pub bot_pdata_waitlist: Mutex<Vec<(usize, String)>>,
 }
 
 impl Plugin for Bots {
@@ -223,6 +226,8 @@ impl Plugin for Bots {
             player_names: Mutex::new(HashMap::new()),
             manager_data: Mutex::new(ManagerData::default()),
             external_simulations,
+            bot_loadouts: persistence::BotLoadouts::new(),
+            bot_pdata_waitlist: Mutex::new(Vec::new()),
         }
     }
 
@@ -392,6 +397,21 @@ impl Plugin for Bots {
         {
             log::error!("bot manager: {err}");
         }
+
+        for (bot, name) in self
+            .bot_pdata_waitlist
+            .lock()
+            .drain(..)
+            .filter_map(|(index, name)| {
+                Some((
+                    unsafe { ENGINE_FUNCTIONS.wait().client_array.add(index).as_ref() }?,
+                    name,
+                ))
+            })
+        {
+            log::info!("applying loadout for {name}");
+            self.bot_loadouts.apply(bot, &name);
+        }
     }
 }
 
@@ -416,11 +436,11 @@ fn spawn_fake_player(
 
     unsafe { engine_server.LockNetworkStringTables(true) };
 
-    let name = try_cstring(&name).unwrap_or_default();
+    let c_name = try_cstring(&name).unwrap_or_default();
     let bot = unsafe {
         (engine_funcs.create_fake_client)(
             engine_funcs.server.cast_const(),
-            name.as_ptr(),
+            c_name.as_ptr(),
             &'\0' as *const char as *const i8,
             &'\0' as *const char as *const i8,
             team,
@@ -484,6 +504,12 @@ fn spawn_fake_player(
         .values()
         .filter_map(|sim| sim.init_func.as_ref())
         .for_each(|init_func| (init_func)(handle - 1, client));
+
+    plugin
+        .bots
+        .bot_pdata_waitlist
+        .lock()
+        .push((handle as usize, name));
 
     Some(handle as i32)
 }

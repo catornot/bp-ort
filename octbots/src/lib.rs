@@ -16,6 +16,7 @@ use shared::{
         MATSYS_FUNCTIONS, MatSysFunctions, SERVER_FUNCTIONS, ServerFunctions,
     },
     interfaces::{IVDebugOverlay, IVEngineServer},
+    persistence::ClientPersistence,
     plugin_interfaces::{CURERENT_INTERFACE_VERSION, ExternalSimulations, rust_version_hash},
 };
 use std::{env, ffi::CStr, sync::Arc};
@@ -53,6 +54,7 @@ pub struct OctBots {
     current_map: Mutex<String>,
     simulations: OnceCell<&'static ExternalSimulations>,
     job_market: JobMarket,
+    persistence: OnceCell<ClientPersistence>,
     // frame: Mutex<UnsafeHandle<EnteredSpan>>, // I really need this
     // trace_guard: Mutex<Option<FlushGuard>>,
 }
@@ -108,6 +110,7 @@ impl Plugin for OctBots {
             job_market: JobMarket::new(Arc::clone(&navmesh)),
             navmesh,
             simulations: OnceCell::new(),
+            persistence: OnceCell::new(),
             // frame: Mutex::new(unsafe { UnsafeHandle::new(Span::none().entered()) }),
             // trace_guard: Mutex::new(Some(guard)),
         }
@@ -191,6 +194,11 @@ impl Plugin for OctBots {
                 .unwrap(),
             })
         };
+
+        _ = self.persistence.set(ClientPersistence::new(
+            ENGINE_INTERFACES.wait().engine_server,
+            false,
+        ));
     }
 
     fn on_sqvm_destroyed(&self, sqvm_handle: &CSquirrelVMHandle, _engine_token: EngineToken) {

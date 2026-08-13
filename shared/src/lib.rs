@@ -3,6 +3,7 @@
 pub mod bindings;
 pub mod cmds_helper;
 pub mod interfaces;
+pub mod persistence;
 pub mod plugin_interfaces;
 pub mod squtils;
 pub mod utils;

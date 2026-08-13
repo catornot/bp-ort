@@ -486,6 +486,10 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
             brain.path_receiver = None; // clear any paths under construction
             brain.path.clear();
 
+            let persistence = crate::PLUGIN.wait().persistence.wait();
+            _ = persistence.set_persistent_int(&*bot, "pilotSpawnLoadout.index", 1);
+            _ = persistence.set_persistent_int(&*bot, "titanSpawnLoadout.index", 1);
+
             (Status::Success, 0.)
         }
         BotAction::IsGamemode(gamemode) => {

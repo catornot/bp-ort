@@ -171,7 +171,7 @@ pub fn run_movement(
                 brain.path_receiver = None; // remove any future paths
                 (Status::Failure, 0.)
             } else if let Some(point) = brain.path.front()
-                && brain.m.last_point_reached_delta > 5.
+                && brain.m.last_point_reached_delta > 1.
             {
                 *brain.m.area_cost.entry(point.as_point()).or_default() += 100.;
                 // also add to the last 5 points
