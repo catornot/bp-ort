@@ -64,6 +64,8 @@ pub struct BotBrain {
     gamemode: String,
     pub shared: Arc<Mutex<SharedBotBrain>>,
     cmd_interface: DebugIgnore<&'static ExternalSimulations>,
+    loadout_index_pilot: usize,
+    loadout_index_titan: usize,
 
     /// movement
     pub m: Movement,
@@ -209,6 +211,8 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
             is_titan: false,
             needs_new_path: true,
             gamemode: String::new(),
+            loadout_index_pilot: 0,
+            loadout_index_titan: 0,
 
             t: Targeting::default(),
 
@@ -487,8 +491,25 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
             brain.path.clear();
 
             let persistence = crate::PLUGIN.wait().persistence.wait();
-            _ = persistence.set_persistent_int(&*bot, "pilotSpawnLoadout.index", 1);
-            _ = persistence.set_persistent_int(&*bot, "titanSpawnLoadout.index", 1);
+            _ = persistence.set_persistent_int(
+                &*bot,
+                "pilotSpawnLoadout.index",
+                brain.loadout_index_pilot as i32,
+            );
+            _ = persistence.set_persistent_int(
+                &*bot,
+                "titanSpawnLoadout.index",
+                brain.loadout_index_titan as i32,
+            );
+
+            brain.loadout_index_pilot += 1;
+            brain.loadout_index_titan += 1;
+            if brain.loadout_index_pilot >= 10 {
+                brain.loadout_index_pilot = 0;
+            };
+            if brain.loadout_index_titan >= 7 {
+                brain.loadout_index_titan = 0;
+            };
 
             (Status::Success, 0.)
         }

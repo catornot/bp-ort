@@ -134,7 +134,6 @@ pub struct Bots {
     pub manager_data: Mutex<simple_bot_manager::ManagerData>,
     pub external_simulations: &'static cmds_interface::ExternalSimulations,
     pub bot_loadouts: persistence::BotLoadouts,
-    pub bot_pdata_waitlist: Mutex<Vec<(usize, String)>>,
 }
 
 impl Plugin for Bots {
@@ -227,7 +226,6 @@ impl Plugin for Bots {
             manager_data: Mutex::new(ManagerData::default()),
             external_simulations,
             bot_loadouts: persistence::BotLoadouts::new(),
-            bot_pdata_waitlist: Mutex::new(Vec::new()),
         }
     }
 
@@ -397,21 +395,6 @@ impl Plugin for Bots {
         {
             log::error!("bot manager: {err}");
         }
-
-        for (bot, name) in self
-            .bot_pdata_waitlist
-            .lock()
-            .drain(..)
-            .filter_map(|(index, name)| {
-                Some((
-                    unsafe { ENGINE_FUNCTIONS.wait().client_array.add(index).as_ref() }?,
-                    name,
-                ))
-            })
-        {
-            log::info!("applying loadout for {name}");
-            self.bot_loadouts.apply(bot, &name);
-        }
     }
 }
 
@@ -504,12 +487,6 @@ fn spawn_fake_player(
         .values()
         .filter_map(|sim| sim.init_func.as_ref())
         .for_each(|init_func| (init_func)(handle - 1, client));
-
-    plugin
-        .bots
-        .bot_pdata_waitlist
-        .lock()
-        .push((handle as usize, name));
 
     Some(handle as i32)
 }

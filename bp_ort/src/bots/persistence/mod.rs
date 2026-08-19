@@ -8,6 +8,7 @@ use crate::interfaces::ENGINE_INTERFACES;
 
 mod enums;
 
+mod asillybot;
 mod botornot;
 
 macro_rules! pdata_struct {
@@ -109,9 +110,17 @@ impl From<i32> for PDataValue {
     }
 }
 
+#[allow(clippy::type_complexity)]
 impl BotLoadouts {
     pub fn new() -> Self {
-        let generators = [("botornot", botornot::pilot, botornot::titan)];
+        let generators: [(
+            &'static str,
+            fn() -> Vec<PilotLoadout>,
+            fn() -> Vec<TitanLoadout>,
+        ); 2] = [
+            ("botornot", botornot::pilot, botornot::titan),
+            ("ASillyBot", asillybot::pilot, asillybot::titan),
+        ];
 
         Self {
             pilot_loadouts: generators

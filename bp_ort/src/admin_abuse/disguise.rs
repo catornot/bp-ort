@@ -42,7 +42,7 @@ pub fn register_disguise_command(engine_data: &EngineData, token: EngineToken) {
     _ = engine_data.register_concommand_with_completion(
         "disguise",
         forward_to_server,
-        "dones various things to cplayer and cclient",
+        "does various things to cplayer and cclient",
         FCVAR_CLIENTDLL as i32,
         disguise_completion,
         token,

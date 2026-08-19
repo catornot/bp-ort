@@ -23,7 +23,7 @@ use std::{env, ffi::CStr, sync::Arc};
 // use tracing_chrome::FlushGuard;
 // use tracing_subscriber::layer::SubscriberExt;
 
-use crate::{async_pathfinding::JobMarket, behavior::drop_behaviors};
+use crate::async_pathfinding::JobMarket;
 
 mod async_pathfinding;
 mod behavior;
