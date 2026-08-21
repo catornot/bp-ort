@@ -18,7 +18,7 @@ use crate::{
 
 const DISGUISE_TYPES_ARR: &[DisguiseTypes] = const {
     use DisguiseTypes::*;
-    &[Name, Tag, Traversal, Edict, Generation, Level]
+    &[Name, Tag, Traversal, Edict, Generation, Level, Loadout]
 };
 static DISGUISE_TYPES_STR: LazyLock<Box<[&'static str]>> = LazyLock::new(|| {
     DISGUISE_TYPES_ARR
@@ -36,6 +36,7 @@ enum DisguiseTypes {
     Edict,
     Generation,
     Level,
+    Loadout,
 }
 
 pub fn register_disguise_command(engine_data: &EngineData, token: EngineToken) {
@@ -238,6 +239,13 @@ fn disguise(
                 .ok_or("bad level")?;
 
             player.m_rank = level;
+        }
+        DisguiseTypes::Loadout => {
+            crate::PLUGIN
+                .wait()
+                .bots
+                .bot_loadouts
+                .apply(&*player, extra_cmds.first().ok_or("no src found")?.as_str());
         }
     }
 

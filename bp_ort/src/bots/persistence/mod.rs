@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
 use once_cell::sync::OnceCell;
-use rrplug::bindings::server::client::CClient;
-use shared::persistence::ClientPersistence;
+use shared::persistence::{ClientIndex, ClientPersistence};
 
 use crate::interfaces::ENGINE_INTERFACES;
 
@@ -155,7 +154,7 @@ impl BotLoadouts {
         }
     }
 
-    pub fn apply(&self, bot: &CClient, name: &str) {
+    pub fn apply<T: ClientIndex>(&self, bot: &T, name: &str) {
         let persistence = self
             .persistence
             .get_or_init(|| ClientPersistence::new(ENGINE_INTERFACES.wait().engine_server, true));
@@ -211,10 +210,10 @@ impl Default for BotLoadouts {
     }
 }
 
-pub fn apply_loadout(
+pub fn apply_loadout<T: ClientIndex>(
     persistence: &ClientPersistence,
     name: &str,
-    bot: &CClient,
+    bot: &T,
     ty: &str,
     index: usize,
     property: &str,

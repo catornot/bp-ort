@@ -128,7 +128,7 @@ fn teleport_server_command(command: CCommandResult) -> Option<()> {
                 unsafe { (funcs.set_origin)(player, &tp_location) }
             }
         },
-        false,
+        true,
         funcs,
         engine,
     );

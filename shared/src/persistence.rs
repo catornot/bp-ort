@@ -41,7 +41,7 @@ impl ClientPersistence {
 
     pub fn set_player_loadout_persistence_string<T: ClientIndex>(
         &self,
-        client: T,
+        client: &T,
         loadout_type: &str,
         loadout_index: usize,
         property_name: &str,
@@ -60,7 +60,7 @@ impl ClientPersistence {
 
     pub fn set_player_loadout_persistence_int<T: ClientIndex>(
         &self,
-        client: T,
+        client: &T,
         loadout_type: &str,
         loadout_index: usize,
         property_name: &str,
@@ -79,7 +79,7 @@ impl ClientPersistence {
 
     pub fn set_persistent_string<T: ClientIndex>(
         &self,
-        client: T,
+        client: &T,
         name: &str,
         value: &str,
     ) -> Result<(), PersitenceSetError> {
@@ -112,7 +112,7 @@ impl ClientPersistence {
 
     pub fn set_persistent_int<T: ClientIndex>(
         &self,
-        client: T,
+        client: &T,
         name: &str,
         value: i32,
     ) -> Result<(), PersitenceSetError> {
@@ -172,14 +172,20 @@ impl Display for PersitenceSetError {
     }
 }
 
-impl ClientIndex for &CClient {
+impl ClientIndex for CClient {
     fn get_index(&self) -> u32 {
         self.m_nHandle as u32
     }
 }
 
-impl ClientIndex for &CPlayer {
+impl ClientIndex for CPlayer {
     fn get_index(&self) -> u32 {
         get_player_index(self) as u32
+    }
+}
+
+impl ClientIndex for u32 {
+    fn get_index(&self) -> u32 {
+        *self
     }
 }
