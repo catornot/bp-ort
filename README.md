@@ -19,7 +19,7 @@ you can contact me at:
 # Ongoing Rewrite
 the bots are getting re written from scratch in a new plugin that works in tandem with bp_ort.
 This new plugin will bring better navigation and combat capabilities for bots (like wallrunning).
-Due to unforeseen obstacles the rewrite is taking longer than expected currently looking to getting it done by end of summer 2026
+Due to unforeseen obstacles the rewrite is taking longer than expected currently looking to getting it done by end of december 2026
 
 ```mermaid
 kanban
