@@ -185,44 +185,65 @@ impl PartialOrd for PossibleTarget {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CGameTraceSubSet {
+    hit_ent: Option<EHandle>,
+    fraction: f32,
+}
+
 pub fn run_targeting(
     targeting: &TargetingAction,
     brain: &mut BotBrain,
     bot: &CPlayer,
     helper: &CUserCmdHelper,
 ) -> (Status, f64) {
+    let raycast_cache = &mut brain.shared.lock().cached_player_raycasts;
+    let targeting_data = &mut brain.t;
+    let bot_origin = brain.origin;
+
     match targeting {
         TargetingAction::FindTarget => {
             let base = Vec3::new(brain.origin.x, brain.origin.y, brain.origin.z);
 
             let Some(current_target) = matches!(
-                brain.t.mode,
+                targeting_data.mode,
                 TargetingMode::Agressive | TargetingMode::PassbyAgressive
             )
             .then(|| {
                 loop {
-                    let (ent, target_data) = brain.t.possible_targets.pop().and_then(|target| {
-                        Some((lookup_ent(target.handle, helper.sv_funcs)?, target))
-                    })?;
+                    let (ent, target_data) =
+                        targeting_data.possible_targets.pop().and_then(|target| {
+                            Some((lookup_ent(target.handle, helper.sv_funcs)?, target))
+                        })?;
 
-                    let trace = trace_ray(
-                        get_eye_position(bot),
-                        ent.m_vecAbsOrigin, // TODO: use eye position too here maybe (requires rrplug support)
-                        Some(bot),
-                        TraceCollisionGroup::BlockWeaponsAndPhysics,
-                        Contents::SOLID
-                            | Contents::MOVEABLE
-                            | Contents::WINDOW
-                            | Contents::MONSTER
-                            | Contents::GRATE
-                            | Contents::PLAYER_CLIP,
-                        helper.sv_funcs,
-                        helper.engine_funcs,
-                    );
+                    let mut v = Vector3::ZERO;
+                    let trace = raycast_cache
+                        .entry((get_entity_handle(bot), get_entity_handle(ent)))
+                        .or_insert_with(|| {
+                            let trace = trace_ray(
+                                get_eye_position(bot),
+                                unsafe { *ent.get_eye_position(&mut v) }, // TODO: use eye position too here maybe (requires rrplug support)
+                                Some(bot),
+                                TraceCollisionGroup::BlockWeaponsAndPhysics,
+                                Contents::SOLID
+                                    | Contents::MOVEABLE
+                                    | Contents::WINDOW
+                                    | Contents::MONSTER
+                                    | Contents::GRATE
+                                    | Contents::PLAYER_CLIP,
+                                helper.sv_funcs,
+                                helper.engine_funcs,
+                            );
+                            CGameTraceSubSet {
+                                hit_ent: unsafe { trace.hit_ent.as_ref() }.map(get_entity_handle),
+                                fraction: trace.fraction,
+                            }
+                        });
 
-                    if trace.hit_ent == ent || trace.fraction == 1.0 {
+                    if trace.hit_ent == Some(get_entity_handle(ent)) || trace.fraction == 1.0 {
                         if !target_data.is_player
-                            && let Some(player) = get_player_in_view(brain, bot, helper, base)
+                            && let Some(player) =
+                                get_player_in_view(targeting_data, bot, bot_origin, helper, base)
                         {
                             return Some(player);
                         }
@@ -483,27 +504,28 @@ fn make_player_iterator<'a>(
 }
 
 fn get_player_in_view(
-    brain: &mut BotBrain,
+    targeting: &Targeting,
     bot: &CPlayer,
+    bot_origin: Vector3,
     helper: &CUserCmdHelper<'_>,
     base: Vec3,
 ) -> Option<i32> {
     make_player_iterator(bot, helper)
         .filter(|_| {
             matches!(
-                brain.t.mode,
+                targeting.mode,
                 TargetingMode::Agressive | TargetingMode::PassbyAgressive
             )
         })
         .fold(None::<(Vec3, &CBaseEntity, usize, i32)>, |left, rigth| {
             if let Some(left) = left
                 && (left.0.distance(base) as u32)
-                    .saturating_sub(brain.t.hates.get(&left.2).copied().unwrap_or_default() * 50)
+                    .saturating_sub(targeting.hates.get(&left.2).copied().unwrap_or_default() * 50)
                     < (rigth.0.distance(base) as u32).saturating_sub(
-                        brain.t.hates.get(&rigth.2).copied().unwrap_or_default() * 50,
+                        targeting.hates.get(&rigth.2).copied().unwrap_or_default() * 50,
                     )
                 && let trace = trace_ray(
-                    brain.origin,
+                    bot_origin,
                     Vector3::from(left.0.to_array()),
                     Some(bot),
                     TraceCollisionGroup::BlockWeaponsAndPhysics,
@@ -521,7 +543,7 @@ fn get_player_in_view(
                 Some(left)
             } else if left.is_none()
                 && let trace = trace_ray(
-                    brain.origin,
+                    bot_origin,
                     Vector3::from(rigth.0.to_array()),
                     Some(bot),
                     TraceCollisionGroup::BlockWeaponsAndPhysics,

@@ -114,14 +114,21 @@ impl Plugin for HooksPlugin {
                     base + 0x15191a,
                     &[0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90],
                 ); // removes 1 max player on sp
-                // utils::patch(
-                //     base + 0x5aa01f,
-                //     &[0x90; 30], // 40 bytes
-                // ); // removes the world view write in run_null_command
+                utils::patch(
+                    base + 0x5aa016,
+                    &[
+                        0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
+                        0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
+                        0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
+                    ],
+                ); // removes the world view write in run_null_command
+                utils::patch(
+                    base + 0x5aa00c,
+                    &[0xc7, 0x83, 0xc0, 0x1b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01],
+                ); // corrects fix up angles in run_null_command
             },
             _ => {}
         }
-
         self.bots.on_dll_load(engine, dll_ptr, token);
         self.disguise.on_dll_load(engine, dll_ptr, token);
         self.interfaces.on_dll_load(engine, dll_ptr, token);

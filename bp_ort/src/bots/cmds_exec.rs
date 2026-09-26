@@ -1,17 +1,15 @@
-use std::cell::UnsafeCell;
-
-use crate::{
-    bindings::{Action, CUserCmd, ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
-    utils::iterate_c_array_sized,
-};
 use rrplug::{
-    bindings::{class_types::client::SignonState, server::cbaseentity::CBaseEntity},
+    bindings::class_types::client::SignonState,
     high::{UnsafeHandle, vector::Vector3},
     prelude::EngineToken,
 };
-use shared::utils::nudge_type;
+use std::cell::UnsafeCell;
 
 use super::{BOT_DATA_MAP, SHARED_BOT_DATA, SIMULATE_TYPE_CONVAR, cmds_helper::CUserCmdHelper};
+use crate::{
+    bindings::{CUserCmd, ENGINE_FUNCTIONS, SERVER_FUNCTIONS},
+    utils::iterate_c_array_sized,
+};
 
 static LAST_CMD: UnsafeHandle<UnsafeCell<Option<CUserCmd>>> =
     unsafe { UnsafeHandle::new(UnsafeCell::new(None)) };
@@ -51,21 +49,22 @@ pub fn run_bots_cmds(paused: bool) {
                 let bot_player = player_by_index((i + 1) as i32).as_mut()?;
                 let handle = client.m_nHandle as usize - 1; // eh
 
-                (server_functions.calc_origin)(
-                    nudge_type::<&CBaseEntity>(bot_player),
-                    &std::ptr::from_ref(bot_player),
-                    0,
-                    0,
-                );
+                // (server_functions.calc_origin)(
+                //     nudge_type::<&CBaseEntity>(bot_player),
+                //     &std::ptr::from_ref(bot_player),
+                //     0,
+                //     0,
+                // );
 
                 Some((bot_player, handle))
             })
     } {
+        let Some(local_data) = bot_local_data.get_mut(edict) else {
+            log::warn!("bot {edict} without valid local data entry");
+            continue;
+        };
+
         let mut cmd = {
-            let Some(local_data) = bot_local_data.get_mut(edict) else {
-                log::warn!("bot {edict} without valid local data entry");
-                continue;
-            };
             local_data.edict = edict as u16;
 
             let helper = CUserCmdHelper::new(
@@ -87,20 +86,9 @@ pub fn run_bots_cmds(paused: bool) {
         };
 
         cmd.frame_time = globals.frameTime;
+        player.pl.fixangle = 0;
         unsafe {
-            (server_functions.player_process_usercmds)(
-                player,
-                &cmd,
-                1, // was amount
-                1, // was amount
-                0, // was amount as u32, seams like it was causing the dropped packets spam but also it was stoping the bots from going faster?
-                paused as i8,
-            );
-
-            (server_functions.simulate_player)(player)
+            (server_functions.proccess_user_cmds)(player, &cmd, 1, 1, 0, false);
         }
-        unsafe {
-            *LAST_CMD.get().get() = None;
-        };
     }
 }
