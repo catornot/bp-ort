@@ -7,7 +7,10 @@ use rrplug::{
     high::UnsafeHandle,
     prelude::{EngineToken, *},
 };
-use shared::utils::{get_player_index, nudge_type};
+use shared::{
+    classes::get_player_titan_class,
+    utils::{get_player_index, nudge_type},
+};
 use std::{cell::UnsafeCell, sync::atomic::Ordering};
 
 use crate::{
@@ -406,7 +409,10 @@ pub(crate) fn basic_combat(
         }
 
         if is_titan && should_shoot {
-            use crate::bots::TitanClass as TC;
+            use shared::classes::TitanClass as TC;
+
+            // for check titan class every frame
+            local_data.titan = get_player_titan_class(player).unwrap_or_default();
 
             if let TC::Northstar = local_data.titan {
                 if !should_charge {

@@ -22,7 +22,6 @@ void function Init_botSetup()
 	AddCallback_OnClientConnected( RunBotTitanFall )
 	AddCallback_OnClientConnected( DecideTeamBots )
 	AddCallback_OnClientConnected( MaybeRunTask )
-	AddCallback_OnPilotBecomesTitan( BotBecameTitan )
 
 	AddClientCommandCallback( "test_script_navs", TestScriptNavs )
 	AddClientCommandCallback( "test_script_oct", TestScriptOct )
@@ -102,17 +101,6 @@ void function SetBotLoadout( entity bot ) {
 	SetPersistentSpawnLoadoutIndex( bot, "titan", settingsNum )
 
 	SetPersistentSpawnLoadoutIndex( bot, "pilot", RandomIntRange(0,9) )
-}
-
-void function BotBecameTitan( entity bot, entity titan ) {	
-	if ( !bot.IsBot() )
-		return
-	
-    entity soul = bot.GetTitanSoul()
-    if ( !IsValid( soul ) )
-        return		
-	
-	BotSetTitan( bot, GetSoulPlayerSettings( soul ) )
 }
 
 void function DecideTeamBots( entity player ) {

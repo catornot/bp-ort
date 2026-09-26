@@ -377,6 +377,12 @@ pub struct CUtlMemory<T: ?Sized> {
     pub grow_size: usize,
 }
 
+#[repr(C)]
+pub struct PlayerClass {
+    pub class_name: [std::ffi::c_char; 64],
+    pub unknown: [u8; 0x68D0 - 64],
+}
+
 // illegal const usage for now
 // #[repr(C)]
 // struct CUtlMemoryFixed<const SIZE: usize, const nAlignment: usize = 0, T: ?Sized> {
@@ -475,6 +481,7 @@ offset_functions! {
         get_npc_buffer = unsafe extern "C" fn(*const c_void) -> *const *mut CBaseEntity where offset(0x3b63a0);
         get_npc_buffer_size = unsafe extern "C" fn(*const c_void) -> u32 where offset(0x3b7680);
         npcbuffer = *const c_void where offset(0x1064650);
+        loaded_player_classes = *const PlayerClass where offset(0x134f260);
 
         get_offhand_weapon = unsafe extern "C" fn(*const CPlayer,u32 ) -> bool where offset(0xe1ec0); // not done
         set_weapon_by_slot = unsafe extern "C" fn(*const c_void, *const c_char) where offset(0xe4ba0);

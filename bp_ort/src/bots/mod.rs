@@ -18,6 +18,7 @@ use rrplug::{
 };
 use shared::{
     bindings::HostState,
+    classes::TitanClass,
     utils::{get_player_index, nudge_type},
 };
 use simple_bot_manager::ManagerData;
@@ -69,18 +70,6 @@ pub(super) static BOT_DATA_MAP: EngineGlobal<RefCell<Lazy<[BotData; 64]>>> =
     })));
 pub(super) static SHARED_BOT_DATA: EngineGlobal<Lazy<RefCell<BotShared>>> =
     EngineGlobal::new(Lazy::new(|| RefCell::new(BotShared::default())));
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub enum TitanClass {
-    #[default]
-    Ion,
-    Northstar,
-    Scorch,
-    Ronin,
-    Tone,
-    Legion,
-    Monarch,
-}
 
 #[derive(Debug, Default)]
 pub(super) struct BotData {
@@ -658,24 +647,9 @@ fn aim_penalty_changed() -> Option<()> {
     None
 }
 
+// stub function for now
 #[rrplug::sqfunction(VM = "Server", ExportName = "BotSetTitan")]
-fn bot_set_titan(bot: Option<&mut CPlayer>, titan: String) -> Option<()> {
-    let mut data_maps = BOT_DATA_MAP.get(engine_token).try_borrow_mut().ok()?;
-    let bot_data = data_maps.as_mut().get_mut(dbg!(get_player_index(bot?)))?; // index and edict should be the same; nope it isn't
-
-    bot_data.titan = match titan.as_str().trim() {
-        "titan_stryder_arc" | "titan_stryder_leadwall" | "titan_stryder_ronin_prime" => {
-            TitanClass::Ronin
-        }
-        "titan_stryder_sniper" | "titan_stryder_northstar_prime" => TitanClass::Northstar,
-        "titan_atlas_tracker" | "titan_atlas_tone_prime" => TitanClass::Tone,
-        "titan_atlas_vanguard" => TitanClass::Monarch,
-        "titan_atlas_stickybomb" | "titan_atlas_ion_prime" => TitanClass::Ion,
-        "titan_ogre_meteor" | "titan_ogre_scorch_prime" => TitanClass::Scorch,
-        "titan_ogre_minigun" | "titan_ogre_legion_prime" => TitanClass::Legion,
-        _ => TitanClass::Ion,
-    };
-
+fn bot_set_titan(_bot: Option<&mut CPlayer>, _titan: String) -> Option<()> {
     None
 }
 
