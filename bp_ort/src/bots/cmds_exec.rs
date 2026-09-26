@@ -25,11 +25,6 @@ pub fn run_bots_cmds(paused: bool) {
     let server_functions = SERVER_FUNCTIONS.wait();
     let engine_functions = ENGINE_FUNCTIONS.wait();
     let player_by_index = server_functions.get_player_by_index;
-    let run_null_command = server_functions.run_null_command;
-    // let player_process_usercmds = server_functions.player_process_usercmds ;
-    let set_base_time = server_functions.set_base_time;
-    let player_run_command = server_functions.player_run_command;
-    let move_helper = server_functions.get_move_helper;
     let globals =
         unsafe { engine_functions.globals.as_mut() }.expect("globals were null for some reason");
 
@@ -93,76 +88,16 @@ pub fn run_bots_cmds(paused: bool) {
 
         cmd.frame_time = globals.frameTime;
         unsafe {
-            // add_user_cmd_to_player(
-            //     player,
-            //     &cmd,
-            //     1, // was amount
-            //     1, // was amount
-            //     0, // was amount as u32, seams like it was causing the dropped packets spam but also it was stoping the bots from going faster?
-            //     paused as i8,
-            // );
+            (server_functions.player_process_usercmds)(
+                player,
+                &cmd,
+                1, // was amount
+                1, // was amount
+                0, // was amount as u32, seams like it was causing the dropped packets spam but also it was stoping the bots from going faster?
+                paused as i8,
+            );
 
-            // LAST_CMD = Some(cmd);
-
-            // bots don't trigger triggers for some reason this way
-
-            // m_pPhysicsController may be behind the crashes in titans
-
-            // checks for m_animActive
-            // looks like it still did nothing
-            if !player.m_animActive || cmd.buttons & Action::WeaponDiscard as u32 == 0 {
-                let frametime = globals.frameTime;
-                let cur_time = globals.curTime;
-
-                player.pl.fixangle = 0;
-                set_base_time(player, cur_time);
-
-                *std::ptr::from_mut(&mut player.m_pCurrentCommand).cast() = &cmd;
-
-                let move_helper = move_helper()
-                    .cast_mut()
-                    .as_mut()
-                    .expect("move_helper should not be null");
-
-                move_helper.host = player;
-
-                player_run_command(player, &mut cmd, move_helper);
-                player.m_latestCommandRun = cmd.command_number as i32;
-                // (server_functions.set_last_cmd)(
-                //     (player as *const _ as *const CUserCmd)
-                //         .offset(0x20a0)
-                //         .cast_mut(),
-                //     &mut cmd,
-                // );
-
-                move_helper.host = std::ptr::null_mut();
-                globals.frameTime = frametime;
-                globals.curTime = cur_time;
-
-                // is this needed?
-                // looks like it's not
-                // (server_functions.simulate_player)(player);
-            } else {
-                run_null_command(player);
-            }
-            // *player.angles.get_inner_mut() = cmd.world_view_angles // this is not really great -> bad aim
-
-            // this is still a bit jitary :(
-            if globals.frameCount % 10 == 0 {
-                // HACK: so setting origin forces the game to check touching so kind of fixes that but doesn't work for exiting triggers maybe?
-                (server_functions.calc_origin)(
-                    nudge_type::<&CBaseEntity>(player),
-                    &std::ptr::from_ref(player),
-                    0,
-                    0,
-                );
-                (server_functions.set_origin_hack_do_not_use)(player, &player.m_vecAbsOrigin);
-            }
-
-            // *std::ptr::from_mut(player).byte_offset(0x618).cast::<u32>() = 0; // m_collectedInvalidateFlags
-            // *std::ptr::from_mut(player).byte_offset(0x61c).cast::<bool>() = false; // m_collectingInvalidateFlags
-            // (server_functions.perform_collision_check)(player, 1);
-            // (server_functions.another_perform_collision_check)(player, std::ptr::null());
+            (server_functions.simulate_player)(player)
         }
         unsafe {
             *LAST_CMD.get().get() = None;
