@@ -9,6 +9,16 @@
 }:
 let
   cargoLock = (import ./cargo_lock.nix { });
+  src = lib.fileset.toSource {
+    root = ../.;
+    fileset = lib.fileset.unions [
+      ../Cargo.toml
+      ../Cargo.lock
+      ../${plugin}
+      ../bspeater
+      ../shared
+    ];
+  };
 in
 (makeRustPlatform {
   cargo = toolchain;
@@ -16,9 +26,7 @@ in
 }).buildRustPackage
   {
     name = plugin;
-    inherit version;
-
-    src = ../.;
+    inherit version src;
 
     inherit buildType;
     rustToolchain = toolchain;
