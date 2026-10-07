@@ -58,9 +58,7 @@
           in
           {
             bp-ort = mkPluginBuildType "bp_ort" "debug";
-            ranim = mkPlugin "ranim";
             octbots = mkPlugin "octbots";
-            serialized-io = mkPlugin "serialized_io";
             packaged-mod = pkgs.callPackage ./nix/packaged-mod.nix {
               inherit (self.packages.${system}) mod;
               inherit version;
@@ -72,8 +70,6 @@
                 paths = with self.packages.${system}; [
                   bp-ort
                   octbots
-                  ranim
-                  serialized-io
                 ];
               };
               inherit version;
