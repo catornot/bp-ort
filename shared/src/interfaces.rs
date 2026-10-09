@@ -52,16 +52,16 @@ type Edict = u16;
 
 create_external_interface! {
     pub IVEngineServer + IVEngineServerMod => {
-        pub fn Changelevel(s1: *const c_char, s2: *const c_char) -> ();
-        pub(self) fn sub_18011B140() -> ();
-        pub(self) fn sub_18011B410() -> ();
-        pub(self) fn sub_18011B6F0() -> ();
-        pub(self) fn sub_18011B3A0() -> ();
-        pub(self) fn sub_18011B3C0() -> ();
+        pub fn Changelevel(pMapName: *const c_char, pLandMarkName: *const c_char) -> ();
+        pub(self) fn GetServerSpawnCount() -> i32;
+        pub(self) fn IsMapValid(pMapName: *const c_char) -> bool;
+        pub(self) fn GetMapCRC(pMapName: *const c_char, pCrc: *const u32) -> bool;
+        pub(self) fn IsDedicatedServer() -> bool;
+        pub(self) fn IsInEditMode() -> ();
         pub fn GetLaunchOptions() -> *const c_void;
 
         pub fn PrecacheModel(name: *const c_char) -> i32;
-        pub(self) fn sub_18011B440() -> ();
+        pub(self) fn IsModelPrecached(name: *const c_char) -> bool;
 
         pub(self) fn sub_18011B520() -> ();
 

@@ -10,9 +10,13 @@ use itertools::Itertools;
 use oktree::prelude::*;
 use parking_lot::{Mutex, RwLock};
 use rrplug::{
-    bindings::class_types::{cbaseentity::CBaseEntity, client::CClient, cplayer::CPlayer},
+    bindings::{
+        class_types::{cbaseentity::CBaseEntity, client::CClient, cplayer::CPlayer},
+        server::EHandle,
+    },
     prelude::*,
 };
+use rustc_hash::FxHasher;
 use shared::{
     bindings::{CUserCmd, Contents, SERVER_FUNCTIONS, TraceCollisionGroup},
     cmds_helper::CUserCmdHelper,
@@ -21,6 +25,7 @@ use shared::{
 };
 use std::{
     collections::{BTreeSet, HashMap, VecDeque},
+    hash::BuildHasherDefault,
     sync::{Arc, LazyLock},
 };
 
@@ -35,8 +40,9 @@ use crate::{
     targeting::{self, Targeting, TargetingAction, run_targeting},
 };
 
-static BEHAVIOR: LazyLock<RwLock<HashMap<u16, BT<BotAction, BotBrain>>>> =
-    LazyLock::new(|| RwLock::new(HashMap::new()));
+static BEHAVIOR: LazyLock<
+    RwLock<HashMap<u16, BT<BotAction, BotBrain>, BuildHasherDefault<FxHasher>>>,
+> = LazyLock::new(|| RwLock::new(HashMap::with_hasher(BuildHasherDefault::new())));
 static SHARED: LazyLock<Arc<Mutex<SharedBotBrain>>> =
     LazyLock::new(|| Arc::new(Mutex::new(SharedBotBrain::default())));
 
@@ -44,6 +50,7 @@ static SHARED: LazyLock<Arc<Mutex<SharedBotBrain>>> =
 pub struct SharedBotBrain {
     pub cp: SharedGamemodeCP,
     pub ctf: SharedGamemodeCTF,
+    pub cached_player_raycasts: HashMap<(EHandle, EHandle), targeting::CGameTraceSubSet>,
 }
 
 #[derive(Debug)]
@@ -198,7 +205,7 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
         routine,
         BotBrain {
             navmesh: Arc::clone(&crate::PLUGIN.wait().navmesh),
-            next_cmd: CUserCmd::init_default(SERVER_FUNCTIONS.wait()),
+            next_cmd: CUserCmd::default(),
             last_alive_state: false,
             looked_at_death_record: true,
             path_receiver: None,
@@ -240,8 +247,11 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn pre_simulate(_paused: bool) {
-    let shared = SHARED.lock();
+    let mut shared = SHARED.lock();
     let mut behaviors = BEHAVIOR.write();
+
+    shared.cached_player_raycasts.clear();
+
     targeting::classify_threats(
         &shared,
         behaviors.iter_mut().map(|(_, b)| b.blackboard_mut()),

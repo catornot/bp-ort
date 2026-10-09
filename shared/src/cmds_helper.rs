@@ -37,42 +37,27 @@ impl CUserCmd {
     pub fn new_basic_move(move_: Vector3, buttons: u32, helper: &CUserCmdHelper) -> Self {
         CUserCmd {
             move_,
-            tick_count: helper.globals.tickCount,
-            frame_time: helper.globals.absoluteFrameTime,
-            command_time: helper.globals.curTime,
-            command_number: helper.cmd_num,
-            world_view_angles: helper.angles,
-            local_view_angles: Vector3::ZERO,
-            attackangles: helper.angles,
             buttons,
-            impulse: 0,
-            weaponselect: 0,
-            meleetarget: 0,
-            camera_pos: Vector3::ZERO,
-            camera_angles: Vector3::ZERO,
-            tick_something: helper.globals.tickCount as i32,
-            dword90: helper.globals.tickCount + 4,
-            ..CUserCmd::init_default(helper.sv_funcs)
+            ..Self::new_empty(helper)
         }
     }
 
     pub fn new_empty(helper: &CUserCmdHelper) -> Self {
         CUserCmd {
             tick_count: helper.globals.tickCount,
-            frame_time: helper.globals.absoluteFrameTime,
-            command_time: helper.globals.curTime,
-            command_number: helper.cmd_num,
+            frame_time: helper.globals.frameTime,
+            command_time: 0.,
             world_view_angles: helper.angles,
-            local_view_angles: Vector3::ZERO,
-            attackangles: helper.angles,
+            local_view_angles: helper.angles,
+            // local_view_angles: Vector3::ZERO,
+            attack_angles: helper.angles,
             impulse: 0,
             weaponselect: 0,
             meleetarget: 0,
-            camera_pos: Vector3::ZERO,
-            camera_angles: helper.angles,
-            tick_something: helper.globals.tickCount as i32,
-            dword90: helper.globals.tickCount + 4,
-            ..CUserCmd::init_default(helper.sv_funcs)
+            head_offset: Vector3::ZERO,
+            camera_angles: Vector3::ZERO,
+            world_angle_tick: 0,
+            ..Default::default()
         }
     }
 }

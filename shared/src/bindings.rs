@@ -9,7 +9,7 @@ use rrplug::{
             command::{CCommand, ConCommand, FnCommandCallback_t},
             convar::Color,
         },
-        server::cai_base_npc::CAI_BaseNPC,
+        server::{EHandle, cai_base_npc::CAI_BaseNPC},
         squirrelclasstypes::SQRESULT,
         squirreldatatypes::{CSquirrelVM, HSquirrelVM, SQObject, SQTable},
     },
@@ -31,7 +31,7 @@ pub type RunNullCommand = unsafe extern "C" fn(*const CPlayer);
 pub type ProcessUsercmds = unsafe extern "C" fn(
     this: *const ServerGameClients,
     edict: c_short,
-    cmds: *const CUserCmd,
+    cmds: *const c_void,
     numcmds: i32,
     dropped: i32,
     ignore: c_char,
@@ -114,51 +114,67 @@ pub type DWORD = ::std::os::raw::c_uint;
 pub type BYTE = ::std::os::raw::c_uchar;
 
 #[repr(C)]
-#[repr(align(4))]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub struct CUserCmd {
-    pub command_number: DWORD,
-    pub tick_count: DWORD,
+    pub command_number: u32,
+    pub tick_count: u32,
     pub command_time: f32,
     pub world_view_angles: Vector3,
-    pub gap18: [BYTE; 4usize],
+    pub unknown_bool_10: u32,
     pub local_view_angles: Vector3,
-    pub attackangles: Vector3,
+    pub attack_angles: Vector3,
     pub move_: Vector3,
-    pub buttons: DWORD,
-    pub impulse: BYTE,
-    pub weaponselect: ::std::os::raw::c_short,
-    pub meleetarget: DWORD,
+    pub buttons: u32,
+    pub impulse: u8,
+    pub weaponselect: i16,
+    pub meleetarget: u32,
     pub gap_4c: [BYTE; 24usize],
     pub headoffset: ::std::os::raw::c_char,
     pub gap65: [BYTE; 11usize],
-    pub camera_pos: Vector3,
+    pub head_offset: Vector3,
     pub camera_angles: Vector3,
     pub gap88: [BYTE; 4usize],
-    pub tick_something: ::std::os::raw::c_int,
-    pub dword90: DWORD,
-    pub predicted_server_event_hack: DWORD,
-    pub dword98: DWORD,
+    pub simulation_ticks: u32,
+    pub world_angle_tick: u32,
+    pub predicted_server_event_hack: u32,
+    pub dword98: u32,
     pub frame_time: f32,
-    pub gap_a0: [c_char; 152], // eh
+    pub unknown_ptr: u64,
+    pub smart_ammo_data: [SmartAmmoCmdType; 2],
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct SmartAmmoCmdType {
+    pub smart_ammo_weapon: i32,
+    pub smart_ammo_num_visible_targets: i32,
+    pub smart_ammo_visible_targets: [i32; 8],
+    pub smart_ammo_visible_points: [i32; 8],
 }
 
 #[repr(C)]
 #[derive(Debug)]
 pub struct CMoveHelperServer {
-    pub vtable: *const c_void,
+    pub vtable: *const IMoveHelperVtable,
     pub host: *const CPlayer,
     pub touchlist: *const c_void,
 }
 
-impl CUserCmd {
-    pub fn init_default(sv_funcs: &ServerFunctions) -> Self {
-        let mut cmd = MaybeUninit::zeroed();
-        unsafe {
-            (sv_funcs.create_null_user_cmd)(cmd.as_mut_ptr());
-            cmd.assume_init()
-        }
-    }
+#[allow(non_snake_case)]
+#[repr(C)]
+#[derive(Debug)]
+pub struct IMoveHelperVtable {
+    pub GetName: extern "C" fn(*mut CMoveHelperServer, EHandle) -> *const c_char,
+    pub SetHost: extern "C" fn(this: *mut CMoveHelperServer, *const CBaseEntity),
+    pub ResetTouchList: extern "C" fn(this: *mut CMoveHelperServer),
+    pub AddToTouched:
+        extern "C" fn(this: *mut CMoveHelperServer, *const CGameTrace, *const Vector3) -> bool,
+    pub ProcessImpacts: extern "C" fn(this: *mut CMoveHelperServer),
+    pub Con_NPrintf: extern "C" fn(this: *mut CMoveHelperServer, i32, *const c_char, ...),
+    pub nullSub: extern "C" fn(this: *mut CMoveHelperServer),
+    pub GetSurfaceProps: extern "C" fn(this: *mut CMoveHelperServer) -> i64,
+    pub IsWorldEntity: extern "C" fn(this: *mut CMoveHelperServer, *const EHandle) -> bool,
+    pub DeIMoveHelper: extern "C" fn(this: *mut CMoveHelperServer),
 }
 
 #[repr(u32)]
@@ -371,6 +387,7 @@ pub struct CServer {
 }
 
 #[repr(C)]
+#[derive(Debug)]
 pub struct CUtlMemory<T: ?Sized> {
     pub memory: *mut T,
     pub allocation_count: usize,
@@ -378,6 +395,32 @@ pub struct CUtlMemory<T: ?Sized> {
 }
 
 #[repr(C)]
+#[derive(Debug)]
+pub struct CUtlVector<T: ?Sized> {
+    pub memory: *mut T,
+    pub allocation_count: usize,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct CCommandContext {
+    pub cmds: CUtlVector<CUserCmd>,
+    pub unk_0: [usize; 2],
+    pub numcmds: i32,
+    pub totalcmds: i32,
+    pub dropped_packets: i32,
+    pub paused: bool,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct CCommandContextContainer {
+    pub cmds: CUtlMemory<CCommandContext>,
+    pub count: usize,
+}
+
+#[repr(C)]
+#[derive(Debug)]
 pub struct PlayerClass {
     pub class_name: [std::ffi::c_char; 64],
     pub unknown: [u8; 0x68D0 - 64],
@@ -437,10 +480,14 @@ offset_functions! {
         client_fully_connected = ClientFullyConnected where offset(0x153B70);
         run_null_command = RunNullCommand where offset(0x5A9FD0);
         simulate_player = unsafe extern "C" fn(*const CPlayer) where offset(0x0492580);
-        process_user_cmds = ProcessUsercmds where offset(0x159e50);
-        player_process_usercmds = unsafe extern "C" fn(this: *const CPlayer, cmds: *const CUserCmd, numcmds: u32, unk: usize, totalcmds: u32, paused: c_char) where offset(0x5a81c0);
+        server_process_user_cmds = ProcessUsercmds where offset(0x159e50);
+        proccess_user_cmds = unsafe extern "C" fn(this: *const CPlayer, cmds: *const CUserCmd, numcmds: u32, totalcmds: u64, dropped_packets: u32, paused: bool) where offset(0x5a81c0);
+        process_player_commands = unsafe extern "C" fn(*mut CPlayer) -> () where offset(0x5dd440);
         create_null_user_cmd = unsafe extern "C" fn(*mut CUserCmd) -> *mut CUserCmd where offset(0x25f790);
         player_run_command = unsafe extern "C" fn(*mut CPlayer, *mut CUserCmd,*const CMoveHelperServer) -> () where offset(0x5a7d80);
+        start_blocker = unsafe extern "C" fn(*mut CPlayer) -> () where offset(0x5a6bb0); // this is a vtable function
+        other_player_process_cmd = unsafe extern "C" fn(*mut CPlayer, u32, bool) -> () where offset(0x5a6e50);
+        player_update_origin_for_cmd = unsafe extern "C" fn(*mut CPlayer) -> () where offset(0x5a6d90);
         fun_1805dd440 = unsafe extern "C" fn(*mut CPlayer) -> () where offset(0x5dd440);
         set_base_time = unsafe extern "C" fn(*mut CPlayer, f32) where offset(0x5b3790);
         set_last_cmd = unsafe extern "C" fn(*mut CUserCmd, *mut CUserCmd) -> () where offset(0x25f860);
@@ -466,6 +513,8 @@ offset_functions! {
         check_position = unsafe extern "C" fn(*const Vector3) -> *const u8 where offset(0x438a90);
         perform_collision_check = unsafe extern "C" fn(*const CPlayer, u32) where offset(0x441480);
         another_perform_collision_check = unsafe extern "C" fn(*const CPlayer, *const CPlayer) where offset(0x443bd0);
+        update_cell = unsafe extern "C" fn(*const CPlayer) where offset(0x4374a0);
+        set_simulation_time = unsafe extern "C" fn(*const CPlayer, f32) where offset(0x0435620);
 
         is_on_ground = unsafe extern "C" fn(*const CBaseEntity) -> usize where offset(0x441c60);
         is_alive = unsafe extern "C" fn(*const CBaseEntity) -> usize where offset(0x4461e0);
