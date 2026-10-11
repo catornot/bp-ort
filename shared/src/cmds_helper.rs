@@ -55,7 +55,7 @@ impl CUserCmd {
             weaponselect: 0,
             meleetarget: 0,
             head_offset: Vector3::ZERO,
-            camera_angles: Vector3::ZERO,
+            camera_angles: helper.angles,
             world_angle_tick: 0,
             ..Default::default()
         }
