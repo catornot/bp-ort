@@ -17,7 +17,7 @@ pub struct Navmesh {
     pub navmesh: NavmeshStatus,
     loading_thread: Option<JoinHandle<Option<(Octree32, f32)>>>,
     building_thread: Option<JoinHandle<Option<()>>>,
-    id: String,
+    pub id: String,
     did_build: bool,
     can_build: bool,
     pub cell_size: f32,

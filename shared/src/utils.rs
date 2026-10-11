@@ -506,12 +506,11 @@ pub fn get_global_net_int(global: impl AsRef<str>, server_funcs: &ServerFunction
 }
 
 pub fn get_global_net_float(global: impl AsRef<str>, server_funcs: &ServerFunctions) -> f32 {
-    // unsafe {
-    //     (server_funcs.get_global_net_float)(
-    //         try_cstring(global.as_ref()).unwrap_or_default().as_ptr(),
-    //     ) as f32
-    // }
-    0.
+    unsafe {
+        (server_funcs.get_global_net_float)(
+            try_cstring(global.as_ref()).unwrap_or_default().as_ptr(),
+        ) as f32
+    }
 }
 
 pub unsafe fn get_npc_buffer(server_funcs: &ServerFunctions) -> &[*mut CBaseEntity] {

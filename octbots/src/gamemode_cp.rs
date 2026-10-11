@@ -72,11 +72,10 @@ pub fn run_cp(
                         .flat_map(|ent| unsafe { ent.as_ref() })
                         .map(|ent| CapturePoint {
                             origin: unsafe { *ent.get_origin(&mut v) } + OFFSET,
-                            // cap_frac: capture_point_get_capture_progress(ent, helper),
+                            cap_frac: capture_point_get_capture_progress(ent, helper),
                             // cap_team: capture_point_get_get_capping_team(ent, helper),
                             team: ent.m_iTeamNum,
                             group: capture_point_get_group(ent).chars().next().unwrap_or('\0'),
-                            cap_frac: 0.,
                             cap_team: 0,
                         }),
                 )
@@ -157,7 +156,7 @@ pub fn run_cp(
                         .or_default()
                         .insert(get_entity_handle(bot));
                 }
-                brain.t.current_target = Target::Position(closest.origin);
+                brain.t.add_target(Target::Position(closest.origin));
             } else {
                 cp.capture_point_claims[bot.m_iTeamNum as usize]
                     .iter_mut()
@@ -186,7 +185,6 @@ pub fn run_cp(
 }
 
 fn capture_point_get_group(hardpoint: &CBaseEntity) -> String {
-    // log::info!("hardpointGroup");
     get_value_for_key_string(hardpoint, c"hardpointGroup").unwrap_or_else(|| "B".to_string())
 }
 
@@ -199,11 +197,10 @@ fn capture_point_get_get_capping_team(hardpoint: &CBaseEntity, helper: &CUserCmd
 }
 
 fn capture_point_get_capture_progress(hardpoint: &CBaseEntity, helper: &CUserCmdHelper) -> f32 {
-    log::info!("progress");
-    get_global_net_float(
-        "objective".to_string() + &capture_point_get_group(hardpoint) + "Progress",
-        helper.sv_funcs,
-    )
+    let global = "objective".to_string() + &capture_point_get_group(hardpoint) + "Progress";
+    let tmp = get_global_net_float(&global, helper.sv_funcs);
+    // log::info!("progress {tmp} {global}");
+    tmp
 }
 
 fn get_other_team(team: i32) -> i32 {

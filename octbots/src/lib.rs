@@ -27,6 +27,7 @@ use crate::async_pathfinding::JobMarket;
 
 mod async_pathfinding;
 mod behavior;
+mod difficulty;
 mod gamemode_cp;
 mod gamemode_ctf;
 mod loader;
@@ -55,6 +56,7 @@ pub struct OctBots {
     simulations: OnceCell<&'static ExternalSimulations>,
     job_market: JobMarket,
     persistence: OnceCell<ClientPersistence>,
+    config: difficulty::ConfigArc,
     // frame: Mutex<UnsafeHandle<EnteredSpan>>, // I really need this
     // trace_guard: Mutex<Option<FlushGuard>>,
 }
@@ -111,6 +113,7 @@ impl Plugin for OctBots {
             navmesh,
             simulations: OnceCell::new(),
             persistence: OnceCell::new(),
+            config: difficulty::default_config(),
             // frame: Mutex::new(unsafe { UnsafeHandle::new(Span::none().entered()) }),
             // trace_guard: Mutex::new(Some(guard)),
         }
@@ -170,7 +173,7 @@ impl Plugin for OctBots {
         }
     }
 
-    fn on_dll_load(&self, engine: Option<&EngineData>, dll_ptr: &DLLPointer, _: EngineToken) {
+    fn on_dll_load(&self, engine: Option<&EngineData>, dll_ptr: &DLLPointer, token: EngineToken) {
         unsafe {
             EngineFunctions::try_init(dll_ptr, &ENGINE_FUNCTIONS);
             ClientFunctions::try_init(dll_ptr, &CLIENT_FUNCTIONS);
@@ -178,7 +181,7 @@ impl Plugin for OctBots {
             MatSysFunctions::try_init(dll_ptr, &MATSYS_FUNCTIONS);
         }
 
-        let Some(_) = engine else { return };
+        let Some(engine) = engine else { return };
 
         _ = unsafe {
             ENGINE_INTERFACES.set(SourceInterfaces {
@@ -199,6 +202,8 @@ impl Plugin for OctBots {
             ENGINE_INTERFACES.wait().engine_server,
             false,
         ));
+
+        difficulty::init_difficulty(token, &self.config);
     }
 
     fn on_sqvm_destroyed(&self, sqvm_handle: &CSquirrelVMHandle, _engine_token: EngineToken) {
@@ -253,38 +258,62 @@ impl Plugin for OctBots {
                     loader::NavmeshStatus::Loading => {
                         if let Some(true) = navmesh.try_loaded()
                             && let cell_size = navmesh.cell_size
+                            && let is_glitch = matches!(navmesh.id.as_str(), "mp_glitch")
                             && let loader::NavmeshStatus::Loaded(octtree) = &mut navmesh.navmesh
-                            && ["cp", "mcp"].contains(
-                                &ConVarStruct::find_convar_by_name("mp_gamemode", unsafe {
-                                    EngineToken::new_unchecked()
-                                })
-                                .map(|convar| convar.get_value_string())
-                                .unwrap_or_default()
-                                .as_str(),
-                            )
                         {
-                            log::info!("loading extra hardpoints into navmesh");
-                            let neighboor = (-3..=3).flat_map(|x| {
-                                (-3..=3).flat_map(move |y| (-2..=3).map(move |z| [x, y, z]))
-                            });
+                            if ["cp", "mcp"].contains(
+                                &ConVarStruct::find_convar_by_name("mp_gamemode", engine_token)
+                                    .map(|convar| convar.get_value_string())
+                                    .unwrap_or_default()
+                                    .as_str(),
+                            ) {
+                                log::info!("loading extra hardpoints into navmesh");
+                                let neighbor = (-3..=3).flat_map(|x| {
+                                    (-3..=3).flat_map(move |y| (-2..=3).map(move |z| [x, y, z]))
+                                });
 
-                            let mut v = Vector3::ZERO;
-                            for point in
-                                shared::utils::get_ents_by_class_name(c"info_hardpoint", funcs)
-                                    .flat_map(|ent| unsafe { ent.as_ref() })
-                                    .map(|ent| unsafe { *ent.get_origin(&mut v) })
-                                    .map(|origin| vector3_to_tuvec(cell_size, origin))
-                                    .flat_map(|point| {
-                                        neighboor.clone().flat_map(move |offset| {
-                                            Some(oktree::prelude::TUVec3u32::new(
-                                                point.0.x.checked_add_signed(offset[0])?,
-                                                point.0.y.checked_add_signed(offset[1])?,
-                                                point.0.z.checked_add_signed(offset[2])?,
-                                            ))
+                                let mut v = Vector3::ZERO;
+                                for point in
+                                    shared::utils::get_ents_by_class_name(c"info_hardpoint", funcs)
+                                        .flat_map(|ent| unsafe { ent.as_ref() })
+                                        .map(|ent| unsafe { *ent.get_origin(&mut v) })
+                                        .map(|origin| vector3_to_tuvec(cell_size, origin))
+                                        .flat_map(|point| {
+                                            neighbor.clone().flat_map(move |offset| {
+                                                Some(oktree::prelude::TUVec3u32::new(
+                                                    point.0.x.checked_add_signed(offset[0])?,
+                                                    point.0.y.checked_add_signed(offset[1])?,
+                                                    point.0.z.checked_add_signed(offset[2])?,
+                                                ))
+                                            })
                                         })
+                                {
+                                    _ = octtree.insert(point);
+                                }
+                            }
+
+                            if is_glitch {
+                                let neighbors = (-3..=3).flat_map(|x| {
+                                    (-3..=3).flat_map(move |y| (-10..=10).map(move |z| [x, y, z]))
+                                });
+
+                                for point in [
+                                    Vector3::new(-4577.9033, -203.02658, 338.9362),
+                                    Vector3::new(4193.9033, 459.02658, 338.9362),
+                                ]
+                                .into_iter()
+                                .map(|origin| vector3_to_tuvec(cell_size, origin))
+                                .flat_map(|point| {
+                                    neighbors.clone().map(move |offset| {
+                                        oktree::prelude::TUVec3u32::new(
+                                            point.0.x.saturating_add_signed(offset[0]),
+                                            point.0.y.saturating_add_signed(offset[1]),
+                                            point.0.z.saturating_add_signed(offset[2]),
+                                        )
                                     })
-                            {
-                                _ = octtree.insert(point);
+                                }) {
+                                    _ = octtree.insert(point);
+                                }
                             }
                         } else if matches!(navmesh.navmesh, loader::NavmeshStatus::Unloaded)
                             && let Ok(sqvm) = SQVM_SERVER.get(engine_token).try_borrow()

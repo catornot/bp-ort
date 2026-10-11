@@ -119,40 +119,37 @@ pub fn run_ctf(
             {
                 brain.t.mode = TargetingMode::PassbyAgressive;
 
-                if brain.path_receiver.is_none()
-                    && brain.path_next_request + 0.1 < helper.globals.curTime
-                    && target_flag.parent != get_entity_handle(bot)
-                {
-                    match (
-                        brain
-                            .path
-                            .back()
-                            .filter(|point| distance3(point.as_vec(), target_flag.origin) < 100.)
-                            .is_some(),
-                        brain
-                            .path
-                            .back()
-                            .filter(|point| distance3(point.as_vec(), target_flag.origin) < 250.)
-                            .is_some(),
-                    ) {
-                        (true, true) => {}
-                        (true, false) => log::info!("this is suppose to be unreachable how lol"),
-                        // HACK: clear path if it's too far
-                        (false, true) | (false, false) => {
-                            brain.path_receiver = None;
-                            brain.path_next_request = helper.globals.curTime + 0.2;
-                            brain.path.drain(brain.path.len().min(10)..);
-                            brain.needs_new_path = true;
-                        }
-                    }
-                }
+                // if brain.path_receiver.is_none()
+                //     && brain.path_next_request + 0.1 < helper.globals.curTime
+                //     && target_flag.parent != get_entity_handle(bot)
+                // {
+                //     match (
+                //         brain
+                //             .path
+                //             .back()
+                //             .filter(|point| distance3(point.as_vec(), target_flag.origin) < 100.)
+                //             .is_some(),
+                //         brain
+                //             .path
+                //             .back()
+                //             .filter(|point| distance3(point.as_vec(), target_flag.origin) < 250.)
+                //             .is_some(),
+                //     ) {
+                //         (true, true) => {}
+                //         (true, false) => log::info!("this is suppose to be unreachable how lol"),
+                //         // HACK: clear path if it's too far
+                //         (false, true) | (false, false) => {
+                //             brain.path_receiver = None;
+                //             brain.path_next_request = helper.globals.curTime + 0.2;
+                //             brain.path.drain(brain.path.len().min(10)..);
+                //             brain.needs_new_path = true;
+                //         }
+                //     }
+                // }
 
-                if target_flag.team != bot.m_iTeamNum
-                    || !matches!(brain.t.current_target, Target::Entity(_, _))
-                {
-                    if target_flag.parent != get_entity_handle(bot) {
-                        brain.t.current_target = if distance3(target_flag.origin, brain.origin)
-                            < 100.
+                if target_flag.team != bot.m_iTeamNum {
+                    let target = if target_flag.parent != get_entity_handle(bot) {
+                        if distance3(target_flag.origin, brain.origin) < 100.
                             && target_flag.team == bot.m_iTeamNum
                         {
                             Target::Roam
@@ -167,18 +164,20 @@ pub fn run_ctf(
                             Target::Entity(target_flag.parent, false)
                         } else {
                             Target::Position(target_flag.origin)
-                        };
+                        }
                     } else {
                         // go back to the base
                         log::info!("going back home");
-                        brain.t.current_target = Target::Position(
+                        Target::Position(
                             ctf.bases
                                 .get(&get_other_team(target_flag.team))
                                 .map(|base| base.origin)
                                 .unwrap_or_default()
                                 + Vector3::new(0., 0., 100.),
-                        );
-                    }
+                        )
+                    };
+
+                    brain.t.add_target(target);
                 }
             } else {
                 brain.t.mode = TargetingMode::Agressive;

@@ -1,5 +1,6 @@
 use bevy_math::{bounding::RayCast3d, prelude::*};
 use bonsai_bt::Status;
+use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use rrplug::{
     bindings::server::{
         EHandle,
@@ -29,9 +30,14 @@ use std::{
     fmt::Debug,
     hash::{Hash, Hasher},
     ops::Sub as _,
+    sync::atomic::AtomicU8,
+    sync::atomic::Ordering as AtomicOrdering,
 };
 
-use crate::{async_pathfinding::GoalFloat, behavior::BotAction, gamemode_cp::distance3};
+use crate::{
+    async_pathfinding::GoalFloat, behavior::BotAction, difficulty::TargetingConfig,
+    gamemode_cp::distance3,
+};
 use crate::{
     behavior::{BotBrain, SharedBotBrain},
     loader::NavmeshStatus,
@@ -43,16 +49,26 @@ const SWITCH_TIME: f32 = 0.2;
 #[derive(Debug, Clone, Default)]
 pub struct Targeting {
     pub mode: TargetingMode,
-    pub current_target: Target,
+    pub move_target: Target,
+    shoot_target: Target,
     last_target: Target,
     reacts_at: f32,
-    spread: Vec<Vector3>,
-    spread_rigth: bool,
     hates: BTreeMap<usize, u32>,
-    last_weapon_state: WeaponState,
     possible_targets: BinaryHeap<PossibleTarget>,
     extra_target: Option<PossibleTarget>,
+    real_targets: ConstGenericRingBuffer<Target, 4>,
+    aim: AimController,
 }
+
+#[derive(Debug, Clone, Default)]
+struct AimController {
+    last_weapon_state: WeaponState,
+    spread: ConstGenericRingBuffer<Vector3, 50>,
+    spread_right: bool,
+    offset_angle: Vector3,
+}
+
+// so the bot gets the target, follows it's camera then maybe overshoots, then checks if there is anything there, if not updates hyp_target with it's current position, repeat
 
 #[derive(Debug, Clone, Default)]
 struct PossibleTarget {
@@ -185,6 +201,17 @@ impl PartialOrd for PossibleTarget {
     }
 }
 
+impl Targeting {
+    pub fn add_target(&mut self, target: Target) {
+        // current there are only four targets in memory so this is fine, in the future maybe it would wise to use a hashmap or something
+        // if let Some(other) = self.real_targets.iter_mut().find(|other| target == **other) {
+        //     mem::swap(&mut target, other);
+        // } else {
+        self.real_targets.enqueue(target);
+        // }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default)]
 pub struct CGameTraceSubSet {
     hit_ent: Option<EHandle>,
@@ -197,12 +224,11 @@ pub fn run_targeting(
     bot: &CPlayer,
     helper: &CUserCmdHelper,
 ) -> (Status, f64) {
-    let raycast_cache = &mut brain.shared.lock().cached_player_raycasts;
-    let targeting_data = &mut brain.t;
-    let bot_origin = brain.origin;
-
     match targeting {
         TargetingAction::FindTarget => {
+            let raycast_cache = &mut brain.shared.lock().cached_player_raycasts;
+            let targeting_data = &mut brain.t;
+            let bot_origin = brain.origin;
             let base = Vec3::new(brain.origin.x, brain.origin.y, brain.origin.z);
 
             let Some(current_target) = matches!(
@@ -278,26 +304,52 @@ pub fn run_targeting(
                     })
                     .map(|(_, _, _, handle)| (handle, false))
             }) else {
-                if !matches!(
-                    brain.t.current_target,
-                    Target::Position(_) | Target::Area(_, _)
-                ) {
-                    brain.t.current_target = Target::Roam;
-                }
                 return (Status::Success, 0.);
             };
-            brain.t.current_target = Target::Entity(current_target.0, current_target.1);
+            brain
+                .t
+                .add_target(Target::Entity(current_target.0, current_target.1));
 
             (Status::Success, 0.)
         }
 
         TargetingAction::TargetSwitching => {
-            if brain.t.current_target != brain.t.last_target {
+            brain.t.move_target = Target::Roam;
+            brain.t.shoot_target = Target::None;
+
+            let mut could_see = false;
+            for target in brain.t.real_targets.iter().rev() {
+                let can_move_change = matches!(
+                    brain.t.move_target,
+                    Target::Entity(_, _) | Target::Roam | Target::None
+                );
+                match target {
+                    Target::Entity(_, can_see) if !could_see => {
+                        could_see |= can_see;
+                        brain.t.shoot_target = *target;
+                        if can_move_change {
+                            brain.t.move_target = *target
+                        }
+                    }
+
+                    Target::Position(_) if can_move_change => brain.t.move_target = *target,
+                    Target::Area(_, _) if can_move_change => brain.t.move_target = *target,
+                    Target::Position(_)
+                    | Target::Area(_, _)
+                    | Target::Roam
+                    | Target::None
+                    | Target::Entity(_, _) => {}
+                }
+            }
+
+            brain.t.real_targets.clear();
+
+            if brain.t.shoot_target != brain.t.last_target {
                 brain.needs_new_path = true;
                 brain.path_receiver = None; // honestly should figure smth better
 
-                brain.t.last_target = brain.t.current_target;
-                brain.t.spread.clear();
+                brain.t.last_target = brain.t.shoot_target;
+                brain.t.aim.spread.clear();
                 brain.t.reacts_at = helper.globals.curTime + SWITCH_TIME;
             }
 
@@ -305,7 +357,7 @@ pub fn run_targeting(
         }
 
         TargetingAction::Shoot => {
-            if let Target::Entity(handle, true) = brain.t.current_target
+            if let Target::Entity(handle, true) = brain.t.shoot_target
                 && let Some(ent) = lookup_ent(handle, helper.sv_funcs)
             {
                 let enemy_is_titan = unsafe { ent.is_titan() };
@@ -333,7 +385,7 @@ pub fn run_targeting(
                         })) != 0.;
                         let semi_auto_allowed_fire = !weapon.m_playerData.m_semiAutoTriggerDown
                             || (weapon.m_weapState == WeaponState::Idle
-                                && weapon.m_weapState == brain.t.last_weapon_state);
+                                && weapon.m_weapState == brain.t.aim.last_weapon_state);
                         let is_fully_zoomed_in = weapon.m_playerData.m_targetZoomFOV
                                 <= weapon.m_playerData.m_curZoomFOV
                                 // from some reason the targetZoomFOV can become like 1000 > sometimes
@@ -354,27 +406,46 @@ pub fn run_targeting(
 
                         weapon_state = weapon.m_weapState;
                     } else {
-                        brain.next_cmd.buttons |=
-                            MoveAction::Attack as u32 | MoveAction::Zoom as u32;
+                        brain.next_cmd.buttons |= MoveAction::Zoom as u32;
+                        if in_view(
+                            brain.origin,
+                            brain.angles,
+                            ent.m_vecAbsOrigin,
+                            const { std::f32::consts::FRAC_PI_2 },
+                        ) {
+                            brain.next_cmd.buttons |=
+                                MoveAction::Attack as u32 | MoveAction::Zoom as u32;
+                        }
                     }
 
-                    if brain.t.spread.is_empty() {
+                    if brain.t.aim.spread.is_empty() {
+                        let config = &brain.shared.lock().config;
                         generate_spread(
-                            &mut brain.t.spread,
-                            brain.t.spread_rigth,
+                            &mut brain.t.aim.spread,
+                            brain.t.aim.spread_right,
+                            &config.targeting,
                             helper.globals.tickCount as u64 + get_player_index(bot) as u64,
                         );
-                        brain.t.spread_rigth = !brain.t.spread_rigth;
+                        brain.t.aim.spread_right = !brain.t.aim.spread_right;
                     }
 
-                    brain.next_cmd.world_view_angles = natural_aim(
-                        brain.angles,
+                    // log::info!("{:?} {:?}", brain.angles, brain.t.aim.offset_angle);
+                    // if (brain.angles.x - brain.t.aim.offset_angle.x)
+                    //     .abs()
+                    //     .rem_euclid(360.)
+                    //     < f32::EPSILON * 3.
+                    //     && (brain.angles.y - brain.t.aim.offset_angle.y)
+                    //         .abs()
+                    //         .rem_euclid(360.)
+                    //         < f32::EPSILON * 3.
+                    // {
+                    brain.t.aim.offset_angle =
                         look_at(brain.origin, unsafe { *ent.get_origin(&mut v) })
-                            + brain.t.spread.pop().unwrap_or_default(),
-                    );
-                    // brain.next_cmd.world_view_angles =
-                    //     look_at(brain.origin, unsafe { *ent.get_origin(&mut v) })
-                    //         + brain.t.spread.pop().unwrap_or_default();
+                            + brain.t.aim.spread.dequeue().unwrap_or_default();
+                    // }
+
+                    brain.next_cmd.world_view_angles =
+                        natural_aim(brain.angles, brain.t.aim.offset_angle);
 
                     let mut v = Vector3::ZERO;
                     if let Some(point) = brain.path.get(1)
@@ -401,7 +472,7 @@ pub fn run_targeting(
 
                     brain.m.view_lock = true;
                 }
-            } else if let Target::Entity(handle, false) = brain.t.current_target
+            } else if let Target::Entity(handle, false) = brain.t.shoot_target
                 && let Target::Entity(last_handle, true) = brain.t.last_target
                 && handle == last_handle
                 && let Some(ent) = lookup_ent(handle, helper.sv_funcs)
@@ -416,14 +487,14 @@ pub fn run_targeting(
             }
             // maybe add a check if ammo isn't full? then reload
 
-            if let Target::Entity(_, false) = brain.t.current_target {
+            if let Target::Entity(_, false) = brain.t.shoot_target {
                 brain.t.reacts_at = helper.globals.curTime + REACTON_TIME;
             }
 
             (Status::Success, 0.)
         }
         TargetingAction::Melee
-            if let Target::Entity(handle, true) = brain.t.current_target
+            if let Target::Entity(handle, true) = brain.t.shoot_target
                 && let Some(ent) = lookup_ent(handle, helper.sv_funcs)
                 && unsafe { ent.is_titan() } == brain.is_titan =>
         {
@@ -466,7 +537,7 @@ pub fn run_targeting(
             if let Some(weapon) = lookup_ent(bot.m_inventory.activeWeapon, helper.sv_funcs)
                 .and_then::<&CWeaponX, _>(|ent| ent.dynamic_cast())
             {
-                brain.t.last_weapon_state = weapon.m_weapState;
+                brain.t.aim.last_weapon_state = weapon.m_weapState;
             }
             (Status::Success, 0.)
         }
@@ -577,47 +648,70 @@ pub fn look_at(origin: Vector3, target: Vector3) -> Vector3 {
     Vector3::new(-anglex, angley, 0.)
 }
 
-fn generate_spread(spread_buf: &mut Vec<Vector3>, spread_rigth: bool, seed: u64) {
-    // TODO: document this
-    const VALUES: usize = 30;
-    const VALUES_BOTTOM: i32 = VALUES as i32 / -3;
-    const VALUES_TOP: i32 = VALUES as i32 * 2 / 3;
-    const VALUES_STEP: f32 = 0.2;
-    const PERMUTATIONS: u64 = 15;
-    const Y_FLUTUATION_PERMUTATIONS: u64 = 10;
-    const Y_FLUTUATION_PERMUTATIONS_MIN: u64 = 1;
-    const Y_FLUTUATION_FRAC: f32 = 0.01;
+pub fn in_view(origin: Vector3, angles: Vector3, cmp_origin: Vector3, view_rad: f32) -> bool {
+    let (origin, angles, cmp_origin) = (
+        Vec3::new(origin.x, origin.y, origin.z),
+        Vec3::new(angles.x, angles.y, angles.z),
+        Vec3::new(cmp_origin.x, cmp_origin.y, cmp_origin.z),
+    );
 
+    (cmp_origin - origin).normalize_or_zero().dot(angles) > view_rad.cos()
+}
+
+static SPIN: AtomicU8 = AtomicU8::new(1);
+fn generate_spread<const N: usize>(
+    spread_buf: &mut ConstGenericRingBuffer<Vector3, N>,
+    spread_rigth: bool,
+    config: &TargetingConfig,
+    seed: u64,
+) {
     spread_buf.clear();
 
-    let right_way = (VALUES_BOTTOM..VALUES_TOP).filter(|_| spread_rigth);
-    let left_way = (-VALUES_TOP..-VALUES_BOTTOM)
+    let values_bottom: i32 = config.values as i32 / -3;
+    let values_top: i32 = config.values as i32 * 2 / 3;
+
+    let right_way = (values_bottom..values_top).filter(|_| spread_rigth);
+    let left_way = (-values_top..-values_bottom)
         .filter(|_| !spread_rigth)
         .rev();
 
+    let spin = SPIN
+        .fetch_update(AtomicOrdering::Relaxed, AtomicOrdering::Relaxed, |x| {
+            Some((x + 1) % 8)
+        })
+        .unwrap_or_default() as f32;
+
     let mut hasher = FxHasher::default();
     seed.hash(&mut hasher);
-    let angle = (hasher.finish() % PERMUTATIONS) as f32 / PERMUTATIONS as f32;
+    let angle = (hasher.finish() % config.permutations) as f32 / config.permutations as f32;
     spread_buf.extend(
         right_way
             .chain(left_way)
             .map(|i| {
                 let mut hasher = FxHasher::default();
                 seed.hash(&mut hasher);
-                Y_FLUTUATION_PERMUTATIONS.hash(&mut hasher);
+                config.y_fluctuation_permutations.hash(&mut hasher);
                 (
                     i as f32,
-                    ((hasher.finish() % Y_FLUTUATION_PERMUTATIONS)
-                        .min(Y_FLUTUATION_PERMUTATIONS_MIN) as f32
-                        / Y_FLUTUATION_PERMUTATIONS as f32
-                        - Y_FLUTUATION_PERMUTATIONS as f32 / 2.)
-                        * Y_FLUTUATION_FRAC,
+                    ((hasher.finish() % config.y_fluctuation_permutations)
+                        .min(config.y_fluctuation_permutations_min) as f32
+                        / config.y_fluctuation_permutations as f32
+                        - config.y_fluctuation_permutations as f32 / 2.)
+                        * config.y_fluctuation_frac,
                 )
             })
             .map(|(x, fluctuation)| {
-                Vector3::new(angle * x * VALUES_STEP - fluctuation, x * VALUES_STEP, 0.)
+                Vector3::new(
+                    angle * x * config.values_step - fluctuation,
+                    x * config.values_step * spin,
+                    0.,
+                )
             }),
     );
+}
+
+pub fn arc_length(left: Vec2, right: Vec2) -> f32 {
+    Vec2::new(angle_diff(left.x, right.x), angle_diff(left.y, right.y)).length()
 }
 
 const AIM_DELTA: f32 = PI / 20.;
@@ -636,6 +730,7 @@ fn angle_move_toward(from: f32, to: f32, delta: f32) -> f32 {
     (from + delta.clamp(diff.abs() - PI, diff.abs()) * if diff >= 0.0 { 1. } else { -1. })
         .to_degrees()
 }
+
 fn angle_diff(from: f32, to: f32) -> f32 {
     let diff = (to - from).rem_euclid(TAU);
     (2.0 * diff).rem_euclid(TAU) - diff

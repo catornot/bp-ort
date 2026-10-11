@@ -18,7 +18,7 @@ use rrplug::{
 };
 use rustc_hash::FxHasher;
 use shared::{
-    bindings::{CUserCmd, Contents, SERVER_FUNCTIONS, TraceCollisionGroup},
+    bindings::{CUserCmd, Contents, TraceCollisionGroup},
     cmds_helper::CUserCmdHelper,
     plugin_interfaces::{ExternalSimulations, Hull},
     utils::{DebugIgnore, get_player_index, is_alive, nudge_type, trace_ray},
@@ -30,7 +30,9 @@ use std::{
 };
 
 use crate::{
+    PLUGIN,
     async_pathfinding::{GoalFloat, PathReceiver},
+    difficulty::DifficultyConfig,
     gamemode_cp::{GamemodeCPAction, SharedGamemodeCP, run_cp},
     gamemode_ctf::{GamemodeCTFAction, SharedGamemodeCTF, run_ctf},
     loader::{Navmesh, NavmeshStatus, Octree32},
@@ -40,9 +42,9 @@ use crate::{
     targeting::{self, Targeting, TargetingAction, run_targeting},
 };
 
-static BEHAVIOR: LazyLock<
-    RwLock<HashMap<u16, BT<BotAction, BotBrain>, BuildHasherDefault<FxHasher>>>,
-> = LazyLock::new(|| RwLock::new(HashMap::with_hasher(BuildHasherDefault::new())));
+type BehaviorType = HashMap<u16, BT<BotAction, BotBrain>, BuildHasherDefault<FxHasher>>;
+static BEHAVIOR: LazyLock<RwLock<BehaviorType>> =
+    LazyLock::new(|| RwLock::new(HashMap::with_hasher(BuildHasherDefault::new())));
 static SHARED: LazyLock<Arc<Mutex<SharedBotBrain>>> =
     LazyLock::new(|| Arc::new(Mutex::new(SharedBotBrain::default())));
 
@@ -51,6 +53,8 @@ pub struct SharedBotBrain {
     pub cp: SharedGamemodeCP,
     pub ctf: SharedGamemodeCTF,
     pub cached_player_raycasts: HashMap<(EHandle, EHandle), targeting::CGameTraceSubSet>,
+    pub config: Arc<DifficultyConfig>,
+    did_load_config: bool,
 }
 
 #[derive(Debug)]
@@ -141,11 +145,11 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
     ]);
 
     let targetting = Sequence(vec![
+        Action(TargetingAction::TargetSwitching.into()),
         AlwaysSucceed(Box::new(Select(vec![
             Action(TargetingAction::Melee.into()),
             Action(TargetingAction::Shoot.into()),
         ]))),
-        Action(TargetingAction::TargetSwitching.into()),
         Action(TargetingAction::UpdatePostTargetting.into()),
     ]);
 
@@ -250,6 +254,11 @@ pub extern "C" fn pre_simulate(_paused: bool) {
     let mut shared = SHARED.lock();
     let mut behaviors = BEHAVIOR.write();
 
+    if !shared.did_load_config {
+        shared.config = PLUGIN.wait().config.load_full();
+        shared.did_load_config = true;
+    }
+
     shared.cached_player_raycasts.clear();
 
     targeting::classify_threats(
@@ -307,7 +316,7 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
         }
         BotAction::FindPath if !brain.is_titan => 'path: {
             let navmesh = brain.navmesh.read();
-            let Some(end) = brain.t.current_target.to_goal(helper) else {
+            let Some(end) = brain.t.move_target.to_goal(helper) else {
                 break 'path (Status::Failure, 0.);
             };
 
@@ -328,7 +337,7 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
                 && brain.path_receiver.is_none()
                 && let Some(distance) = brain
                     .t
-                    .current_target
+                    .move_target
                     .to_position(helper)
                     .map(|pos| distance2d(pos, brain.abs_origin))
                 && distance > 1000.
@@ -434,19 +443,18 @@ pub extern "C" fn wallpathfining_bots(helper: &CUserCmdHelper, bot: &mut CPlayer
             {
                 brain.path_next_request = helper.globals.curTime + 0.1;
 
-                let end_point =
-                    brain
-                        .t
-                        .current_target
-                        .to_position(helper)
-                        .unwrap_or_else(|| unsafe {
-                            brain.cmd_interface.0.find_random_point(
-                                Hull::Titan,
-                                brain.abs_origin,
-                                500.,
-                                Some(50.),
-                            )
-                        });
+                let end_point = brain
+                    .t
+                    .move_target
+                    .to_position(helper)
+                    .unwrap_or_else(|| unsafe {
+                        brain.cmd_interface.0.find_random_point(
+                            Hull::Titan,
+                            brain.abs_origin,
+                            500.,
+                            Some(50.),
+                        )
+                    });
 
                 let path = unsafe {
                     brain
