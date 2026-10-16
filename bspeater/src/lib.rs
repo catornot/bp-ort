@@ -7,6 +7,8 @@ use bevy::{
     prelude::*,
     state::app::StatesPlugin,
 };
+use bytemuck::AnyBitPattern;
+use itertools::Itertools;
 use oktree::{prelude::*, tree::Octree};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::{
@@ -113,7 +115,10 @@ pub fn read_lump_data<T>(
     reader: &mut dyn SeekRead,
     header: &BSPHeader,
     id: LumpIds,
-) -> Result<Vec<T>, io::Error> {
+) -> Result<Vec<T>, io::Error>
+where
+    T: AnyBitPattern,
+{
     let lump = get_lump(header, id);
     let size = std::mem::size_of::<T>();
 
@@ -126,17 +131,12 @@ pub fn read_lump_data<T>(
     assert!(buf.len().is_multiple_of(size), "lump {id:?}");
     assert!(buf.capacity().is_multiple_of(size), "lump {id:?}");
 
-    let tricoll = unsafe {
-        Vec::<T>::from_raw_parts(
-            buf.as_ptr().cast_mut().cast(),
-            buf.len() / size,
-            buf.capacity() / size,
-        )
-    };
+    let lump_data = buf
+        .chunks_exact(size)
+        .map(|bytes| bytemuck::pod_read_unaligned(bytes))
+        .collect_vec();
 
-    std::mem::forget(buf);
-
-    Ok(tricoll)
+    Ok(lump_data)
 }
 
 pub fn get_lump(header: &BSPHeader, lump: LumpIds) -> &LumpHeader {
