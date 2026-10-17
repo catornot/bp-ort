@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::ops::Not;
 
 use crate::bindings::*;
@@ -58,7 +59,9 @@ pub fn geoset_to_meshes(
         grid,
         props,
         model_data,
+        models,
     }: BSPData,
+    entities: &[entities::Entity],
     map_name: &str,
 ) -> Vec<Mesh> {
     let extra_flags = EXTRA_FLAGS
@@ -71,6 +74,14 @@ pub fn geoset_to_meshes(
         .find_map(|(name, rest)| (*name == map_name).then_some(rest))
         .copied()
         .unwrap_or_default();
+
+    // these are indices to MESHES not CM_BRUSHES, so we need a way to figure out a mapping between the two
+    let skip_models = entities
+        .iter()
+        .filter_map(|ent| ent.get_model_index())
+        .dedup()
+        .filter_map(|index| models.get(index))
+        .collect::<Vec<_>>();
 
     geo_sets
         .into_iter()
@@ -355,32 +366,3 @@ fn calculate_intersection_point(planes: [&Vec4; 3]) -> Option<DVec3> {
 
     Some(Vec3::from_slice((a.try_inverse()? * b).as_slice()).as_dvec3())
 }
-
-// pub fn ico(sphere: Sphere, subdivisions: u32) -> (Vec<Vec3>, Vec<u32>) {
-//     use hexasphere::shapes::IcoSphere;
-//     let generated = IcoSphere::new(subdivisions as usize, |point| {
-//         let inclination = ops::acos(point.y);
-//         let azimuth = ops::atan2(point.z, point.x);
-
-//         let norm_inclination = inclination / PI;
-//         let norm_azimuth = 0.5 - (azimuth / core::f32::consts::TAU);
-
-//         [norm_azimuth, norm_inclination]
-//     });
-
-//     let raw_points = generated.raw_points();
-
-//     let points = raw_points
-//         .iter()
-//         .map(|&p| (p * sphere.radius).into())
-//         .map(Vec3::from_array)
-//         .collect::<Vec<Vec3>>();
-
-//     let mut indices = Vec::with_capacity(generated.indices_per_main_triangle() * 20);
-
-//     for i in 0..20 {
-//         generated.get_indices(i, &mut indices);
-//     }
-
-//     (points, indices)
-// }

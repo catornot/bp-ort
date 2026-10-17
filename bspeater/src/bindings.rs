@@ -348,6 +348,15 @@ pub struct VertexBlinnPhong {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
+pub struct Model {
+    pub mins: Vec3,
+    pub max: Vec3,
+    pub first_mesh: i32,
+    pub num_meshes: i32,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct Brush {
     pub origin: Vec3,
     pub num_non_axial_do_discard: u8,
@@ -848,6 +857,7 @@ pub struct BSPData {
     pub grid: CMGrid,
     pub props: Vec<StaticProp>,
     pub model_data: Vec<Option<(Vec<Vec3>, Vec<u32>)>>,
+    pub models: Vec<Model>,
 }
 
 impl TryFrom<u32> for MeshFlags {

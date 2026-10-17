@@ -17,9 +17,13 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::bindings::{BSPHeader, LumpHeader, LumpIds};
+use crate::{
+    bindings::{BSPHeader, LumpHeader, LumpIds},
+    entities::load_entitess,
+};
 
 pub mod bindings;
+pub mod entities;
 pub mod export;
 pub mod geoset_loader;
 pub mod mdl_loader;
@@ -175,6 +179,11 @@ where
         .ok_or_else(|| anyhow::format_err!("isn't there supposed to be only one grid thing"))?;
     let game_lump = read_lump_data::<u8>(&mut bsp, &header, LumpIds::GAME_LUMP)?;
     let (props, model_data) = mdl_loader::extract_game_lump_models(game_lump, vpk_reader);
+    let entities = load_entitess(read_lump_data(&mut bsp, &header, LumpIds::ENTITIES)?);
+    let models = read_lump_data::<Model>(&mut bsp, &header, LumpIds::MODELS)?;
+
+    println!("{entities:#?}");
+
     println!("vertices {:#?}", vertices.len());
     println!("normals {:#?}", normals.len());
     let meshes = geoset_loader::geoset_to_meshes(
@@ -191,7 +200,9 @@ where
             grid,
             props,
             model_data,
+            models,
         },
+        &entities,
         map_name,
     );
     Ok(meshes)
