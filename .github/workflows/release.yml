@@ -13,7 +13,7 @@ permissions:
   contents: write # Needed to write to GitHub draft release
 
 jobs:
-  build-northstar:
+  build-bp-ort:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
