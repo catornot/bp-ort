@@ -1,7 +1,10 @@
 {
   allowedCrate ? null,
   allowedCrates ? if allowedCrate == null then [ ] else [ allowedCrate ],
-  libCrates ? [ "shared" "bspeater" ],
+  libCrates ? [
+    "shared"
+    "bspeater"
+  ],
   writeText,
 }:
 let

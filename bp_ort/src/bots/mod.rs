@@ -28,6 +28,7 @@ use std::{
     ops::Not,
     sync::atomic::{AtomicI32, AtomicU32, Ordering},
 };
+use windows_sys::Win32::System::LibraryLoader::GetModuleHandleA;
 
 use crate::{
     PLUGIN,
@@ -55,7 +56,8 @@ mod persistence;
 mod set_on_join;
 mod simple_bot_manager;
 
-pub const DEFAULT_SIMULATE_TYPE: i32 = 100;
+pub const DEFAULT_SIMULATE_TYPE: i32 = 6;
+pub const OCTBOTS_SIMULATE_TYPE: i32 = 100;
 
 static BASE_AIM_PENALTY: OnceCell<ConVarStruct> = OnceCell::new();
 static CLAN_TAG_CONVAR: OnceCell<ConVarStruct> = OnceCell::new();
@@ -329,7 +331,7 @@ impl Plugin for Bots {
 
         let simulate_convar = ConVarStruct::try_new(&ConVarRegister::new(
                 "bot_cmds_type",
-                DEFAULT_SIMULATE_TYPE.to_string(),
+                if unsafe { GetModuleHandleA(c"octbots.dll".as_ptr().cast()) } == 0 {  DEFAULT_SIMULATE_TYPE.to_string()} else { OCTBOTS_SIMULATE_TYPE.to_string()  },
                 FCVAR_GAMEDLL as i32,
                 "the type of cmds running for bots; 0 = null, 1 = frog, 2 = following player 0, 3 = firing, 5 = firing and moving to a player, 5 = going forward",
             ), token

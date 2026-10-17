@@ -41,7 +41,7 @@
 
         packages =
           let
-            version = "0.1.7";
+            version = self.version;
           in
           let
             mkPluginBuildType =
@@ -63,15 +63,16 @@
               inherit (self.packages.${system}) mod;
               inherit version;
             };
+            plugins = pkgs.symlinkJoin {
+              name = "plugins";
+              # must have at least one plugin
+              paths = with self.packages.${system}; [
+                bp-ort
+                octbots
+              ];
+            };
             mod = pkgs.callPackage ./nix/mod.nix {
-              plugins = pkgs.symlinkJoin {
-                name = "plugins";
-                # must have at least one plugin
-                paths = with self.packages.${system}; [
-                  bp-ort
-                  octbots
-                ];
-              };
+              plugins = self.packages.${system}.plugins;
               inherit version;
             };
             bspeater = pkgs.callPackage ./nix/bspeater.nix {
@@ -204,5 +205,8 @@
           ];
         };
       }
-    );
+    )
+    // {
+      version = "1.0.0";
+    };
 }

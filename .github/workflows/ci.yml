@@ -53,7 +53,7 @@ jobs:
           purge-primary-key: never
 
       - name: Build
-        run: nix build .#packaged-mod
+        run: nix build .#plugins
 
       # # Uncomment to debug this job
       # - name: Setup tmate session
