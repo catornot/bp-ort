@@ -157,7 +157,7 @@ impl Plugin for OctBots {
             MatSysFunctions::try_init(dll_ptr, &MATSYS_FUNCTIONS);
         }
 
-        let Some(engine) = engine else { return };
+        let Some(_) = engine else { return };
 
         _ = unsafe {
             ENGINE_INTERFACES.set(SourceInterfaces {

@@ -74,6 +74,7 @@ pub struct BotBrain {
     pub needs_new_path: bool,
     gamemode: String,
     pub shared: Arc<Mutex<SharedBotBrain>>,
+    pub config: Arc<DifficultyConfig>,
     cmd_interface: DebugIgnore<&'static ExternalSimulations>,
     loadout_index_pilot: usize,
     loadout_index_titan: usize,
@@ -146,6 +147,8 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
 
     let targetting = Sequence(vec![
         Action(TargetingAction::TargetSwitching.into()),
+        Action(TargetingAction::ProtoTitanEmbark.into()),
+        Action(TargetingAction::ProtoTitanUseAbility.into()),
         AlwaysSucceed(Box::new(Select(vec![
             Action(TargetingAction::Melee.into()),
             Action(TargetingAction::Shoot.into()),
@@ -201,6 +204,12 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
         ),
     ]);
 
+    let mut shared = SHARED.lock();
+    if !shared.did_load_config {
+        shared.config = PLUGIN.wait().config.load_full();
+        shared.did_load_config = true;
+    }
+
     log::info!(
         "init bot {} with {edict}",
         shared::utils::get_c_char_array_lossy(&client.m_szServerName)
@@ -229,6 +238,7 @@ pub extern "C" fn init_bot(edict: u16, client: &CClient) {
 
             m: Movement::default(),
 
+            config: Arc::clone(&shared.config),
             shared: Arc::clone(&*SHARED),
             cmd_interface: DebugIgnore(crate::PLUGIN.wait().simulations.wait()),
         },

@@ -5,6 +5,7 @@ use rrplug::{
     bindings::server::{
         EHandle,
         cbaseentity::CBaseEntity,
+        cnpc_titan::CNPC_Titan,
         cplayer::CPlayer,
         cweaponx::{CWeaponX, WeaponState},
     },
@@ -16,10 +17,11 @@ use shared::{
     bindings::{
         Action as MoveAction, Contents, ENGINE_FUNCTIONS, SERVER_FUNCTIONS, TraceCollisionGroup,
     },
+    classes::get_player_titan_class,
     cmds_helper::CUserCmdHelper,
     utils::{
-        get_entity_handle, get_eye_position, get_npc_buffer, get_player_index, is_alive,
-        lookup_ent, nudge_type, trace_ray,
+        get_entity_handle, get_eye_position, get_net_var, get_npc_buffer, get_player_index,
+        is_alive, lookup_ent, nudge_type, trace_ray,
     },
 };
 use std::{
@@ -42,9 +44,6 @@ use crate::{
     behavior::{BotBrain, SharedBotBrain},
     loader::NavmeshStatus,
 };
-
-const REACTON_TIME: f32 = 0.4;
-const SWITCH_TIME: f32 = 0.2;
 
 #[derive(Debug, Clone, Default)]
 pub struct Targeting {
@@ -89,6 +88,8 @@ pub enum TargetingAction {
     TargetSwitching,
     Shoot,
     Melee,
+    ProtoTitanUseAbility,
+    ProtoTitanEmbark,
     OnDeathStartHate,
     UpdatePostTargetting,
 }
@@ -98,6 +99,7 @@ pub enum Target {
     Entity(EHandle, bool),
     Position(Vector3),
     Area(Vector3, f64),
+    OwnedTitan(EHandle),
     Roam,
     #[default]
     None,
@@ -135,6 +137,10 @@ impl Target {
             Target::Area(pos, _) => Some(pos),
             Target::Roam => None,
             Target::None => None,
+            Target::OwnedTitan(handle) => lookup_ent(handle, helper.sv_funcs).map(|ent| unsafe {
+                let mut v = Vector3::ZERO;
+                *ent.get_origin(&mut v)
+            }),
         }
     }
 
@@ -145,6 +151,7 @@ impl Target {
             Target::Area(pos, radius) => Some(GoalFloat::Area(pos, radius)),
             Target::Roam => Some(GoalFloat::Distance(15)),
             Target::None => None,
+            Target::OwnedTitan(_) => Some(GoalFloat::Point(self.to_position(helper)?)),
         }
     }
 }
@@ -310,6 +317,12 @@ pub fn run_targeting(
                 .t
                 .add_target(Target::Entity(current_target.0, current_target.1));
 
+            if let Some(_) = lookup_ent(bot.m_petTitan, helper.sv_funcs)
+                .and_then::<&CNPC_Titan, _>(|ent| ent.dynamic_cast())
+            {
+                brain.t.add_target(Target::OwnedTitan(bot.m_petTitan));
+            }
+
             (Status::Success, 0.)
         }
 
@@ -331,9 +344,9 @@ pub fn run_targeting(
                             brain.t.move_target = *target
                         }
                     }
-
                     Target::Position(_) if can_move_change => brain.t.move_target = *target,
                     Target::Area(_, _) if can_move_change => brain.t.move_target = *target,
+                    Target::OwnedTitan(_) => brain.t.move_target = *target,
                     Target::Position(_)
                     | Target::Area(_, _)
                     | Target::Roam
@@ -350,7 +363,8 @@ pub fn run_targeting(
 
                 brain.t.last_target = brain.t.shoot_target;
                 brain.t.aim.spread.clear();
-                brain.t.reacts_at = helper.globals.curTime + SWITCH_TIME;
+                brain.t.reacts_at =
+                    helper.globals.curTime + brain.config.targeting.target_switch_time;
             }
 
             (Status::Success, 0.)
@@ -419,11 +433,10 @@ pub fn run_targeting(
                     }
 
                     if brain.t.aim.spread.is_empty() {
-                        let config = &brain.shared.lock().config;
                         generate_spread(
                             &mut brain.t.aim.spread,
                             brain.t.aim.spread_right,
-                            &config.targeting,
+                            &brain.config.targeting,
                             helper.globals.tickCount as u64 + get_player_index(bot) as u64,
                         );
                         brain.t.aim.spread_right = !brain.t.aim.spread_right;
@@ -488,7 +501,7 @@ pub fn run_targeting(
             // maybe add a check if ammo isn't full? then reload
 
             if let Target::Entity(_, false) = brain.t.shoot_target {
-                brain.t.reacts_at = helper.globals.curTime + REACTON_TIME;
+                brain.t.reacts_at = helper.globals.curTime + brain.config.targeting.reaction_time;
             }
 
             (Status::Success, 0.)
@@ -516,13 +529,74 @@ pub fn run_targeting(
                 brain.next_cmd.buttons |= MoveAction::Melee as u32;
                 brain.next_cmd.world_view_angles =
                     natural_aim(brain.angles, look_at(brain.origin, target));
-                brain.t.reacts_at = helper.globals.curTime + SWITCH_TIME;
+                brain.t.reacts_at =
+                    helper.globals.curTime + brain.config.targeting.target_switch_time;
                 (Status::Success, 0.)
             } else {
                 (Status::Failure, 0.)
             }
         }
         TargetingAction::Melee => (Status::Failure, 0.),
+        TargetingAction::ProtoTitanUseAbility
+            if unsafe { bot.is_titan() }
+                && let Target::Entity(handle, true) = brain.t.shoot_target
+                && let Some(target) = lookup_ent(handle, helper.sv_funcs)
+                && let Some(titan_class) = get_player_titan_class(bot) =>
+        {
+            use shared::classes::TitanClass as TC;
+            brain.next_cmd.buttons |= match (helper.globals.frameCount % 300, titan_class) {
+                (_, TC::Scorch) if distance3(brain.abs_origin, target.m_vecAbsOrigin) <= 300. => {
+                    MoveAction::OffHand0 as u32
+                }
+                (0..60, TC::Scorch) => 0,
+                (60..120, TC::Ronin | TC::Ion) => 0,
+                (120..180, TC::Legion) => 0,
+                (0..60, _) => MoveAction::OffHand0 as u32,
+                (60..120, _) => MoveAction::OffHand1 as u32,
+                (120..180, _) => MoveAction::OffHand2 as u32,
+                (180..240, _) => MoveAction::OffHand3 as u32,
+                (240..300, _) => {
+                    MoveAction::OffHand4 as u32 // core
+                }
+                _ => 0,
+            };
+            (Status::Success, 0.)
+        }
+        TargetingAction::ProtoTitanUseAbility => (Status::Success, 0.),
+        // this is just so they at least somehow work for the release a better implementation will implemented later
+        TargetingAction::ProtoTitanEmbark if unsafe { !bot.is_titan() } && is_alive(bot) => {
+            // due to crashes we disable this for now
+            // if helper.globals.frameCount % 100 == 0
+            //     && get_net_var(bot, c"goalState", 124, helper.sv_funcs) == Some(2)
+            // {
+            //     log::info!("bot calling titan down");
+
+            //     let sqvm = mid::squirrel::SQVM_SERVER
+            //         .get(unsafe { EngineToken::new_unchecked() })
+            //         .borrow();
+            //     if let Some(sqvm) = sqvm.as_ref() {
+            //         high::squirrel::call_sq_function::<(), _>(
+            //             *sqvm,
+            //             SQFUNCTIONS.server.wait(),
+            //             "CodeCallback_ClientCommand",
+            //             (
+            //                 unsafe { UnsafeHandle::new(bot) },
+            //                 ["ClientCommand_RequestTitan".to_owned()],
+            //             ),
+            //         )
+            //         .unwrap_or_default();
+            //     }
+            // }
+
+            if let Some(_) = lookup_ent(bot.m_petTitan, helper.sv_funcs)
+                && helper.globals.frameCount % 60 < 30
+            {
+                brain.next_cmd.buttons |= MoveAction::Use as u32;
+            }
+
+            (Status::Success, 0.)
+        }
+        TargetingAction::ProtoTitanEmbark => (Status::Success, 0.),
         TargetingAction::OnDeathStartHate => {
             if let Some(player) = lookup_ent(bot.m_lastDeathInfo.m_hAttacker, helper.sv_funcs)
                 .and_then::<&CPlayer, _>(|ent| ent.dynamic_cast())
