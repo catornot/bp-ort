@@ -60,7 +60,6 @@ jobs:
           path: ./dist
 
       - name: Upload files to draft release
-        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
