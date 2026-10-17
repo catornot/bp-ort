@@ -20,8 +20,6 @@ use shared::{
     plugin_interfaces::{CURERENT_INTERFACE_VERSION, ExternalSimulations, rust_version_hash},
 };
 use std::{env, ffi::CStr, sync::Arc};
-// use tracing_chrome::FlushGuard;
-// use tracing_subscriber::layer::SubscriberExt;
 
 use crate::async_pathfinding::JobMarket;
 
@@ -57,8 +55,6 @@ pub struct OctBots {
     job_market: JobMarket,
     persistence: OnceCell<ClientPersistence>,
     config: difficulty::ConfigArc,
-    // frame: Mutex<UnsafeHandle<EnteredSpan>>, // I really need this
-    // trace_guard: Mutex<Option<FlushGuard>>,
 }
 
 impl Plugin for OctBots {
@@ -87,24 +83,6 @@ impl Plugin for OctBots {
 
         let navmesh = Arc::new(RwLock::new(navmesh));
 
-        // let file = PathBuf::from(format!(
-        //     "trace/trace_{}.json",
-        //     SystemTime::now()
-        //         .duration_since(SystemTime::UNIX_EPOCH)
-        //         .unwrap()
-        //         .as_secs_f64()
-        //         .trunc() as i64
-        // ));
-
-        // fs::create_dir_all(file.parent().unwrap()).unwrap();
-        // _ = fs::File::create_new(&file);
-
-        // log::info!("trace goes into {file:?}");
-
-        // let (chrome_layer, guard) = tracing_chrome::ChromeLayerBuilder::new().file(file).build();
-        // tracing::subscriber::set_global_default(tracing_subscriber::registry().with(chrome_layer))
-        //     .expect("setup tracy layer");
-
         sqapi::octtree_register_sq_functions();
 
         Self {
@@ -114,8 +92,6 @@ impl Plugin for OctBots {
             simulations: OnceCell::new(),
             persistence: OnceCell::new(),
             config: difficulty::default_config(),
-            // frame: Mutex::new(unsafe { UnsafeHandle::new(Span::none().entered()) }),
-            // trace_guard: Mutex::new(Some(guard)),
         }
     }
 
@@ -222,7 +198,6 @@ impl Plugin for OctBots {
 
         unsafe { self.simulations.wait().drop_simulation(PLUGIN_DLL_NAME) };
         self.job_market.stop();
-        // self.trace_guard.lock().flush();
 
         // force the visualizer to stop and run other drop functions :skull: (didn't used to do that)
         behavior::drop_behaviors();
@@ -232,9 +207,6 @@ impl Plugin for OctBots {
     }
 
     fn runframe(&self, engine_token: EngineToken) {
-        // let mut frame = self.frame.lock();
-        // *frame = unsafe { UnsafeHandle::new(span!(Level::TRACE, "frame").entered()) };
-
         if let Some(state) = unsafe {
             ENGINE_FUNCTIONS
                 .get()
