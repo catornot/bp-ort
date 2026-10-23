@@ -4644,6 +4644,7 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "parry3d",
+ "rayon",
  "ringbuffer",
  "rkyv",
  "rrplug",

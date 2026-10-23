@@ -9,6 +9,7 @@ use bonsai_bt::{
 use itertools::Itertools;
 use oktree::prelude::*;
 use parking_lot::{Mutex, RwLock};
+use rayon::ThreadPool;
 use rrplug::{
     bindings::{
         class_types::{cbaseentity::CBaseEntity, client::CClient, cplayer::CPlayer},
@@ -48,13 +49,14 @@ static BEHAVIOR: LazyLock<RwLock<BehaviorType>> =
 static SHARED: LazyLock<Arc<Mutex<SharedBotBrain>>> =
     LazyLock::new(|| Arc::new(Mutex::new(SharedBotBrain::default())));
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct SharedBotBrain {
     pub cp: SharedGamemodeCP,
     pub ctf: SharedGamemodeCTF,
     pub cached_player_raycasts: HashMap<(EHandle, EHandle), targeting::CGameTraceSubSet>,
     pub config: Arc<DifficultyConfig>,
     did_load_config: bool,
+    pub threads: Option<ThreadPool>,
 }
 
 #[derive(Debug)]
@@ -272,7 +274,7 @@ pub extern "C" fn pre_simulate(_paused: bool) {
     shared.cached_player_raycasts.clear();
 
     targeting::classify_threats(
-        &shared,
+        &mut shared,
         behaviors.iter_mut().map(|(_, b)| b.blackboard_mut()),
     )
 }

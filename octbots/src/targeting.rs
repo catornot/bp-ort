@@ -1,5 +1,6 @@
 use bevy_math::{bounding::RayCast3d, prelude::*};
 use bonsai_bt::Status;
+use rayon::ThreadPoolBuilder;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use rrplug::{
     bindings::server::{
@@ -20,8 +21,8 @@ use shared::{
     classes::get_player_titan_class,
     cmds_helper::CUserCmdHelper,
     utils::{
-        get_entity_handle, get_eye_position, get_net_var, get_npc_buffer, get_player_index,
-        is_alive, lookup_ent, nudge_type, trace_ray,
+        get_entity_handle, get_eye_position, get_npc_buffer, get_player_index, is_alive,
+        lookup_ent, nudge_type, trace_ray,
     },
 };
 use std::{
@@ -32,8 +33,8 @@ use std::{
     fmt::Debug,
     hash::{Hash, Hasher},
     ops::Sub as _,
-    sync::atomic::AtomicU8,
-    sync::atomic::Ordering as AtomicOrdering,
+    sync::atomic::{AtomicU8, Ordering as AtomicOrdering},
+    thread,
 };
 
 use crate::{
@@ -317,8 +318,9 @@ pub fn run_targeting(
                 .t
                 .add_target(Target::Entity(current_target.0, current_target.1));
 
-            if let Some(_) = lookup_ent(bot.m_petTitan, helper.sv_funcs)
+            if lookup_ent(bot.m_petTitan, helper.sv_funcs)
                 .and_then::<&CNPC_Titan, _>(|ent| ent.dynamic_cast())
+                .is_some()
             {
                 brain.t.add_target(Target::OwnedTitan(bot.m_petTitan));
             }
@@ -839,7 +841,7 @@ fn get_weapon_charge_fraction(weapon: &CWeaponX, helper: &CUserCmdHelper) -> f32
 }
 
 pub(crate) fn classify_threats<'a>(
-    _shared: &SharedBotBrain,
+    shared: &mut SharedBotBrain,
     behaviors: impl Iterator<Item = &'a mut BotBrain> + 'a,
 ) {
     let server_funcs = SERVER_FUNCTIONS.wait();
@@ -866,14 +868,29 @@ pub(crate) fn classify_threats<'a>(
     }
 
     let players_slice = players.as_slice();
-    std::thread::scope(move |s| {
+
+    if shared.threads.is_none() {
+        _ = shared.threads.replace(
+            ThreadPoolBuilder::new()
+                .num_threads(
+                    thread::available_parallelism()
+                        .map(|n| n.get())
+                        .unwrap_or_default(),
+                )
+                .thread_name(|index| format!("classify_threats {index}"))
+                .build()
+                .expect("couldn't build a thread pool; this is fatal"),
+        );
+    }
+    // UNWRAP: can unwrap safely since we check for none before this ^
+    shared.threads.as_mut().unwrap().in_place_scope(|s| {
         for brain in behaviors {
             brain.t.possible_targets.clear();
             brain.t.extra_target.take();
 
             // SAFETY: same as above
             let npcs = unsafe { high::UnsafeHandle::new(npcs) };
-            s.spawn(move || {
+            s.spawn(move |_s| {
                 let npcs = npcs.take();
 
                 let navmesh_ref = brain.navmesh.read();

@@ -23,6 +23,7 @@ rkyv = "=0.8.17"
 parry3d = { version = "0.25.*", features = ["simd-stable"] }
 ringbuffer = { version = "0.16.0", default-features = false }
 arc-swap = "1.9.2"
+rayon = "1.12.0"
 
 [lib]
 crate-type = ["cdylib"]
