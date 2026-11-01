@@ -73,10 +73,8 @@ impl Plugin for OctBots {
     fn new(_reloaded: bool) -> Self {
         let mut navmesh = loader::Navmesh::default();
 
-        let is_dedicated = env::args().any(|arg| arg == "-dedicated");
 
-        if (env::args().all(|arg| arg != "-disable-building") && !is_dedicated)
-            || (env::args().any(|arg| arg == "-allow-building") && is_dedicated)
+        if env::args().all(|arg| arg != "-disable-building")
         {
             navmesh.allow_building();
         }
